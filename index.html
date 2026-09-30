@@ -137,6 +137,7 @@ label>input,label>select,label>.amt{margin-top:4px}
 .empty{text-align:center;color:var(--muted);padding:28px 10px}
 .fab{position:fixed;right:max(16px,calc(50vw - 474px));bottom:calc(20px + env(safe-area-inset-bottom));display:flex;gap:8px;z-index:5}
 .fab .btn{box-shadow:0 4px 16px rgba(0,0,0,.18);border-radius:999px;padding:12px 18px}
+@media (max-width:620px){.fab{left:12px;right:12px;justify-content:flex-end;flex-wrap:wrap;gap:6px}.fab .btn{padding:10px 12px;font-size:12px}}
 dialog{border:1px solid var(--line);border-radius:16px;padding:0;background:var(--card);color:var(--ink);width:min(460px,calc(100vw - 32px))}
 dialog::backdrop{background:rgba(0,0,0,.4)}
 .dlg{padding:18px;display:grid;gap:12px}
@@ -190,6 +191,7 @@ th{font-size:12px;color:var(--muted);font-weight:600;border-top:0}
 </div>
 
 <div class="fab">
+  <button class="btn" data-action="new-tx" data-type="opening" title="Hesaba ilk başlangıç bakiyesini gir">Başlangıç</button>
   <button class="btn" data-action="new-tx" data-type="transfer" title="Hesaplar arası para gönder veya dinar ⇄ dolar bozdur">⇄ Transfer</button>
   <button class="btn" data-action="new-tx" data-type="income">+ Gelir</button>
   <button class="btn primary" data-action="new-tx" data-type="expense">+ Gider</button>
@@ -202,6 +204,7 @@ th{font-size:12px;color:var(--muted);font-weight:600;border-top:0}
       <button type="button" data-action="tx-type" data-type="expense">Gider</button>
       <button type="button" data-action="tx-type" data-type="income">Gelir</button>
       <button type="button" data-action="tx-type" data-type="transfer">Transfer</button>
+      <button type="button" data-action="tx-type" data-type="opening">Başlangıç</button>
     </div>
     <label>Tarih<input type="date" name="date" required></label>
     <label><span id="accLbl">Hesap</span><select name="accountId"></select></label>
@@ -242,6 +245,7 @@ th{font-size:12px;color:var(--muted);font-weight:600;border-top:0}
   <form class="dlg" id="payForm" novalidate>
     <div class="dlg-head"><h2 id="payTitle">Ödeme</h2><button type="button" class="icon" data-action="close-pay" aria-label="Kapat">✕</button></div>
     <div class="muted" id="payInfo"></div>
+    <label><span id="payAccLbl">Hesap</span><select name="accountId" required></select></label>
     <label>Tarih<input type="date" name="date" required></label>
     <label>Tutar
       <div class="amt"><input name="amount" inputmode="decimal" autocomplete="off" placeholder="0"><span id="payCur">IQD</span></div>
@@ -300,7 +304,12 @@ function seed() {
 /* Eski kayıtlarda/yedeklerde olmayan alanları tamamlar (ör. borç/alacak listesi). */
 function norm(d) {
   if (!Array.isArray(d.debts)) d.debts = [];
-  d.debts.forEach(x => { if (!Array.isArray(x.payments)) x.payments = []; });
+  d.debts.forEach(x => {
+    if (!Array.isArray(x.payments)) x.payments = [];
+    x.payments.forEach(p => { if (!p.accountId) p.accountId = ''; if (!p.txId) p.txId = ''; });
+    if (!x.accountId) x.accountId = '';
+    if (!x.txId) x.txId = '';
+  });
   d.settings = Object.assign({ display: 'IQD', weekStart: 1, lastBackup: '' }, d.settings);
   return d;
 }
@@ -407,7 +416,11 @@ function balance(id) {
   const a = acc(id); if (!a) return 0;
   let b = Number(a.opening) || 0;
   for (const t of db.tx) {
-    if (t.accountId === id) b += t.type === 'income' ? t.amount : -t.amount - (t.fee || 0);
+    if (t.accountId === id) {
+      if (t.type === 'income' || t.type === 'opening' || t.type === 'debt-in') b += t.amount;
+      else if (t.type === 'expense' || t.type === 'debt-out') b -= t.amount;
+      else if (t.type === 'transfer') b -= t.amount + (t.fee || 0);
+    }
     if (t.type === 'transfer' && t.toAccountId === id) b += t.toAmount;
   }
   return b;
@@ -565,7 +578,7 @@ function vTx() {
     <div class="filters">
       <input data-filter="q" placeholder="Notta ara…" value="${esc(f.q)}" style="grid-column:1/-1" class="q">
       <select data-filter="acc"><option value="">Tüm hesaplar</option>${accOpts}</select>
-      <select data-filter="cat"><option value="">Tüm kategoriler</option><option value="__transfer" ${f.cat === '__transfer' ? 'selected' : ''}>Transferler</option>${catOpts}</select>
+      <select data-filter="cat"><option value="">Tüm kategoriler</option><option value="__transfer" ${f.cat === '__transfer' ? 'selected' : ''}>Transferler</option><option value="__debt" ${f.cat === '__debt' ? 'selected' : ''}>Borç/Alacak hareketleri</option><option value="__opening" ${f.cat === '__opening' ? 'selected' : ''}>Başlangıç girişleri</option>${catOpts}</select>
       <input type="date" data-filter="from" value="${f.from}" title="Başlangıç">
       <input type="date" data-filter="to" value="${f.to}" title="Bitiş">
       <button class="btn" data-action="clear-f">Temizle</button>
@@ -582,13 +595,15 @@ function renderTxList() {
     const inAcc = id => id && (id === f.acc || acc(id)?.parentId === f.acc);
     if (f.acc && !inAcc(t.accountId) && !inAcc(t.toAccountId)) return false;
     if (f.cat === '__transfer' && t.type !== 'transfer') return false;
+    if (f.cat === '__debt' && t.type !== 'debt-in' && t.type !== 'debt-out') return false;
+    if (f.cat === '__opening' && t.type !== 'opening') return false;
     // Ana kategori seçiliyse alt kategorilerinin işlemleri de gelir.
-    if (f.cat && f.cat !== '__transfer' && t.categoryId !== f.cat && cat(t.categoryId)?.parentId !== f.cat) return false;
+    if (f.cat && !['__transfer','__debt','__opening'].includes(f.cat) && t.categoryId !== f.cat && cat(t.categoryId)?.parentId !== f.cat) return false;
     if (f.from && t.date < f.from) return false;
     if (f.to && t.date > f.to) return false;
     if (q) {
       const c = cat(t.categoryId);
-      const hay = `${t.note || ''} ${catLabel(c)} ${accLabel(acc(t.accountId))} ${t.toAccountId ? accLabel(acc(t.toAccountId)) : ''}`.toLocaleLowerCase('tr');
+      const hay = `${t.note || ''} ${t.person || ''} ${catLabel(c)} ${accLabel(acc(t.accountId))} ${t.toAccountId ? accLabel(acc(t.toAccountId)) : ''}`.toLocaleLowerCase('tr');
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -627,13 +642,24 @@ function renderTxList() {
 }
 function txRow(t) {
   const a = acc(t.accountId), cur = a ? a.currency : '';
-  let title, sub, col, ic, amt;
+  let title, sub, col, ic, amt, locked = false;
   if (t.type === 'transfer') {
     const b = acc(t.toAccountId);
     title = 'Transfer'; col = '#64748b'; ic = '⇄';
     sub = `${accLabel(a)} → ${accLabel(b)}`;
     amt = `<span class="num">${fmt(t.amount, cur)}</span>${b && b.currency !== cur ? `<br><small class="muted num">→ ${fmt(t.toAmount, b.currency)}</small>` : ''}` +
       (t.fee ? `<br><small class="exp num">ücret −${fmt(t.fee, cur)}</small>` : '');
+  } else if (t.type === 'opening') {
+    title = 'Başlangıç Girişi'; col = '#14b8a6'; ic = 'B';
+    sub = accLabel(a);
+    amt = `<span class="num inc">+${fmt(t.amount, cur)}</span>`;
+  } else if (t.type === 'debt-in' || t.type === 'debt-out') {
+    locked = true;
+    const incoming = t.type === 'debt-in';
+    title = t.debtKind === 'lent' ? (incoming ? 'Alacak Tahsilatı' : 'Borç Verildi') : (incoming ? 'Borç Alındı' : 'Borç Ödemesi');
+    col = incoming ? '#2e9e6b' : '#d9534f'; ic = incoming ? '↓' : '↑';
+    sub = `${t.person ? t.person + ' · ' : ''}${accLabel(a)}`;
+    amt = `<span class="num ${incoming ? 'inc' : 'exp'}">${incoming ? '+' : '−'}${fmt(t.amount, cur)}</span>`;
   } else {
     const c = cat(t.categoryId);
     title = c ? catLabel(c) : (t.type === 'income' ? 'Gelir' : 'Kategorisiz');
@@ -643,7 +669,7 @@ function txRow(t) {
     amt = `<span class="num ${t.type === 'expense' ? 'exp' : 'inc'}">${t.type === 'expense' ? '−' : '+'}${fmt(t.amount, cur)}</span>`;
   }
   if (t.note) sub += ' · ' + t.note;
-  return `<div class="tx" data-action="edit-tx" data-id="${t.id}">
+  return `<div class="tx" ${locked ? '' : `data-action="edit-tx" data-id="${t.id}"`}>
     <div class="ic" style="background:${col}">${ic}</div>
     <div class="m"><div class="t">${esc(title)}</div><div class="s">${esc(sub)}</div></div>
     <div class="a">${amt}</div></div>`;
@@ -778,11 +804,17 @@ function vRate() {
 }
 
 /* ---------- borç / alacak ---------- */
-/* Hesap bakiyelerinden bağımsız basit bir defter: kime ne verdim / kimden ne aldım, ne kadarı ödendi. */
+/* Borç ve alacak hareketleri gerçek hesap bakiyelerine bağlıdır; gelir/gider istatistiğine dahil edilmez. */
 const SHORTDATE = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' });
 const debtPaid = x => x.payments.reduce((s, p) => s + p.amount, 0);
 const debtLeft = x => Math.max(0, x.amount - debtPaid(x));
 const debtOpen = x => debtLeft(x) >= (x.currency === 'USD' ? 0.005 : 0.5);
+const debtAccounts = cur => accOrdered().filter(a => a.currency === cur);
+function debtAccOptions(cur, selected) {
+  const list = debtAccounts(cur);
+  if (!list.length) return `<option value="">— ${cur} hesabı yok —</option>`;
+  return accOptions(list, selected);
+}
 function debtTotals() {
   const D = disp(), r = curRate(), t = { lent: 0, owed: 0 };
   for (const x of db.debts) if (debtOpen(x)) t[x.dir] += conv(debtLeft(x), x.currency, D, r);
@@ -791,13 +823,14 @@ function debtTotals() {
 function debtRow(x) {
   const left = debtLeft(x), open = debtOpen(x), pct = Math.min(100, debtPaid(x) / x.amount * 100);
   const pays = [...x.payments].sort((a, b) => b.date.localeCompare(a.date));
+  const source = x.accountId && acc(x.accountId) ? ` · hesap: ${esc(accLabel(acc(x.accountId)))}` : '';
   return `<div class="list-row debt">
     <div class="m"><b>${esc(x.person)}</b> <span class="cur">${x.currency}</span>
-      <div class="muted" style="font-size:12px">${esc(SHORTDATE.format(parse(x.date)))}${x.note ? ' · ' + esc(x.note) : ''} · toplam ${fmt(x.amount, x.currency)}</div>
+      <div class="muted" style="font-size:12px">${esc(SHORTDATE.format(parse(x.date)))}${x.note ? ' · ' + esc(x.note) : ''}${source} · toplam ${fmt(x.amount, x.currency)}</div>
       ${x.payments.length ? `<div class="bar-track" style="margin-top:6px"><div class="bar-fill" style="width:${pct}%;background:var(--accent)"></div></div>` : ''}
     </div>
     <b class="num ${!open ? 'muted' : x.dir === 'lent' ? 'inc' : 'exp'}">${open ? fmt(left, x.currency) : 'Kapandı'}</b>
-    ${pays.length ? `<div class="pays">${pays.map(p => `<div class="subline"><span>${esc(SHORTDATE.format(parse(p.date)))}${p.note ? ' · ' + esc(p.note) : ''}</span><span class="num">${fmt(p.amount, x.currency)}<button class="icon xs" data-action="del-pay" data-id="${x.id}" data-pay="${p.id}" aria-label="Ödemeyi sil">✕</button></span></div>`).join('')}</div>` : ''}
+    ${pays.length ? `<div class="pays">${pays.map(p => `<div class="subline"><span>${esc(SHORTDATE.format(parse(p.date)))}${p.note ? ' · ' + esc(p.note) : ''}${p.accountId && acc(p.accountId) ? ' · ' + esc(accLabel(acc(p.accountId))) : ''}</span><span class="num">${fmt(p.amount, x.currency)}<button class="icon xs" data-action="del-pay" data-id="${x.id}" data-pay="${p.id}" aria-label="Ödemeyi sil">✕</button></span></div>`).join('')}</div>` : ''}
     <div class="acts">${open ? `<button class="btn sm primary" data-action="pay" data-id="${x.id}">${x.dir === 'lent' ? 'Tahsilat' : 'Ödeme'}</button>` : ''}<button class="btn sm danger" data-action="del-debt" data-id="${x.id}">Sil</button></div>
   </div>`;
 }
@@ -814,7 +847,7 @@ function vDebt() {
       <div class="kpi"><div class="l">Borcum</div><div class="v num exp">${fmt(t.owed, D)}</div></div>
       <div class="kpi"><div class="l">Net</div><div class="v num ${t.lent - t.owed < 0 ? 'exp' : 'inc'}">${fmt(t.lent - t.owed, D, true)}</div></div>
     </div>
-    <p class="muted" style="font-size:12px;margin:10px 0 0">Bu liste hesap bakiyelerinizi değiştirmez, ayrı bir defterdir. Toplamlar güncel kurla ${D} cinsinden gösterilir.</p>
+    <p class="muted" style="font-size:12px;margin:10px 0 0">Borç verdiğinizde seçilen hesaptan para düşer; borç aldığınızda seçilen hesaba para girer. Tahsilat ve ödemeler de seçtiğiniz hesaba yansır. Bunlar normal gelir/gider toplamına dahil edilmez.</p>
   </div>
   <div class="card">
     <h2>Yeni kayıt</h2>
@@ -824,7 +857,8 @@ function vDebt() {
         <option value="owed">Borç — ben aldım</option></select></label>
       <label style="grid-column:1/-1">Kişi<input name="person" required maxlength="40" autocomplete="off" placeholder="ör. Ahmed"></label>
       <label>Tutar<input name="amount" inputmode="decimal" autocomplete="off" placeholder="0"></label>
-      <label>Para birimi<select name="currency"><option value="IQD">Dinar (IQD)</option><option value="USD">Dolar (USD)</option></select></label>
+      <label>Para birimi<select name="currency" data-debt-currency><option value="IQD">Dinar (IQD)</option><option value="USD">Dolar (USD)</option></select></label>
+      <label style="grid-column:1/-1"><span data-debt-account-label>Paranın çıktığı hesap</span><select name="accountId" data-debt-account required>${debtAccOptions('IQD')}</select></label>
       <label>Tarih<input type="date" name="date" value="${today()}" required></label>
       <label>Not<input name="note" maxlength="100" autocomplete="off" placeholder="İsteğe bağlı"></label>
       <button class="btn primary" style="grid-column:1/-1">Ekle</button>
@@ -834,14 +868,27 @@ function vDebt() {
   ${sect('Borçlarım', owed, 'Açık borç yok.')}
   ${done.length ? `<div class="card"><h2>Kapananlar</h2>${done.map(debtRow).join('')}</div>` : ''}`;
 }
+function syncDebtForm() {
+  const f = document.querySelector('[data-form="debt"]'); if (!f) return;
+  const cur = f.elements.currency.value, dir = f.elements.dir.value, sel = f.elements.accountId;
+  const keep = sel.value;
+  sel.innerHTML = debtAccOptions(cur, keep);
+  if (keep && debtAccounts(cur).some(a => a.id === keep)) sel.value = keep;
+  const lbl = f.querySelector('[data-debt-account-label]');
+  if (lbl) lbl.textContent = dir === 'lent' ? 'Paranın çıktığı hesap' : 'Paranın girdiği hesap';
+}
 let payId = null;
 function openPay(id) {
   const x = db.debts.find(d => d.id === id); if (!x) return;
   payId = id;
   const f = $('#payForm').elements;
+  const list = debtAccounts(x.currency);
+  f.accountId.innerHTML = debtAccOptions(x.currency, x.accountId);
+  if (x.accountId && list.some(a => a.id === x.accountId)) f.accountId.value = x.accountId;
   f.date.value = today(); f.amount.value = fmtIn(debtLeft(x), 'any'); f.note.value = '';
   $('#payTitle').textContent = `${x.dir === 'lent' ? 'Tahsilat' : 'Ödeme'} — ${x.person}`;
   $('#payInfo').textContent = `Kalan: ${fmt(debtLeft(x), x.currency)}`;
+  $('#payAccLbl').textContent = x.dir === 'lent' ? 'Paranın gireceği hesap' : 'Paranın çıkacağı hesap';
   $('#payCur').textContent = x.currency;
   $('#payDlg').showModal();
   setTimeout(() => f.amount.select(), 30);
@@ -849,11 +896,19 @@ function openPay(id) {
 function submitPay(e) {
   e.preventDefault();
   const x = db.debts.find(d => d.id === payId); if (!x) return;
-  const f = $('#payForm').elements, amount = num(f.amount.value);
+  const f = $('#payForm').elements, amount = num(f.amount.value), a = acc(f.accountId.value);
   if (!(amount > 0)) { toast('Geçerli bir tutar girin.'); return; }
+  if (!a || a.currency !== x.currency) { toast(`${x.currency} para biriminde bir hesap seçin.`); return; }
   if (!f.date.value) { toast('Tarih seçin.'); return; }
   if (amount > debtLeft(x) + 0.005) { toast(`Kalan tutardan (${fmt(debtLeft(x), x.currency)}) fazla olamaz.`); return; }
-  x.payments.push({ id: uid(), date: f.date.value, amount, note: f.note.value.trim() });
+  const pid = uid(), txid = uid();
+  const incoming = x.dir === 'lent';
+  x.payments.push({ id: pid, date: f.date.value, amount, note: f.note.value.trim(), accountId: a.id, txId: txid });
+  db.tx.push({
+    id: txid, ts: Date.now(), type: incoming ? 'debt-in' : 'debt-out', date: f.date.value,
+    accountId: a.id, amount, note: f.note.value.trim(), debtId: x.id, paymentId: pid,
+    debtKind: x.dir, person: x.person, locked: true,
+  });
   save(); $('#payDlg').close(); render(); toast(debtOpen(x) ? 'Kaydedildi' : 'Kapandı ✓');
 }
 
@@ -953,7 +1008,7 @@ function openTx(type, id, preset) {
   resetFx();
   f.toAccountId.innerHTML = '';
   f.date.value = t ? t.date : today();
-  const lastAcc = dlg.type === 'income' ? ui.lastIncAcc : dlg.type === 'expense' ? ui.lastExpAcc : ui.lastTrAcc;
+  const lastAcc = dlg.type === 'income' ? ui.lastIncAcc : dlg.type === 'expense' ? ui.lastExpAcc : dlg.type === 'opening' ? ui.lastOpeningAcc : ui.lastTrAcc;
   fillAccSelect(f.accountId, preset ? preset.from : t ? t.accountId : lastAcc);
   f.amount.value = t ? fmtIn(t.amount, 'any') : preset ? fmtIn(preset.amount, 'any') : '';
   f.note.value = t ? (t.note || '') : '';
@@ -968,7 +1023,7 @@ function openTx(type, id, preset) {
     dlg.fxOrder = ['fxRate', 'amount', 'toAmount'];
     syncTx();
   }
-  $('#txTitle').textContent = t ? 'İşlemi düzenle' : dlg.type === 'transfer' ? 'Hesaplar arası transfer' : 'Yeni işlem';
+  $('#txTitle').textContent = t ? 'İşlemi düzenle' : dlg.type === 'transfer' ? 'Hesaplar arası transfer' : dlg.type === 'opening' ? 'Başlangıç Girişi' : 'Yeni işlem';
   $('#txDel').classList.toggle('hide', !t);
   $('#txDlg').showModal();
   if (!t) setTimeout(() => f.amount.focus(), 30);
@@ -992,16 +1047,16 @@ function syncTx(t) {
   document.querySelectorAll('#txType button').forEach(b => b.classList.toggle('on', b.dataset.type === tp));
   const a = acc(f.accountId.value), cur = a ? a.currency : 'IQD';
   $('#amtCur').textContent = cur;
-  $('#accLbl').textContent = tp === 'transfer' ? 'Çıkan hesap' : tp === 'income' ? 'Giren hesap' : 'Hesap';
+  $('#accLbl').textContent = tp === 'transfer' ? 'Çıkan hesap' : (tp === 'income' || tp === 'opening') ? 'Giren hesap' : 'Hesap';
 
-  const isTr = tp === 'transfer';
-  $('#catWrap').classList.toggle('hide', isTr);
+  const isTr = tp === 'transfer', isOpening = tp === 'opening';
+  $('#catWrap').classList.toggle('hide', isTr || isOpening);
   $('#toWrap').classList.toggle('hide', !isTr);
-  if (!isTr) {
+  if (!isTr && !isOpening) {
     const prev = t ? t.categoryId : f.categoryId.value;
     f.categoryId.innerHTML = (tp === 'income' ? '<option value="">— Belirtme —</option>' : '') + catOptions(tp);
     if (prev !== undefined && [...f.categoryId.options].some(o => o.value === prev)) f.categoryId.value = prev;
-  } else {
+  } else if (isTr) {
     // Hedef hesap: açık olan seçim korunur, yoksa en son transferde kullanılan, o da yoksa ilk uygun hesap.
     const from = f.accountId.value, keep = f.toAccountId.value;
     const pref = keep && keep !== from ? keep
@@ -1067,6 +1122,8 @@ function submitTx(e) {
       const R = a.currency === 'IQD' ? amount / t.toAmount : t.toAmount / amount;
       if (Math.abs(R - rateAt(t.date)) >= 0.01) setRate(t.date, R);
     }
+  } else if (dlg.type === 'opening') {
+    ui.lastOpeningAcc = t.accountId;
   } else {
     t.categoryId = f.categoryId.value;
     if (dlg.type === 'income') ui.lastIncAcc = t.accountId; else ui.lastExpAcc = t.accountId;
@@ -1176,6 +1233,7 @@ document.addEventListener('click', e => {
     case 'del-pay': {
       const x = db.debts.find(y => y.id === d.id), p = x && x.payments.find(y => y.id === d.pay);
       if (x && p && confirm(`${fmt(p.amount, x.currency)} tutarındaki ödeme kaydı silinsin mi?`)) {
+        if (p.txId) db.tx = db.tx.filter(t => t.id !== p.txId);
         x.payments = x.payments.filter(y => y.id !== d.pay); save(); render(); toast('Ödeme silindi');
       }
       break;
@@ -1185,6 +1243,8 @@ document.addEventListener('click', e => {
       const kind = x.dir === 'lent' ? 'alacak' : 'borç';
       const extra = x.payments.length ? `\n\n${x.payments.length} ödeme/tahsilat kaydı da silinecek.` : '';
       if (confirm(`“${x.person}” için ${kind} kaydı silinsin mi?${extra}`)) {
+        const ids = new Set([x.txId, ...x.payments.map(p => p.txId)].filter(Boolean));
+        if (ids.size) db.tx = db.tx.filter(t => !ids.has(t.id));
         db.debts = db.debts.filter(y => y.id !== d.id); save(); render(); toast('Kayıt silindi');
       }
       break;
@@ -1256,15 +1316,21 @@ document.addEventListener('submit', e => {
     db.rates.push({ id: uid(), date: v.date, rate });
     toast('Kur kaydedildi');
   } else if (form.dataset.form === 'debt') {
-    const person = (v.person || '').trim(), amount = num(v.amount);
+    const person = (v.person || '').trim(), amount = num(v.amount), a = acc(v.accountId);
     if (!person) { toast('Kişi adını girin.'); form.elements.person.focus(); return; }
     if (!(amount > 0)) { toast('Geçerli bir tutar girin.'); form.elements.amount.focus(); return; }
+    if (!a || a.currency !== v.currency) { toast(`${v.currency} para biriminde bir hesap seçin.`); return; }
     if (!v.date) { toast('Tarih seçin.'); return; }
+    const did = uid(), txid = uid(), note = (v.note || '').trim();
     db.debts.push({
-      id: uid(), dir: v.dir, person, amount, currency: v.currency,
-      date: v.date, note: (v.note || '').trim(), payments: [],
+      id: did, dir: v.dir, person, amount, currency: v.currency, accountId: a.id, txId: txid,
+      date: v.date, note, payments: [],
     });
-    toast(v.dir === 'lent' ? 'Alacak eklendi' : 'Borç eklendi');
+    db.tx.push({
+      id: txid, ts: Date.now(), type: v.dir === 'owed' ? 'debt-in' : 'debt-out', date: v.date,
+      accountId: a.id, amount, note, debtId: did, debtKind: v.dir, person, locked: true,
+    });
+    toast(v.dir === 'lent' ? 'Alacak eklendi · hesaptan düşüldü' : 'Borç eklendi · hesaba girdi');
   }
   save(); render();
 });
@@ -1288,6 +1354,7 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => {
   const el = e.target;
+  if (el.closest('[data-form=debt]') && (el.name === 'currency' || el.name === 'dir')) { syncDebtForm(); return; }
   if (el.closest('#txForm') && (el.name === 'accountId' || el.name === 'toAccountId' || el.name === 'date')) {
     if (el.name !== 'date') resetFx();
     syncTx(); return;
