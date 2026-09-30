@@ -148,6 +148,18 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 .hide{display:none!important}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
 .chip{background:var(--soft);border-radius:999px;padding:3px 10px;font-size:12px}
+.toast.undo{display:flex;gap:12px;align-items:center}
+.toast.undo.on{pointer-events:auto}
+.toast .btn{color:var(--ink);padding:3px 10px}
+.icon.xs{width:24px;height:24px;font-size:11px;border-radius:6px;vertical-align:middle;margin-left:6px}
+.debt{flex-wrap:wrap}
+.debt .pays,.debt .acts{flex-basis:100%}
+.debt .pays{display:grid;gap:3px;border-left:2px solid var(--line);padding-left:10px}
+.debt .acts{display:flex;gap:6px;justify-content:flex-end}
+.warn{display:flex;gap:12px;align-items:center;flex-wrap:wrap;border-color:var(--accent)}
+.warn .m{flex:1;min-width:160px}
+.warn .m b{display:block}
+.ok{color:var(--inc)}
 .toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20}
 .toast.on{opacity:1}
 table{width:100%;border-collapse:collapse}
@@ -169,6 +181,7 @@ th{font-size:12px;color:var(--muted);font-weight:600;border-top:0}
     <button class="tab" data-action="tab" data-tab="ozet">Özet</button>
     <button class="tab" data-action="tab" data-tab="islemler">İşlemler</button>
     <button class="tab" data-action="tab" data-tab="hesaplar">Hesaplar</button>
+    <button class="tab" data-action="tab" data-tab="borclar">Borç/Alacak</button>
     <button class="tab" data-action="tab" data-tab="kategoriler">Kategoriler</button>
     <button class="tab" data-action="tab" data-tab="kur">Kur</button>
     <button class="tab" data-action="tab" data-tab="ayarlar">Ayarlar</button>
@@ -177,7 +190,7 @@ th{font-size:12px;color:var(--muted);font-weight:600;border-top:0}
 </div>
 
 <div class="fab">
-  <button class="btn" data-action="new-tx" data-type="transfer" title="Dinar ⇄ Dolar bozdur veya hesaplar arası transfer">⇄ Bozdur</button>
+  <button class="btn" data-action="new-tx" data-type="transfer" title="Hesaplar arası para gönder veya dinar ⇄ dolar bozdur">⇄ Transfer</button>
   <button class="btn" data-action="new-tx" data-type="income">+ Gelir</button>
   <button class="btn primary" data-action="new-tx" data-type="expense">+ Gider</button>
 </div>
@@ -188,7 +201,7 @@ th{font-size:12px;color:var(--muted);font-weight:600;border-top:0}
     <div class="seg" id="txType">
       <button type="button" data-action="tx-type" data-type="expense">Gider</button>
       <button type="button" data-action="tx-type" data-type="income">Gelir</button>
-      <button type="button" data-action="tx-type" data-type="transfer">Transfer / Döviz</button>
+      <button type="button" data-action="tx-type" data-type="transfer">Transfer</button>
     </div>
     <label>Tarih<input type="date" name="date" required></label>
     <label><span id="accLbl">Hesap</span><select name="accountId"></select></label>
@@ -199,7 +212,7 @@ th{font-size:12px;color:var(--muted);font-weight:600;border-top:0}
     <label id="catWrap">Kategori<select name="categoryId"></select></label>
     <label id="toWrap">Hedef hesap<select name="toAccountId"></select></label>
     <div id="toEmpty" class="fxbox hide">
-      <div style="font-size:13px">Paranın gireceği başka bir hesap yok. Bozdurmak için karşı para biriminde bir hesap gerekli.</div>
+      <div style="font-size:13px">Transfer için ikinci bir hesap gerekli — paranın gireceği başka hesap yok.</div>
       <div><button type="button" class="btn primary sm" data-action="quick-acc" id="quickAccBtn"></button></div>
     </div>
     <div id="toAmtWrap" class="fxbox">
@@ -210,15 +223,34 @@ th{font-size:12px;color:var(--muted);font-weight:600;border-top:0}
       <div class="hint" id="fxHint"></div>
       <label class="check"><input type="checkbox" name="saveRate"> Bu kuru <span id="fxDate"></span> günün kuru olarak kaydet</label>
     </div>
-    <label id="feeWrap">Transfer ücreti <span class="muted">(yoksa boş bırakın)</span>
+    <label id="feeWrap">Transfer ücreti <span class="muted">(ücret yoksa boş bırakın — 0 sayılır)</span>
       <div class="amt"><input name="fee" inputmode="decimal" autocomplete="off" placeholder="0"><span id="feeCur">IQD</span></div>
       <div class="hint" id="feeHint"></div>
     </label>
+    <div class="hint" id="trHint" style="min-height:0"></div>
     <label>Not<input name="note" maxlength="140" placeholder="İsteğe bağlı" autocomplete="off"></label>
     <div class="dlg-actions">
       <button type="button" class="btn danger" id="txDel" data-action="tx-del">Sil</button>
       <span class="sp"></span>
       <button type="button" class="btn" data-action="close-dlg">Vazgeç</button>
+      <button type="submit" class="btn primary">Kaydet</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="payDlg">
+  <form class="dlg" id="payForm" novalidate>
+    <div class="dlg-head"><h2 id="payTitle">Ödeme</h2><button type="button" class="icon" data-action="close-pay" aria-label="Kapat">✕</button></div>
+    <div class="muted" id="payInfo"></div>
+    <label>Tarih<input type="date" name="date" required></label>
+    <label>Tutar
+      <div class="amt"><input name="amount" inputmode="decimal" autocomplete="off" placeholder="0"><span id="payCur">IQD</span></div>
+    </label>
+    <label>Not<input name="note" maxlength="100" placeholder="İsteğe bağlı" autocomplete="off"></label>
+    <div class="dlg-actions">
+      <button type="button" class="btn sm" data-action="pay-all">Kalanın tamamı</button>
+      <span class="sp"></span>
+      <button type="button" class="btn" data-action="close-pay">Vazgeç</button>
       <button type="submit" class="btn primary">Kaydet</button>
     </div>
   </form>
@@ -261,12 +293,30 @@ function seed() {
       ];
     })(),
     tx: [],
-    settings: { display: 'IQD', weekStart: 1 },
+    debts: [],
+    settings: { display: 'IQD', weekStart: 1, lastBackup: '' },
   };
 }
-function load() {
-  try { const s = localStorage.getItem(KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; }
+/* Eski kayıtlarda/yedeklerde olmayan alanları tamamlar (ör. borç/alacak listesi). */
+function norm(d) {
+  if (!Array.isArray(d.debts)) d.debts = [];
+  d.debts.forEach(x => { if (!Array.isArray(x.payments)) x.payments = []; });
+  d.settings = Object.assign({ display: 'IQD', weekStart: 1, lastBackup: '' }, d.settings);
+  return d;
 }
+function load() {
+  try { const s = localStorage.getItem(KEY); return s ? norm(JSON.parse(s)) : null; } catch (e) { return null; }
+}
+/* Geri yükleme / sıfırlama gibi büyük işlemlerden önce verinin bir kopyası ayrıca saklanır. */
+const SNAP = KEY + '-onceki';
+function takeSnapshot(reason) {
+  try { localStorage.setItem(SNAP, JSON.stringify({ ts: Date.now(), reason, data: db })); } catch (e) {}
+}
+function loadSnap() {
+  try { const s = JSON.parse(localStorage.getItem(SNAP)); return s && s.data && Array.isArray(s.data.tx) ? s : null; } catch (e) { return null; }
+}
+const snap = () => JSON.stringify(db);
+const fmtTs = ts => new Date(ts).toLocaleString('tr-TR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(db)); }
   catch (e) { toast('Kaydedilemedi! Tarayıcı depolaması kapalı olabilir — Ayarlar’dan yedek alın.'); }
@@ -450,7 +500,15 @@ function vOzet() {
   const nativeLine = (st.native.IQD || st.native.USD)
     ? `<div class="muted" style="margin-top:10px;font-size:13px">Hesap para birimine göre harcanan: <b class="num">${fmt(st.native.IQD, 'IQD')}</b> + <b class="num">${fmt(st.native.USD, 'USD')}</b></div>` : '';
 
-  return `
+  const warn = backupStale() ? `<div class="card warn">
+    <div class="m"><b>Yedek almayı unutmayın</b><small class="muted">${backupAge() === null
+      ? 'Veriler sadece bu cihazda. Cihaz verisi silinirse işlemleriniz kaybolur.'
+      : `En son ${backupAge()} gün önce yedeklediniz.`}</small></div>
+    <button class="btn primary" data-action="export">Yedekle</button>
+    <button class="btn sm" data-action="tab" data-tab="ayarlar">Ayarlar</button>
+  </div>` : '';
+
+  return warn + `
   <div class="card">
     <div class="muted" style="font-size:13px">Toplam varlık (${D})</div>
     <div class="big num">${fmt(total, D)}</div>
@@ -719,7 +777,88 @@ function vRate() {
   </div>`;
 }
 
+/* ---------- borç / alacak ---------- */
+/* Hesap bakiyelerinden bağımsız basit bir defter: kime ne verdim / kimden ne aldım, ne kadarı ödendi. */
+const SHORTDATE = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' });
+const debtPaid = x => x.payments.reduce((s, p) => s + p.amount, 0);
+const debtLeft = x => Math.max(0, x.amount - debtPaid(x));
+const debtOpen = x => debtLeft(x) >= (x.currency === 'USD' ? 0.005 : 0.5);
+function debtTotals() {
+  const D = disp(), r = curRate(), t = { lent: 0, owed: 0 };
+  for (const x of db.debts) if (debtOpen(x)) t[x.dir] += conv(debtLeft(x), x.currency, D, r);
+  return t;
+}
+function debtRow(x) {
+  const left = debtLeft(x), open = debtOpen(x), pct = Math.min(100, debtPaid(x) / x.amount * 100);
+  const pays = [...x.payments].sort((a, b) => b.date.localeCompare(a.date));
+  return `<div class="list-row debt">
+    <div class="m"><b>${esc(x.person)}</b> <span class="cur">${x.currency}</span>
+      <div class="muted" style="font-size:12px">${esc(SHORTDATE.format(parse(x.date)))}${x.note ? ' · ' + esc(x.note) : ''} · toplam ${fmt(x.amount, x.currency)}</div>
+      ${x.payments.length ? `<div class="bar-track" style="margin-top:6px"><div class="bar-fill" style="width:${pct}%;background:var(--accent)"></div></div>` : ''}
+    </div>
+    <b class="num ${!open ? 'muted' : x.dir === 'lent' ? 'inc' : 'exp'}">${open ? fmt(left, x.currency) : 'Kapandı'}</b>
+    ${pays.length ? `<div class="pays">${pays.map(p => `<div class="subline"><span>${esc(SHORTDATE.format(parse(p.date)))}${p.note ? ' · ' + esc(p.note) : ''}</span><span class="num">${fmt(p.amount, x.currency)}<button class="icon xs" data-action="del-pay" data-id="${x.id}" data-pay="${p.id}" aria-label="Ödemeyi sil">✕</button></span></div>`).join('')}</div>` : ''}
+    <div class="acts">${open ? `<button class="btn sm primary" data-action="pay" data-id="${x.id}">${x.dir === 'lent' ? 'Tahsilat' : 'Ödeme'}</button>` : ''}<button class="btn sm danger" data-action="del-debt" data-id="${x.id}">Sil</button></div>
+  </div>`;
+}
+function vDebt() {
+  const D = disp(), t = debtTotals();
+  const lent = db.debts.filter(x => x.dir === 'lent' && debtOpen(x));
+  const owed = db.debts.filter(x => x.dir === 'owed' && debtOpen(x));
+  const done = db.debts.filter(x => !debtOpen(x));
+  const sect = (title, list, empty) => `<div class="card"><h2>${title}</h2>${list.length ? list.map(debtRow).join('') : `<div class="empty">${empty}</div>`}</div>`;
+  return `
+  <div class="card">
+    <div class="kpis" style="margin-top:0">
+      <div class="kpi"><div class="l">Alacağım</div><div class="v num inc">${fmt(t.lent, D)}</div></div>
+      <div class="kpi"><div class="l">Borcum</div><div class="v num exp">${fmt(t.owed, D)}</div></div>
+      <div class="kpi"><div class="l">Net</div><div class="v num ${t.lent - t.owed < 0 ? 'exp' : 'inc'}">${fmt(t.lent - t.owed, D, true)}</div></div>
+    </div>
+    <p class="muted" style="font-size:12px;margin:10px 0 0">Bu liste hesap bakiyelerinizi değiştirmez, ayrı bir defterdir. Toplamlar güncel kurla ${D} cinsinden gösterilir.</p>
+  </div>
+  <div class="card">
+    <h2>Yeni kayıt</h2>
+    <form data-form="debt" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <label style="grid-column:1/-1">Tür<select name="dir">
+        <option value="lent">Alacak — ben verdim</option>
+        <option value="owed">Borç — ben aldım</option></select></label>
+      <label style="grid-column:1/-1">Kişi<input name="person" required maxlength="40" autocomplete="off" placeholder="ör. Ahmed"></label>
+      <label>Tutar<input name="amount" inputmode="decimal" autocomplete="off" placeholder="0"></label>
+      <label>Para birimi<select name="currency"><option value="IQD">Dinar (IQD)</option><option value="USD">Dolar (USD)</option></select></label>
+      <label>Tarih<input type="date" name="date" value="${today()}" required></label>
+      <label>Not<input name="note" maxlength="100" autocomplete="off" placeholder="İsteğe bağlı"></label>
+      <button class="btn primary" style="grid-column:1/-1">Ekle</button>
+    </form>
+  </div>
+  ${sect('Alacaklarım', lent, 'Açık alacak yok.')}
+  ${sect('Borçlarım', owed, 'Açık borç yok.')}
+  ${done.length ? `<div class="card"><h2>Kapananlar</h2>${done.map(debtRow).join('')}</div>` : ''}`;
+}
+let payId = null;
+function openPay(id) {
+  const x = db.debts.find(d => d.id === id); if (!x) return;
+  payId = id;
+  const f = $('#payForm').elements;
+  f.date.value = today(); f.amount.value = fmtIn(debtLeft(x), 'any'); f.note.value = '';
+  $('#payTitle').textContent = `${x.dir === 'lent' ? 'Tahsilat' : 'Ödeme'} — ${x.person}`;
+  $('#payInfo').textContent = `Kalan: ${fmt(debtLeft(x), x.currency)}`;
+  $('#payCur').textContent = x.currency;
+  $('#payDlg').showModal();
+  setTimeout(() => f.amount.select(), 30);
+}
+function submitPay(e) {
+  e.preventDefault();
+  const x = db.debts.find(d => d.id === payId); if (!x) return;
+  const f = $('#payForm').elements, amount = num(f.amount.value);
+  if (!(amount > 0)) { toast('Geçerli bir tutar girin.'); return; }
+  if (!f.date.value) { toast('Tarih seçin.'); return; }
+  if (amount > debtLeft(x) + 0.005) { toast(`Kalan tutardan (${fmt(debtLeft(x), x.currency)}) fazla olamaz.`); return; }
+  x.payments.push({ id: uid(), date: f.date.value, amount, note: f.note.value.trim() });
+  save(); $('#payDlg').close(); render(); toast(debtOpen(x) ? 'Kaydedildi' : 'Kapandı ✓');
+}
+
 function vSet() {
+  const sn = loadSnap();
   return `
   <div class="card">
     <h2>Tercihler</h2>
@@ -735,22 +874,67 @@ function vSet() {
   </div>
   <div class="card">
     <h2>Yedek</h2>
-    <p class="muted" style="margin-top:0">Veriler sadece bu bilgisayardaki tarayıcıda saklanır. Tarayıcı verisini silerseniz kaybolur — ara sıra yedek alın.</p>
+    <p class="muted" style="margin-top:0">Veriler sadece bu cihazda saklanır. Uygulamayı silerseniz veya cihaz verisini temizlerseniz kaybolur — ara sıra yedek alın.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn primary" data-action="export">Yedeği indir (.json)</button>
+      <button class="btn primary" data-action="export">Yedekle</button>
       <button class="btn" data-action="import">Yedekten geri yükle</button>
+      ${sn ? `<button class="btn" data-action="restore-snap">Önceki veriyi geri al</button>` : ''}
       <button class="btn danger" data-action="reset">Tüm verileri sil</button>
     </div>
+    <p class="hint" style="min-height:0">${backupLine()}</p>
+    ${sn ? `<p class="muted" style="font-size:12px;margin:8px 0 0">Önceki veri: ${esc(fmtTs(sn.ts))}${sn.reason ? ` · ${esc(sn.reason)}` : ''}</p>` : ''}
+    <p class="muted" style="font-size:12px;margin:10px 0 0">Telefonda <b>Yedekle</b> paylaşım menüsünü açar: <b>Dosyalar’a Kaydet → iCloud Drive</b> seçerseniz yedek telefon kaybolsa bile durur. Geri yüklemek için aynı dosyayı <b>Yedekten geri yükle</b> ile seçin.</p>
     <input type="file" id="importFile" class="hide">
     <p class="muted" style="font-size:12px">${db.tx.length} işlem · ${db.accounts.length} hesap · ${db.categories.length} kategori · ${db.rates.length} kur kaydı</p>
   </div>`;
+}
+
+/* ---------- yedek ---------- */
+/* Yedek, uygulamanın tüm verisini tek bir .json dosyasına yazar.
+   iPhone ana ekran uygulamasında indirme çalışmadığı için Paylaş menüsü kullanılır
+   (Dosyalar'a Kaydet, iCloud Drive, WhatsApp…); masaüstünde normal indirme olur. */
+const backupAge = () => db.settings.lastBackup ? daysBetween(db.settings.lastBackup, today()) : null;
+const backupStale = () => db.tx.length > 0 && (backupAge() === null || backupAge() >= 7);
+function backupLine() {
+  const n = backupAge();
+  if (n === null) return db.tx.length ? '⚠️ Henüz hiç yedek almadınız.' : 'Henüz yedek alınmadı.';
+  if (n <= 0) return '<span class="ok">✓ Bugün yedeklendi.</span>';
+  const s = n === 1 ? 'Son yedek: dün.' : `Son yedek: ${n} gün önce.`;
+  return backupStale() ? '⚠️ ' + s : `<span class="ok">✓</span> ${s}`;
+}
+function markBackup() { db.settings.lastBackup = today(); save(); render(); }
+function backupFile() {
+  const name = `kisisel-hesap-yedek-${today()}.json`;
+  return new File([JSON.stringify(db, null, 2)], name, { type: 'application/json' });
+}
+function downloadBackup(file) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file); a.download = file.name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  markBackup(); toast('Yedek indirildi');
+}
+async function doBackup() {
+  const file = backupFile();
+  // canShare/share, tıklama anında çağrılmalı — bu yüzden await'ten önce kontrol edilir.
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: 'Kişisel Hesap yedeği' });
+      markBackup(); toast('Yedek kaydedildi');
+    } catch (err) {
+      // Kullanıcı paylaşım menüsünü kapattıysa sessizce vazgeç; başka hatada indirmeyi dene.
+      if (!err || err.name !== 'AbortError') downloadBackup(file);
+    }
+    return;
+  }
+  downloadBackup(file);
 }
 
 function render() {
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === ui.tab));
   document.querySelectorAll('#disp button').forEach(b => b.classList.toggle('on', b.dataset.cur === disp()));
   $('#rateBadge').innerHTML = `Kur: 1 $ = <b class="num">${fmtNum(curRate())}</b> IQD`;
-  const views = { ozet: vOzet, islemler: vTx, hesaplar: vAcc, kategoriler: vCat, kur: vRate, ayarlar: vSet };
+  const views = { ozet: vOzet, islemler: vTx, hesaplar: vAcc, borclar: vDebt, kategoriler: vCat, kur: vRate, ayarlar: vSet };
   $('#view').innerHTML = views[ui.tab]();
   if (ui.tab === 'islemler') renderTxList();
 }
@@ -784,7 +968,7 @@ function openTx(type, id, preset) {
     dlg.fxOrder = ['fxRate', 'amount', 'toAmount'];
     syncTx();
   }
-  $('#txTitle').textContent = t ? 'İşlemi düzenle' : dlg.type === 'transfer' ? 'Bozdurma / Transfer' : 'Yeni işlem';
+  $('#txTitle').textContent = t ? 'İşlemi düzenle' : dlg.type === 'transfer' ? 'Hesaplar arası transfer' : 'Yeni işlem';
   $('#txDel').classList.toggle('hide', !t);
   $('#txDlg').showModal();
   if (!t) setTimeout(() => f.amount.focus(), 30);
@@ -793,6 +977,15 @@ function fillAccSelect(sel, value, exclude) {
   const list = accOrdered().filter(a => a.id !== exclude);
   sel.innerHTML = accOptions(list);
   if (value && list.some(a => a.id === value)) sel.value = value;
+}
+/* Transferin iki ucunu tek satırda özetler: çıkan hesaptan düşen (tutar + ücret) ve hedefe giren. */
+function trSummary(a, b, amt, toAmt, fee) {
+  if (!a || !b || !(amt > 0)) return '';
+  fee = fee > 0 ? fee : 0;
+  const feeTxt = fee ? ` <small class="muted">(${fmt(amt, a.currency)} + ${fmt(fee, a.currency)} ücret)</small>` : '';
+  const inTxt = toAmt > 0 ? `+${fmt(toAmt, b.currency)}` : '—';
+  return `<b>${esc(accLabel(a))}</b> <span class="exp num">−${fmt(amt + fee, a.currency)}</span>${feeTxt}` +
+    ` → <b>${esc(accLabel(b))}</b> <span class="inc num">${inTxt}</span>`;
 }
 function syncTx(t) {
   const f = F(), tp = dlg.type;
@@ -809,8 +1002,11 @@ function syncTx(t) {
     f.categoryId.innerHTML = (tp === 'income' ? '<option value="">— Belirtme —</option>' : '') + catOptions(tp);
     if (prev !== undefined && [...f.categoryId.options].some(o => o.value === prev)) f.categoryId.value = prev;
   } else {
+    // Hedef hesap: açık olan seçim korunur, yoksa en son transferde kullanılan, o da yoksa ilk uygun hesap.
     const from = f.accountId.value, keep = f.toAccountId.value;
-    const pref = keep && keep !== from ? keep : db.accounts.find(x => x.id !== from && a && x.currency !== a.currency)?.id;
+    const pref = keep && keep !== from ? keep
+      : ui.lastTrTo && ui.lastTrTo !== from ? ui.lastTrTo
+      : accOrdered().find(x => x.id !== from)?.id;
     fillAccSelect(f.toAccountId, pref, from);
   }
   const noTarget = isTr && !f.toAccountId.options.length;
@@ -819,11 +1015,7 @@ function syncTx(t) {
   if (noTarget) $('#quickAccBtn').textContent = cur === 'IQD' ? '+ "Nakit Dolar" hesabı oluştur' : '+ "Nakit Dinar" hesabı oluştur';
   // Ücret çıkan hesabın para biriminde, tutara ek olarak o hesaptan düşer.
   $('#feeWrap').classList.toggle('hide', !isTr || noTarget);
-  if (isTr) {
-    $('#feeCur').textContent = cur;
-    const fee = num(f.fee.value), amt = num(f.amount.value);
-    $('#feeHint').textContent = fee > 0 && amt > 0 ? `${accLabel(a)} hesabından toplam ${fmt(amt + fee, cur)} düşecek (${fmt(amt, cur)} + ${fmt(fee, cur)} ücret)` : '';
-  }
+  if (isTr) $('#feeCur').textContent = cur;
   const b = isTr ? acc(f.toAccountId.value) : null;
   const fx = isTr && b && a && b.currency !== a.currency;
   $('#toAmtWrap').classList.toggle('hide', !fx);
@@ -844,9 +1036,12 @@ function syncTx(t) {
     $('#fxHint').textContent = `Herhangi ikisini yazın, üçüncüsü hesaplanır. Kayıtlı kur: 1 $ = ${fmtNum(rate)} IQD` +
       (R > 0 && Math.abs(R - rate) >= 0.01 ? ` (fark ${R > rate ? '+' : '−'}${fmtNum(Math.abs(R - rate), 2)})` : '');
     $('#amtHint').textContent = '';
+    $('#trHint').innerHTML = trSummary(a, b, num(f.amount.value), num(f.toAmount.value), num(f.fee.value));
     return;
   }
   const amount = num(f.amount.value), other = cur === 'USD' ? 'IQD' : 'USD';
+  // Aynı para birimindeki transferde giren tutar, çıkan tutarla aynıdır (ücret ayrıca düşer).
+  $('#trHint').innerHTML = isTr ? trSummary(a, b, amount, amount, num(f.fee.value)) : '';
   // Yazılan rakamın nasıl okunduğunu göster ki nokta/virgül karışıklığı hemen fark edilsin.
   $('#amtHint').textContent = amount > 0 ? `= ${fmt(amount, cur)}  ≈ ${fmt(conv(amount, cur, other, rate), other)}` : '';
 }
@@ -867,7 +1062,7 @@ function submitTx(e) {
     if (!(t.toAmount > 0)) { toast('Hedef tutarı veya kuru girin.'); return; }
     t.fee = f.fee.value.trim() ? num(f.fee.value) : 0;
     if (!(t.fee >= 0)) { toast('Transfer ücreti geçersiz.'); f.fee.focus(); return; }
-    ui.lastTrAcc = a.id;
+    ui.lastTrAcc = a.id; ui.lastTrTo = b.id;
     if (a.currency !== b.currency && f.saveRate.checked) {
       const R = a.currency === 'IQD' ? amount / t.toAmount : t.toAmount / amount;
       if (Math.abs(R - rateAt(t.date)) >= 0.01) setRate(t.date, R);
@@ -971,23 +1166,43 @@ document.addEventListener('click', e => {
     case 'del-rate':
       if (confirm('Bu kur kaydı silinsin mi?')) { db.rates = db.rates.filter(r => r.id !== d.id); save(); render(); }
       break;
-    case 'export': {
-      const name = `kisisel-hesap-yedek-${today()}.json`;
-      const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
-      // iPhone ana ekran uygulamasında indirme çalışmaz; Paylaş menüsüyle (Dosyalar'a Kaydet, AirDrop, WhatsApp…) verilir.
-      const file = new File([blob], name, { type: 'application/json' });
-      if (navigator.canShare && navigator.canShare({ files: [file] }) && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-        navigator.share({ files: [file], title: 'Kişisel Hesap yedeği' }).catch(() => {});
-        break;
-      }
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob); a.download = name;
-      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    case 'pay': openPay(d.id); break;
+    case 'close-pay': payId = null; $('#payDlg').close(); break;
+    case 'pay-all': {
+      const x = db.debts.find(y => y.id === payId);
+      if (x) $('#payForm').elements.amount.value = fmtIn(debtLeft(x), 'any');
       break;
     }
+    case 'del-pay': {
+      const x = db.debts.find(y => y.id === d.id), p = x && x.payments.find(y => y.id === d.pay);
+      if (x && p && confirm(`${fmt(p.amount, x.currency)} tutarındaki ödeme kaydı silinsin mi?`)) {
+        x.payments = x.payments.filter(y => y.id !== d.pay); save(); render(); toast('Ödeme silindi');
+      }
+      break;
+    }
+    case 'del-debt': {
+      const x = db.debts.find(y => y.id === d.id); if (!x) break;
+      const kind = x.dir === 'lent' ? 'alacak' : 'borç';
+      const extra = x.payments.length ? `\n\n${x.payments.length} ödeme/tahsilat kaydı da silinecek.` : '';
+      if (confirm(`“${x.person}” için ${kind} kaydı silinsin mi?${extra}`)) {
+        db.debts = db.debts.filter(y => y.id !== d.id); save(); render(); toast('Kayıt silindi');
+      }
+      break;
+    }
+    case 'export': doBackup(); break;
     case 'import': $('#importFile').click(); break;
+    case 'restore-snap': {
+      const sn = loadSnap(); if (!sn) { toast('Geri alınacak önceki veri yok.'); break; }
+      if (confirm(`${fmtTs(sn.ts)} tarihindeki önceki veriler geri yüklensin mi?`)) {
+        const previous = sn.data;
+        takeSnapshot('geri alma öncesi');
+        db = norm(previous); save(); ui.tab = 'ozet'; render(); toast('Önceki veriler geri yüklendi');
+      }
+      break;
+    }
     case 'reset':
       if (confirm('TÜM veriler silinecek (işlemler, hesaplar, kategoriler, kurlar). Emin misiniz?') && confirm('Son kez: yedek aldınız mı? Silinsin mi?')) {
+        takeSnapshot('tüm verileri silme öncesi');
         db = seed(); save(); ui.tab = 'ozet'; render(); toast('Sıfırlandı');
       }
       break;
@@ -997,6 +1212,7 @@ document.addEventListener('click', e => {
 document.addEventListener('submit', e => {
   const form = e.target;
   if (form.id === 'txForm') return submitTx(e);
+  if (form.id === 'payForm') return submitPay(e);
   e.preventDefault();
   const v = Object.fromEntries(new FormData(form));
   if (form.dataset.form === 'acc') {
@@ -1039,6 +1255,16 @@ document.addEventListener('submit', e => {
     db.rates = db.rates.filter(r => r.date !== v.date);
     db.rates.push({ id: uid(), date: v.date, rate });
     toast('Kur kaydedildi');
+  } else if (form.dataset.form === 'debt') {
+    const person = (v.person || '').trim(), amount = num(v.amount);
+    if (!person) { toast('Kişi adını girin.'); form.elements.person.focus(); return; }
+    if (!(amount > 0)) { toast('Geçerli bir tutar girin.'); form.elements.amount.focus(); return; }
+    if (!v.date) { toast('Tarih seçin.'); return; }
+    db.debts.push({
+      id: uid(), dir: v.dir, person, amount, currency: v.currency,
+      date: v.date, note: (v.note || '').trim(), payments: [],
+    });
+    toast(v.dir === 'lent' ? 'Alacak eklendi' : 'Borç eklendi');
   }
   save(); render();
 });
@@ -1084,8 +1310,8 @@ document.addEventListener('change', e => {
         const d = JSON.parse(r.result);
         if (!Array.isArray(d.accounts) || !Array.isArray(d.categories) || !Array.isArray(d.tx) || !Array.isArray(d.rates)) throw 0;
         if (!confirm(`Yedekte ${d.tx.length} işlem var. Mevcut verilerin yerine geçsin mi?`)) return;
-        d.settings = Object.assign({ display: 'IQD', weekStart: 1 }, d.settings);
-        db = d; save(); ui.tab = 'ozet'; render(); toast('Yedek yüklendi');
+        takeSnapshot('yedekten geri yükleme öncesi');
+        db = norm(d); save(); ui.tab = 'ozet'; render(); toast('Yedek yüklendi');
       } catch (_) { alert('Bu dosya geçerli bir yedek değil.'); }
     };
     r.readAsText(el.files[0]);
