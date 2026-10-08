@@ -423,6 +423,8 @@ dialog.sheet{overflow-x:hidden;touch-action:pan-y}
 <div id="report"></div>
 
 <script>
+/* Varsayılan canlı kur köprüsü: yeni cihazda da kurlar hemen canlı gelir. */
+const DEF_BRIDGE = 'https://kur.mohammeddilovan0.workers.dev';
 const KEY = 'kisisel-hesap-v1';
 const PALETTE = ['#d9534f','#e8a33d','#3b82c4','#2e9e6b','#9b59b6','#e76f51','#14b8a6','#8d6e63','#64748b','#c2410c','#db2777','#65a30d'];
 
@@ -459,7 +461,7 @@ function seed() {
     tx: [],
     debts: [],
     trash: [],
-    settings: { display: 'IQD', weekStart: 1, lastBackup: '', rateCity: 'erbil', bridge: '' },
+    settings: { display: 'IQD', weekStart: 1, lastBackup: '', rateCity: 'erbil', bridge: DEF_BRIDGE, goldCity: 'erbil' },
   };
 }
 /* Eski kayıtlarda/yedeklerde olmayan alanları tamamlar (ör. borç/alacak listesi). */
@@ -476,6 +478,8 @@ function norm(d) {
   });
   d.settings = Object.assign({ display: 'IQD', weekStart: 1, lastBackup: '', rateCity: 'erbil', bridge: '' }, d.settings);
   if (!/^https:\/\/[^\s/]+\.[^\s]+$/.test(d.settings.bridge || '')) d.settings.bridge = '';
+  if (!d.settings.bridge && !d.settings.bridgeOff) d.settings.bridge = DEF_BRIDGE;
+  if (!['erbil', 'baghdad', 'basra'].includes(d.settings.goldCity)) d.settings.goldCity = 'erbil';
   return clean(d);
 }
 /* Güvenlik: kimlik, tarih, renk gibi alanlar ekrana kaçışsız yazılır. Dışarıdan gelen (ör. birinin gönderdiği)
@@ -1381,21 +1385,21 @@ function goldStream() {
   sock.onerror = () => { wsHost = (wsHost + 1) % WS_HOSTS.length; };
   sock.onclose = () => { if (ws === sock) ws = null; };
 }
-/* Dinara çevirmek için kullanılabilecek kurlar: canlı şehir kurları + uygulamadaki kayıtlı kur. */
-function goldRates() {
-  const out = Object.entries(LIVE_CITIES).filter(([k]) => live.data && live.data[k])
-    .map(([k, [name]]) => ({ k, name, rate: live.data[k].rate }));
-  out.push({ k: 'saved', name: 'Kayıtlı kur', rate: curRate() });
-  return out;
+/* Dinara çevirme: seçilen şehrin (Erbil/Bağdat/Basra) canlı kuru. Canlı kur yoksa kayıtlı kur, açıkça belirtilerek. */
+function goldRate() {
+  const k = db.settings.goldCity, x = live.data && live.data[k];
+  if (x) return { name: LIVE_CITIES[k][0], rate: x.rate, live: true };
+  const why = !db.settings.bridge ? 'canlı kur köprüsü bağlı değil' : live.loading || !live.err ? `${LIVE_CITIES[k][0]} kuru alınıyor…` : `${LIVE_CITIES[k][0]} kuru alınamadı`;
+  return { name: 'Kayıtlı kur', rate: curRate(), live: false, why };
 }
 const goldUsd = (karat, grams) => gold.usd / OZ * karat / 24 * grams;
 function vGold() {
-  ui.goldCity = ui.goldCity || 'erbil';
   ui.lastMkt = 'altin';
   return mktSeg() + `
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
       <h2 style="margin:0">Altın fiyatı</h2>
+      <select id="gCity" style="width:auto" aria-label="Dinar kuru şehri">${Object.entries(LIVE_CITIES).map(([k, [n]]) => `<option value="${k}"${db.settings.goldCity === k ? ' selected' : ''}>${n}</option>`).join('')}</select>
     </div>
     <p class="muted" style="font-size:12px;margin:2px 0 8px">Dünya ons fiyatı · anlık · işçilik hariç</p>
     <div id="gold"></div>
@@ -1417,12 +1421,11 @@ function renderGold() {
       : `<p class="hint">Altın fiyatı alınamadı (${esc(gold.err)}), birkaç saniye içinde tekrar denenecek.</p>`;
     renderGoldCalc(); return;
   }
-  const rates = goldRates(), city = rates.find(r => r.k === ui.goldCity) || rates[0];
+  const city = goldRate();
   el.innerHTML = `
     <div class="num gold-px ${gold.dir}" style="font-size:22px;font-weight:700">1 ons = ${fmtNum(gold.usd, 2)} $ ${gold.dir === 'up' ? '▲' : gold.dir === 'down' ? '▼' : ''}</div>
     <p class="muted" style="font-size:12px;margin:2px 0 10px">${gold.src === 'canlı' ? '<span style="color:#16a34a">●</span> Canlı (her işlemde)' : 'son güncelleme ' + new Date(gold.upd).toLocaleTimeString('tr-TR')}${gold.err ? ' · yenilenemedi: ' + esc(gold.err) : ''}</p>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">${rates.map(r =>
-      `<button class="btn sm${r.k === city.k ? ' primary' : ''}" data-action="gold-city" data-city="${r.k}">${r.name} ${fmtNum(r.rate, r.rate % 1 ? 2 : 0)}</button>`).join('')}</div>
+    <p style="font-size:13px;margin:0 0 6px">${goldRateLine(city)}</p>
     <table><thead><tr><th>Ayar <small>($ / IQD)</small></th>${['1 gram', '1 miskal', '1 ons'].map(t => `<th style="text-align:right">${t}</th>`).join('')}</tr></thead><tbody>
     ${KARATS.map(k => `<tr><td><b>${k}</b></td>${[1, MISKAL, OZ].map(gr => {
       const u = goldUsd(k, gr);
@@ -1431,6 +1434,9 @@ function renderGold() {
     </tbody></table>`;
   renderGoldCalc();
 }
+const goldRateLine = c => c.live
+  ? `Dinar: <b>${c.name}</b> canlı kuru · 1 $ = <b class="num">${fmtNum(c.rate, c.rate % 1 ? 2 : 0)}</b> IQD`
+  : `<span style="color:var(--warn,#d97706)">${esc(c.why)}</span> · şimdilik kayıtlı kur 1 $ = <span class="num">${fmtNum(c.rate, c.rate % 1 ? 2 : 0)}</span> IQD`;
 function renderGoldCalc() {
   const el = $('#gOut'); if (!el) return;
   ui.gAmt = $('#gAmt').value; ui.gUnit = $('#gUnit').value; ui.gKarat = +$('#gKarat').value;
@@ -1438,8 +1444,8 @@ function renderGoldCalc() {
   if (!gold.usd || !amt) { el.innerHTML = ''; return; }
   const usd = goldUsd(ui.gKarat, amt * ({ m: MISKAL, g: 1, o: OZ }[ui.gUnit] || 1));
   el.innerHTML = `<div class="list-row" style="margin-top:8px"><div class="m"><b>Dolar</b></div><b class="num">${fmtNum(usd, 2)} $</b></div>`
-    + goldRates().map(r => `<div class="list-row"><div class="m">${r.name} <small class="muted num">· ${fmtNum(r.rate, r.rate % 1 ? 2 : 0)}</small></div>
-      <b class="num">${fmtNum(Math.round(usd * r.rate))} IQD</b></div>`).join('');
+    + (r => `<div class="list-row"><div class="m"><b>Dinar</b> <small class="muted num">· ${r.name} ${fmtNum(r.rate, r.rate % 1 ? 2 : 0)}</small></div>
+      <b class="num">${fmtNum(Math.round(usd * r.rate))} IQD</b></div>`)(goldRate());
 }
 
 /* ---------- borç / alacak ---------- */
@@ -2193,16 +2199,15 @@ document.addEventListener('click', e => {
       break;
     }
     case 'mkt-reload': loadMkt(true); break;
-    case 'gold-city': ui.goldCity = d.city; renderGold(); break;
     case 'bridge-save': {
       const u = $('#bridgeUrl').value.trim();
       if (!/^https:\/\/[^\s/]+\.[^\s]+$/.test(u)) { toast('https:// ile başlayan köprü adresini yapıştırın.'); break; }
-      db.settings.bridge = u; live.data = null; save(); render(); toast('Köprü bağlandı');
+      db.settings.bridge = u; db.settings.bridgeOff = false; live.data = null; save(); render(); toast('Köprü bağlandı');
       break;
     }
     case 'bridge-edit':
       ask({ msg: 'Köprü adresi silinsin mi? Yeni adresi tekrar yapıştırabilirsiniz.', ok: 'Köprüyü kaldır' }).then(ok => {
-        if (ok) { db.settings.bridge = ''; live.data = null; save(); render(); }
+        if (ok) { db.settings.bridge = ''; db.settings.bridgeOff = true; live.data = null; save(); render(); }
       });
       break;
     case 'use-rate': {
@@ -2369,6 +2374,7 @@ document.addEventListener('submit', e => {
 document.addEventListener('input', e => {
   const el = e.target;
   if (el.dataset.filter) { ui.f[el.dataset.filter] = el.value; renderTxList(); return; }
+  if (el.id === 'gCity') { db.settings.goldCity = el.value; save(); renderGold(); return; }
   if (el.closest('#goldCalc')) { renderGoldCalc(); return; }
   if (el.closest('#payForm')) { if (el.name === 'rate') payRateTyped.v = true; syncPay(); return; }
   if (el.closest('#txForm')) {
