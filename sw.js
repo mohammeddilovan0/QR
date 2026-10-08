@@ -1,7 +1,7 @@
 // Uygulama dosyalarını telefonda saklar ki internet yokken de açılsın.
 // İnternet varsa önce yeni sürümü dener (güncellemeler kendiliğinden gelir), yoksa saklananı açar.
 // Not: Verileriniz (işlemler, hesaplar) burada değil, uygulamanın kendi deposunda durur.
-const CACHE = 'kisisel-hesap-v22';
+const CACHE = 'kisisel-hesap-v23';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -28,4 +28,19 @@ self.addEventListener('fetch', e => {
       })
       .catch(() => caches.match(e.request, { ignoreSearch: true }).then(r => r || caches.match('./index.html')))
   );
+});
+
+// Ayağa kalk hatırlatıcısı: köprüden gelen bildirimi göster (uygulama kapalıyken de).
+self.addEventListener('push', e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (_) {}
+  e.waitUntil(self.registration.showNotification(d.title || 'Kalk biraz 🧍', {
+    body: d.body || 'Uzun süredir oturuyorsun. Kalk, birkaç adım yürü.',
+    tag: 'kalk', renotify: true, icon: 'icon-192.png', badge: 'icon-192.png',
+  }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    .then(cs => cs.length ? cs[0].focus() : self.clients.openWindow('./')));
 });
