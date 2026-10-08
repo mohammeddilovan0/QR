@@ -4,20 +4,18 @@ Web uygulamasının (repo kökündeki `index.html`) [Capacitor](https://capacito
 Farkı: **Ayağa kalk** hatırlatmaları telefonun kendi bildirimleriyle kurulur, seçilen ses uygulama kapalıyken de çalar;
 Cloudflare köprüsüne gerek kalmaz. Geri kalan her şey web sürümüyle aynı.
 
-## iPhone'a yükleme (Mac'te, Node gerekmez)
+## iPhone'a yükleme (SideStore)
 
-1. App Store'dan **Xcode**'u kur ve bir kez aç.
-2. Bu repoyu indir (GitHub'da **Code → Download ZIP**, ya da `git clone`).
-3. `ios-app/ios/App/App.xcodeproj` dosyasını çift tıkla, Xcode'da açılır. Paketler ilk açılışta kendiliğinden iner.
-4. Xcode → **Settings → Accounts** → **+** → Apple ID ile giriş yap (ücretsiz hesap yeter).
-5. Soldan **App** projesini seç → **Signing & Capabilities** → **Team**: kendi adın (Personal Team).
-   "Bundle identifier kullanılıyor" hatası çıkarsa `com.mohammeddilovan.kisiselhesap` sonuna bir şey ekle (ör. `.m1`).
-6. iPhone'u kabloyla Mac'e tak, telefonda **Bu bilgisayara güven** de. iPhone'da **Ayarlar → Gizlilik ve Güvenlik → Geliştirici Modu**'nu aç (telefon yeniden başlar).
-7. Xcode'un üstündeki cihaz listesinden iPhone'unu seç, **▶ (Run)**'a bas.
-8. İlk açılışta iPhone **güvenilmeyen geliştirici** der: **Ayarlar → Genel → VPN ve Cihaz Yönetimi** → Apple ID'n → **Güven**. Sonra uygulamayı aç.
+Uygulama GitHub'da kendiliğinden derlenir: https://github.com/mohammeddilovan0/QR/releases/download/ios/KisiselHesap.ipa
+SideStore bu dosyayı kendi Apple ID'nizle imzalayıp yükler ve 7 günlük süreyi telefondan yeniler, Mac gerekmez
+(SideStore'un ilk kurulumu hariç: https://docs.sidestore.io).
 
-Ücretsiz Apple hesabıyla yüklenen uygulama **7 gün** çalışır; sonra telefonu takıp 7. adımı tekrarlamak yeter (veriler silinmez).
-Yıllık 99 $ Apple Developer üyeliğiyle bu süre 1 yıl olur ve TestFlight ile kablosuz yüklenebilir.
+1. SideStore'u kur (bir kez, Mac ile).
+2. iPhone'da Safari ile yukarıdaki .ipa'yı indir.
+3. SideStore → **My Apps** → **+** → indirilen `KisiselHesap.ipa`.
+4. Güncelleme gelince 2–3'ü tekrarla; veriler silinmez.
+
+Xcode ile de yüklenebilir: `ios-app/ios/App/App.xcodeproj` açılır, **Signing & Capabilities → Team** seçilir, iPhone seçilip **Run**.
 
 ## Verileri taşıma
 
@@ -33,6 +31,8 @@ Web uygulaması değişince iOS kopyasını güncellemek için (Node gerekir):
 ```
 cd ios-app && npm install && npm run sync
 ```
+
+GitHub derlemesi zaten her seferinde güncel `index.html`'i pakete koyar.
 
 `sync`, `index.html`'i `ios/App/App/public/`'e kopyalar ve bildirim eklentisini `ios/plugins/`'e alır;
 böylece Mac'te yalnızca Xcode ile derlenebilir. Hatırlatıcı sesleri (`ios/App/App/kalk-*.wav`) web uygulamasının
