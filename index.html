@@ -32,19 +32,11 @@
 *{box-sizing:border-box}
 html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:980px;margin:0 auto;padding:0 max(16px,env(safe-area-inset-right)) calc(96px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
-header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:calc(18px + env(safe-area-inset-top)) 0 10px}
+.wrap{max-width:980px;margin:0 auto;padding:calc(44px + env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) calc(150px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
 /* iPhone'da 16px'ten küçük yazı alanına dokununca sayfa yakınlaşıyor; engelle. */
 @media (max-width:760px){input,select,textarea{font-size:16px!important}}
 html{-webkit-text-size-adjust:100%}
 body{-webkit-tap-highlight-color:transparent}
-header h1{font-size:20px;margin:0;letter-spacing:-.01em;flex:1;min-width:140px}
-.badge{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:5px 12px;font-size:13px;color:var(--muted);cursor:pointer}
-.badge b{color:var(--ink);font-weight:600}
-nav{display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid var(--line);margin-bottom:18px;scrollbar-width:none}
-nav::-webkit-scrollbar{display:none}
-.tab{background:none;border:0;padding:10px 12px;font:inherit;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
-.tab.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow);margin-bottom:14px}
 h2{font-size:17px;margin:0 0 12px}
 h3{font-size:13px;margin:18px 0 10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
@@ -58,9 +50,9 @@ small{font-size:12px}
 button,input,select{font:inherit;color:inherit}
 button{cursor:pointer}
 .btn{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:8px 14px}
-.btn:hover{background:var(--soft)}
+@media (hover:hover){.btn:hover{background:var(--soft)}}
 .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
-.btn.primary:hover{filter:brightness(1.05)}
+@media (hover:hover){.btn.primary:hover{filter:brightness(1.05)}}
 .btn.danger{color:var(--exp)}
 .btn.sm{padding:4px 10px;font-size:13px;border-radius:8px}
 .seg{display:inline-flex;background:var(--soft);border-radius:10px;padding:3px;gap:2px}
@@ -104,7 +96,7 @@ label>input,label>select,label>.amt{margin-top:4px}
 .kpi .l{font-size:12px;color:var(--muted)}
 .kpi .v{font-size:20px;font-weight:700;margin-top:2px}
 .bar-row{display:grid;grid-template-columns:minmax(90px,150px) 1fr auto;gap:10px;align-items:center;padding:5px 0;cursor:pointer;border-radius:8px}
-.bar-row:hover .bar-lbl{text-decoration:underline}
+@media (hover:hover){.bar-row:hover .bar-lbl{text-decoration:underline}}
 .bar-lbl{display:flex;align-items:center;gap:8px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .bar-row.sub{padding:2px 0;font-size:13px;color:var(--muted)}
 .bar-row.sub .bar-lbl::before{content:"↳";margin-left:-4px}
@@ -147,7 +139,7 @@ label>input,label>select,label>.amt{margin-top:4px}
 @media (min-width:760px){.filters{grid-template-columns:2fr 1fr 1fr 1fr 1fr auto}}
 .day{font-size:12px;color:var(--muted);font-weight:600;padding:12px 2px 6px;display:flex;justify-content:space-between}
 .tx{display:flex;gap:12px;align-items:center;padding:10px;border-radius:10px;cursor:pointer}
-.tx:hover{background:var(--soft)}
+@media (hover:hover){.tx:hover{background:var(--soft)}}
 .tx .ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex:none;font-weight:700;font-size:14px;color:#fff}
 .tx .m{flex:1;min-width:0}
 .tx .t{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -157,15 +149,6 @@ label>input,label>select,label>.amt{margin-top:4px}
 .list-row:first-child{border-top:0}
 .list-row .m{flex:1;min-width:0}
 .empty{text-align:center;color:var(--muted);padding:28px 10px}
-.fab{position:fixed;right:max(16px,calc(50vw - 474px));bottom:calc(20px + env(safe-area-inset-bottom));display:flex;gap:8px;z-index:5}
-.fab .btn{box-shadow:0 4px 16px rgba(0,0,0,.18);border-radius:999px;padding:12px 18px}
-@media (max-width:620px){.fab{left:12px;right:12px;justify-content:flex-end;flex-wrap:wrap;gap:6px}.fab .btn{padding:10px 12px;font-size:12px}}
-dialog{border:1px solid var(--line);border-radius:16px;padding:0;background:var(--card);color:var(--ink);width:min(460px,calc(100vw - 32px))}
-dialog::backdrop{background:rgba(0,0,0,.4)}
-.dlg{padding:18px;display:grid;gap:12px}
-.dlg-head{display:flex;justify-content:space-between;align-items:center}
-.dlg-head h2{margin:0}
-.dlg-actions{display:flex;gap:8px;align-items:center}
 .sp{flex:1}
 .hint{font-size:12px;color:var(--muted);margin-top:4px;min-height:16px}
 .hide{display:none!important}
@@ -185,7 +168,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 .warn .m{flex:1;min-width:160px}
 .warn .m b{display:block}
 .ok{color:var(--inc)}
-.toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20}
+.toast{position:fixed;left:50%;bottom:calc(var(--tabh) + 84px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20}
 .toast.on{opacity:1}
 table{width:100%;border-collapse:collapse}
 td,th{text-align:left;padding:8px 4px;border-top:1px solid var(--line)}
@@ -197,6 +180,95 @@ th{font-size:12px;color:var(--muted);font-weight:600;border-top:0}
 .gold-px.down{color:#dc2626;animation:flashDown 1s}
 details{border-top:1px solid var(--line);margin-top:8px}
 details summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:14px;padding:10px 0}
+/* ---------- uygulama kabuğu: üst çubuk, büyük başlık, alt menü ---------- */
+:root{--tabh:50px;--bar:color-mix(in srgb,var(--bg) 78%,transparent)}
+html{background:var(--bg);overscroll-behavior-y:none}
+body{overscroll-behavior-y:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea,select,[contenteditable]{-webkit-user-select:text;user-select:text}
+.navbar{position:fixed;top:0;left:0;right:0;z-index:10;padding:env(safe-area-inset-top) max(8px,env(safe-area-inset-right)) 0 max(8px,env(safe-area-inset-left));height:calc(44px + env(safe-area-inset-top));display:grid;grid-template-columns:1fr auto 1fr;align-items:center;border-bottom:.5px solid transparent;transition:background .2s,border-color .2s}
+body.scrolled .navbar{background:var(--bar);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);border-bottom-color:var(--line)}
+.navbar .nt{font-weight:600;font-size:17px;opacity:0;transition:opacity .2s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60vw}
+body.scrolled .navbar .nt{opacity:1}
+.navbar .nl{justify-self:start;display:flex}.navbar .nr{justify-self:end;display:flex;gap:4px}
+.nav-txt{background:none;border:0;color:var(--accent);font:inherit;font-size:17px;padding:8px;min-height:44px;display:inline-flex;align-items:center;gap:2px;cursor:pointer}
+.nav-txt.b{font-weight:600}
+.nav-txt:disabled{opacity:.35}
+.nav-txt svg{width:22px;height:22px}
+.nav-txt .chev{font-size:30px;line-height:0;margin:-2px 2px 0 -4px;font-weight:300}
+.lt{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin:4px 0 14px}
+.lt h1{font-size:32px;line-height:1.15;margin:0;letter-spacing:-.02em;font-weight:750}
+.lt .seg button{padding:5px 10px;font-size:13px}
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:10;display:flex;justify-content:center;padding:0 max(0px,env(safe-area-inset-right)) env(safe-area-inset-bottom) max(0px,env(safe-area-inset-left));background:var(--bar);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);border-top:.5px solid var(--line)}
+.tabbar button{flex:1;max-width:120px;height:var(--tabh);background:none;border:0;color:var(--muted);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font:inherit;font-size:10px;font-weight:500;cursor:pointer;padding:4px 0 0}
+.tabbar button svg{width:25px;height:25px}
+.tabbar button.on{color:var(--accent)}
+svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.fab{position:fixed;right:max(16px,calc(50vw - 474px));bottom:calc(var(--tabh) + 16px + env(safe-area-inset-bottom));z-index:9;width:56px;height:56px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;box-shadow:0 6px 20px rgba(0,0,0,.28);cursor:pointer;transition:transform .15s}
+.fab svg{width:28px;height:28px;stroke-width:2.4}
+.fab:active{transform:scale(.92)}
+body:not(.has-fab) .fab{display:none}
+/* Daha fazla menüsü: iOS Ayarlar gibi gruplu liste */
+.group{background:var(--card);border-radius:12px;overflow:hidden;margin-bottom:22px;border:1px solid var(--line)}
+.gitem{display:flex;align-items:center;gap:12px;width:100%;background:none;border:0;padding:0 0 0 14px;font:inherit;color:var(--ink);text-align:left;cursor:pointer}
+.gitem .gi{width:30px;height:30px;border-radius:7px;display:grid;place-items:center;color:#fff;flex:none}
+.gitem .gi svg{width:19px;height:19px}
+.gitem .gt{flex:1;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:13px 14px 13px 0;border-top:.5px solid var(--line);min-height:50px}
+.gitem:first-child .gt{border-top:0}
+.gitem .gv{color:var(--muted);display:flex;align-items:center;gap:6px}
+.chev-r{color:var(--muted);opacity:.6;font-size:22px;line-height:1}
+.mseg{display:flex;width:100%;margin-bottom:14px}.mseg button{flex:1}
+/* Görünüm geçişi ve dokunma tepkileri */
+#view.enter{animation:viewIn .24s ease-out}
+@keyframes viewIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.btn,.seg button,.chip.pick,.icon,.nav-txt,.tabbar button,.gitem,.caret{transition:transform .12s,opacity .12s,background .15s}
+.btn:active,.chip.pick:active,.icon:active{transform:scale(.96);opacity:.75}
+.nav-txt:active,.tabbar button:active{opacity:.45}
+.tx:active,.list-row.tap:active,.gitem:active,.bar-row:active,.list-row .m.tog:active{background:var(--soft)}
+.list-row.tap{cursor:pointer}
+/* Kaydırarak sil */
+.sw{position:relative;overflow:hidden;border-top:1px solid var(--line)}
+.sw>.sw-row{position:relative;z-index:1;background:var(--card);transition:transform .28s cubic-bezier(.2,.8,.2,1);touch-action:pan-y}
+.sw>.sw-row>.list-row{border-top:0}
+.sw-acts{position:absolute;top:0;right:0;bottom:0;display:flex}
+.sw-btn{border:0;color:#fff;font:inherit;font-size:14px;font-weight:600;padding:0 18px;min-width:76px;cursor:pointer}
+.sw-btn.del{background:#e5484d}.sw-btn.edit{background:#8e8e93}.sw-btn.ok{background:var(--accent);color:var(--accent-ink)}
+#txlist .sw{border-top:0;border-radius:10px}
+.card>.sw:first-child{border-top:0}
+/* Bildirim açık panellerin de üstünde görünsün (popover). */
+.toast[popover]{inset:auto auto calc(var(--tabh) + 84px + env(safe-area-inset-bottom)) 50%;margin:0;border:0;overflow:visible;max-width:calc(100vw - 32px)}
+/* Alttan açılan paneller */
+dialog{color:var(--ink)}
+dialog.sheet{position:fixed;inset:auto 0 0 0;margin:0 auto var(--kb,0px);width:100%;max-width:560px;max-height:calc(var(--vvh,100dvh) - env(safe-area-inset-top) - 10px);border:0;border-radius:14px 14px 0 0;padding:0 0 env(safe-area-inset-bottom);background:var(--card);overflow:auto;overscroll-behavior:contain;box-shadow:0 -8px 30px rgba(0,0,0,.25)}
+dialog.sheet{transition:transform .25s cubic-bezier(.2,.8,.2,1)}
+dialog.sheet[open]{animation:sheetIn .38s cubic-bezier(.32,.72,0,1)}
+dialog.sheet.closing{animation:sheetOut .22s ease-in forwards}
+dialog.sheet::backdrop{background:rgba(0,0,0,.42);animation:fadeIn .3s}
+dialog.sheet.closing::backdrop{animation:fadeOut .22s forwards}
+@keyframes sheetIn{from{transform:translateY(100%)}to{transform:none}}
+@keyframes sheetOut{to{transform:translateY(110%)}}
+@keyframes fadeIn{from{opacity:0}}
+@keyframes fadeOut{to{opacity:0}}
+.sheet-nav{position:sticky;top:0;z-index:2;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:8px 6px 4px;background:var(--card);border-bottom:.5px solid var(--line);touch-action:none;cursor:grab}
+.sheet-nav h2{margin:0;font-size:17px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:56vw}
+.sheet-nav .nav-txt:first-of-type{justify-self:start}.sheet-nav .nav-txt.b{justify-self:end}
+.grab{position:absolute;top:5px;left:50%;width:36px;height:5px;margin-left:-18px;border-radius:3px;background:var(--line)}
+.dlg{display:block}
+.sheet-body{padding:16px;display:grid;gap:14px}
+.btn.block{width:100%;padding:12px;font-weight:600}
+.btn.danger.block{background:color-mix(in srgb,var(--exp) 12%,var(--card));border-color:transparent}
+/* Onay menüsü (iOS eylem menüsü gibi) */
+#askDlg{background:transparent;box-shadow:none;padding:0 8px calc(8px + env(safe-area-inset-bottom));overflow:visible}
+.ask-box{background:var(--card);border-radius:14px;overflow:hidden;text-align:center}
+.ask-box .ah{padding:16px 16px 14px;color:var(--muted);font-size:13px;border-bottom:.5px solid var(--line)}
+.ask-box .ah b{display:block;color:var(--ink);font-size:14px;margin-bottom:4px}
+.ask-btn{display:block;width:100%;border:0;background:var(--card);color:var(--accent);font:inherit;font-size:19px;padding:16px;cursor:pointer}
+.ask-btn.danger{color:#e5484d}
+.ask-btn.cancel{margin-top:8px;border-radius:14px;font-weight:600}
+.ask-btn:active{background:var(--soft)}
+/* Silinenler */
+.trash .ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex:none;color:#fff}
+.trash .ic svg{width:18px;height:18px}
+@media (prefers-reduced-motion:reduce){*,::backdrop{animation:none!important;transition:none!important}}
 /* Rapor sadece yazdırırken (PDF) görünür; her zaman açık renkte basılır. */
 #report{display:none}
 @media print{
@@ -205,7 +277,7 @@ details summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:14p
   }
   @page{margin:12mm}
   body{background:#fff;font-size:12px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  body.printing .wrap,body.printing .fab,body.printing .toast,body.printing dialog{display:none!important}
+  body.printing .wrap,body.printing .fab,body.printing .toast,body.printing dialog,body.printing .navbar,body.printing .tabbar{display:none!important}
   body.printing #report{display:block}
   #report h1{font-size:22px;margin:2px 0 0}
   #report h3{margin:18px 0 6px;break-after:avoid}
@@ -224,48 +296,39 @@ details summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:14p
 </style>
 </head>
 <body>
+<div class="navbar">
+  <div class="nl" id="navL"></div>
+  <div class="nt" id="navT"></div>
+  <div class="nr" id="navR"></div>
+</div>
 <div class="wrap">
-  <header>
-    <h1>Kişisel Hesap</h1>
+  <div class="lt">
+    <h1 id="ltitle">Özet</h1>
     <div class="seg" id="disp" title="Toplamlar hangi para biriminde gösterilsin">
       <button data-action="disp" data-cur="IQD">IQD</button>
       <button data-action="disp" data-cur="USD">USD</button>
     </div>
-    <button class="badge" data-action="tab" data-tab="kur" id="rateBadge"></button>
-  </header>
-  <nav>
-    <button class="tab" data-action="tab" data-tab="ozet">Özet</button>
-    <button class="tab" data-action="tab" data-tab="islemler">İşlemler</button>
-    <button class="tab" data-action="tab" data-tab="hesaplar">Hesaplar</button>
-    <button class="tab" data-action="tab" data-tab="borclar">Borç/Alacak</button>
-    <button class="tab" data-action="tab" data-tab="kategoriler">Kategoriler</button>
-    <button class="tab" data-action="tab" data-tab="kur">Kur</button>
-    <button class="tab" data-action="tab" data-tab="altin">Altın</button>
-    <button class="tab" data-action="tab" data-tab="ayarlar">Ayarlar</button>
-  </nav>
+  </div>
   <main id="view"></main>
 </div>
 
-<div class="fab">
-  <button class="btn" data-action="new-tx" data-type="transfer" title="Hesaplar arası para gönder veya dinar ⇄ dolar bozdur">⇄ Transfer</button>
-  <button class="btn" data-action="new-tx" data-type="income">+ Gelir</button>
-  <button class="btn primary" data-action="new-tx" data-type="expense">+ Gider</button>
-</div>
+<button class="fab" data-action="new-tx" data-type="expense" aria-label="Yeni işlem"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+<nav class="tabbar" id="tabbar"></nav>
 
-<dialog id="txDlg">
+<dialog id="txDlg" class="sheet">
   <form class="dlg" id="txForm" novalidate>
-    <div class="dlg-head"><h2 id="txTitle">Yeni işlem</h2><button type="button" class="icon" data-action="close-dlg" aria-label="Kapat">✕</button></div>
-    <div class="seg" id="txType">
+    <div class="sheet-nav"><span class="grab"></span><button type="button" class="nav-txt" data-action="close-dlg">Vazgeç</button><h2 id="txTitle">Yeni işlem</h2><button type="submit" class="nav-txt b">Kaydet</button></div>
+    <div class="sheet-body">
+    <div class="seg mseg" id="txType" style="margin:0">
       <button type="button" data-action="tx-type" data-type="expense">Gider</button>
       <button type="button" data-action="tx-type" data-type="income">Gelir</button>
       <button type="button" data-action="tx-type" data-type="transfer">Transfer</button>
     </div>
-    <label>Tarih<input type="date" name="date" required></label>
-    <label><span id="accLbl">Hesap</span><select name="accountId"></select></label>
     <label>Tutar
       <div class="amt" id="amtBox"><input name="amount" inputmode="decimal" autocomplete="off" placeholder="0"><span id="amtCur">IQD</span></div>
       <div class="hint" id="amtHint"></div>
     </label>
+    <label><span id="accLbl">Hesap</span><select name="accountId"></select></label>
     <div id="catWrap"><label>Kategori</label>
       <select name="categoryId" class="hide" tabindex="-1"></select>
       <button type="button" class="cpick-btn" data-action="cpick" id="cpickBtn"></button>
@@ -289,36 +352,33 @@ details summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:14p
       <div class="hint" id="feeHint"></div>
     </label>
     <div class="hint" id="trHint" style="min-height:0"></div>
+    <label>Tarih<input type="date" name="date" required></label>
     <label>Not<input name="note" maxlength="140" placeholder="İsteğe bağlı" autocomplete="off"></label>
-    <div class="dlg-actions">
-      <button type="button" class="btn danger" id="txDel" data-action="tx-del">Sil</button>
-      <span class="sp"></span>
-      <button type="button" class="btn" data-action="close-dlg">Vazgeç</button>
-      <button type="submit" class="btn primary">Kaydet</button>
+    <button type="button" class="btn danger block" id="txDel" data-action="tx-del">İşlemi sil</button>
     </div>
   </form>
 </dialog>
 
-<dialog id="payDlg">
+<dialog id="payDlg" class="sheet">
   <form class="dlg" id="payForm" novalidate>
-    <div class="dlg-head"><h2 id="payTitle">Ödeme</h2><button type="button" class="icon" data-action="close-pay" aria-label="Kapat">✕</button></div>
+    <div class="sheet-nav"><span class="grab"></span><button type="button" class="nav-txt" data-action="close-pay">Vazgeç</button><h2 id="payTitle">Ödeme</h2><button type="submit" class="nav-txt b">Kaydet</button></div>
+    <div class="sheet-body">
     <div class="muted" id="payInfo"></div>
-    <label><span id="payAccLbl">Hesap</span><select name="accountId" required></select></label>
-    <label>Tarih<input type="date" name="date" required></label>
     <label>Tutar
       <div class="amt"><input name="amount" inputmode="decimal" autocomplete="off" placeholder="0"><span id="payCur">IQD</span></div>
     </label>
+    <div><button type="button" class="btn sm" data-action="pay-all">Kalanın tamamı</button></div>
+    <label><span id="payAccLbl">Hesap</span><select name="accountId" required></select></label>
+    <label>Tarih<input type="date" name="date" required></label>
     <label>Not<input name="note" maxlength="100" placeholder="İsteğe bağlı" autocomplete="off"></label>
-    <div class="dlg-actions">
-      <button type="button" class="btn sm" data-action="pay-all">Kalanın tamamı</button>
-      <span class="sp"></span>
-      <button type="button" class="btn" data-action="close-pay">Vazgeç</button>
-      <button type="submit" class="btn primary">Kaydet</button>
     </div>
   </form>
 </dialog>
 
-<div class="toast" id="toast"></div>
+<dialog id="sheet" class="sheet"></dialog>
+<dialog id="askDlg" class="sheet"></dialog>
+
+<div class="toast" id="toast" popover="manual"></div>
 <div id="report"></div>
 
 <script>
@@ -357,12 +417,15 @@ function seed() {
     })(),
     tx: [],
     debts: [],
+    trash: [],
     settings: { display: 'IQD', weekStart: 1, lastBackup: '', rateCity: 'erbil', bridge: '' },
   };
 }
 /* Eski kayıtlarda/yedeklerde olmayan alanları tamamlar (ör. borç/alacak listesi). */
 function norm(d) {
   if (!Array.isArray(d.debts)) d.debts = [];
+  if (!Array.isArray(d.trash)) d.trash = [];
+  d.trash = d.trash.filter(x => x && x.id && x.kind && x.data && typeof x.data === 'object');
   d.debts.forEach(x => {
     if (!Array.isArray(x.payments)) x.payments = [];
     x.payments.forEach(p => { if (!p.accountId) p.accountId = ''; if (!p.txId) p.txId = ''; });
@@ -376,7 +439,7 @@ function norm(d) {
 }
 /* Güvenlik: kimlik, tarih, renk gibi alanlar ekrana kaçışsız yazılır. Dışarıdan gelen (ör. birinin gönderdiği)
    bir yedek dosyası bu alanlara kod gizleyemesin diye, serbest yazı alanları dışındaki metinlerden HTML karakterleri atılır. */
-const TEXT_KEYS = new Set(['name', 'note', 'person', 'bridge', 'reason']);
+const TEXT_KEYS = new Set(['name', 'note', 'person', 'bridge', 'reason', 'label', 'sub']);
 function clean(v, k) {
   if (typeof v === 'string') return TEXT_KEYS.has(k) ? v : v.replace(/[<>"'`&\\]/g, '');
   if (Array.isArray(v)) return v.map(x => clean(x, k));
@@ -831,7 +894,7 @@ function renderTxList() {
     ${active ? '<span class="chip">Filtre açık</span>' : ''}</div>`;
 
   if (!rows.length) {
-    el.innerHTML = summary + `<div class="empty">${db.tx.length ? 'Filtreye uyan işlem yok.' : 'Henüz işlem yok. Sağ alttaki <b>+ Gider</b> ile başlayın.'}</div>`;
+    el.innerHTML = summary + `<div class="empty">${db.tx.length ? 'Filtreye uyan işlem yok.' : 'Henüz işlem yok. Sağ alttaki <b>+</b> ile başlayın.'}</div>`;
     return;
   }
   let html = summary, lastDay = '';
@@ -883,57 +946,57 @@ function txInfo(t) {
 }
 function txRow(t) {
   const { title, sub, col, ic, amt, locked } = txInfo(t);
-  return `<div class="tx" ${locked ? '' : `data-action="edit-tx" data-id="${t.id}"`}>
+  const row = `<div class="tx" ${locked ? '' : `data-action="edit-tx" data-id="${t.id}"`}>
     <div class="ic" style="background:${col}">${ic}</div>
     <div class="m"><div class="t">${esc(title)}</div><div class="s">${esc(sub)}</div></div>
     <div class="a">${amt}</div></div>`;
+  // Borç/alacak hareketleri kendi ekranından silinir.
+  return locked ? row : swRow(row, swBtn('Sil', 'del-tx', t.id));
 }
 
 function vAcc() {
+  const D = disp(), r = curRate();
+  const row = (a, isChild) => {
+    const b = balance(a.id), n = db.tx.filter(t => t.accountId === a.id || t.toAccountId === a.id).length;
+    const kids = isChild ? [] : accChildren(a.id);
+    const tot = kids.length ? [a, ...kids].reduce((s, x) => s + conv(balance(x.id), x.currency, D, r), 0) : 0;
+    return swRow(`<div class="list-row tap ${isChild ? 'child' : ''}" data-action="edit-acc" data-id="${a.id}">
+      <span class="cur">${a.currency}</span>
+      <div class="m"><b>${isChild ? '↳ ' : ''}${esc(a.name)}</b><div class="muted" style="font-size:12px">${n} işlem · açılış ${fmt(Number(a.opening) || 0, a.currency)}${a.currency !== D ? ` · ≈ ${fmt(conv(b, a.currency, D, r), D)}` : ''}${kids.length ? ` · <b>grup toplamı ≈ ${fmt(tot, D)}</b>` : ''}</div></div>
+      <b class="num ${b < 0 ? 'exp' : ''}">${fmt(b, a.currency)}</b><span class="chev-r">›</span>
+    </div>`, swBtn('Sil', 'del-acc', a.id));
+  };
+  return `
+  <div class="card" style="padding:4px 12px">
+    ${db.accounts.length ? accParents().map(p => row(p, false) + accChildren(p.id).map(k => row(k, true)).join('')).join('') : '<div class="empty">Hesap yok. Sağ üstteki <b>+</b> ile ekleyin.</div>'}
+  </div>
+  <p class="muted" style="font-size:12px;margin:0 4px">Düzenlemek için hesaba dokunun, silmek için sola kaydırın.</p>`;
+}
+/* Hesap ekleme / düzenleme paneli. ui.editAcc: düzenlenen hesap, ui.newAccParent: altına eklenecek ana hesap. */
+function accSheet() {
   const e = ui.editAcc ? acc(ui.editAcc) : null;
   const used = e && accUsed(e.id);
-  const D = disp(), r = curRate();
   const parentId = e ? (e.parentId || '') : (ui.newAccParent || '');
   const par = acc(parentId);
   const hasKids = e && accChildren(e.id).length > 0;
   const cur = e ? e.currency : (par ? par.currency : 'IQD');
   const parentOpts = accParents().filter(p => !e || p.id !== e.id)
     .map(p => `<option value="${p.id}" ${parentId === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
-  const row = (a, isChild) => {
-    const b = balance(a.id), n = db.tx.filter(t => t.accountId === a.id || t.toAccountId === a.id).length;
-    const kids = isChild ? [] : accChildren(a.id);
-    const tot = kids.length ? [a, ...kids].reduce((s, x) => s + conv(balance(x.id), x.currency, D, r), 0) : 0;
-    return `<div class="list-row ${isChild ? 'child' : ''}">
-      <span class="cur">${a.currency}</span>
-      <div class="m"><b>${isChild ? '↳ ' : ''}${esc(a.name)}</b><div class="muted" style="font-size:12px">${n} işlem · açılış ${fmt(Number(a.opening) || 0, a.currency)}${a.currency !== D ? ` · ≈ ${fmt(conv(b, a.currency, D, r), D)}` : ''}${kids.length ? ` · <b>grup toplamı ≈ ${fmt(tot, D)}</b>` : ''}</div></div>
-      <b class="num ${b < 0 ? 'exp' : ''}">${fmt(b, a.currency)}</b>
-      ${isChild ? '' : `<button class="btn sm" data-action="add-subacc" data-id="${a.id}" title="Alt hesap / kart ekle">+ Alt</button>`}
-      <button class="btn sm" data-action="edit-acc" data-id="${a.id}">Düzenle</button>
-      <button class="btn sm danger" data-action="del-acc" data-id="${a.id}">Sil</button>
-    </div>`;
-  };
-  return `
-  <div class="card">
-    <h2>${e ? 'Hesabı düzenle' : par ? `"${esc(par.name)}" altına alt hesap / kart ekle` : 'Yeni hesap ekle'}</h2>
-    <form data-form="acc" class="form-row" style="--cols:4">
-      <label>Hesap adı<input name="name" required maxlength="40" placeholder="${par ? 'ör. Kart IQD, Kart USD…' : 'ör. ZainCash, Rafidain Bank, FIB…'}" value="${esc(e?.name)}"></label>
+  openSheet(`<form data-form="acc" class="dlg">${sheetNav(e ? 'Hesabı düzenle' : par ? 'Yeni alt hesap' : 'Yeni hesap', e ? 'Kaydet' : 'Ekle')}
+    <div class="sheet-body">
+      <label>Hesap adı<input name="name" required maxlength="40" autocomplete="off" placeholder="${par ? 'ör. Kart IQD, Kart USD…' : 'ör. ZainCash, Rafidain Bank, FIB…'}" value="${esc(e?.name)}"></label>
       <label>Üst hesap<select name="parentId" ${hasKids ? 'disabled title="Alt hesabı olan hesap başka birinin altına taşınamaz"' : ''}>
         <option value="">— Yok (ana hesap) —</option>${parentOpts}</select></label>
       <label>Para birimi<select name="currency" ${used ? 'disabled title="İşlemi olan hesabın para birimi değiştirilemez"' : ''}>
         <option value="IQD" ${cur === 'IQD' ? 'selected' : ''}>Dinar (IQD)</option>
         <option value="USD" ${cur === 'USD' ? 'selected' : ''}>Dolar (USD)</option></select></label>
-      <label>Açılış bakiyesi<input name="opening" inputmode="decimal" placeholder="0" value="${e ? esc(fmtIn(Number(e.opening) || 0, 'any')) : ''}"></label>
-      <div style="display:flex;gap:6px">${e || par ? '<button type="button" class="btn" data-action="cancel-acc">Vazgeç</button>' : ''}<button class="btn primary">${e ? 'Kaydet' : 'Ekle'}</button></div>
-    </form>
-  </div>
-  <div class="card">
-    <h2>Hesaplarım</h2>
-    ${db.accounts.length ? accParents().map(p => row(p, false) + accChildren(p.id).map(k => row(k, true)).join('')).join('') : '<div class="empty">Hesap yok.</div>'}
-  </div>`;
+      <label>Açılış bakiyesi<input name="opening" inputmode="decimal" autocomplete="off" placeholder="0" value="${e ? esc(fmtIn(Number(e.opening) || 0, 'any')) : ''}"></label>
+      ${e && !e.parentId ? `<button type="button" class="btn block" data-action="add-subacc" data-id="${e.id}">+ Alt hesap / kart ekle</button>` : ''}
+      ${e ? `<button type="button" class="btn danger block" data-action="del-acc" data-id="${e.id}">Hesabı sil</button>` : ''}
+    </div></form>`);
 }
 
 function vCat() {
-  const e = ui.editCat ? cat(ui.editCat) : null;
   const rg = range('month', today()), st = stats(rg.start, rg.end), D = disp();
   const row = (c, isChild) => {
     const n = db.tx.filter(t => t.categoryId === c.id).length;
@@ -944,18 +1007,26 @@ function vCat() {
     const caret = isChild ? '' : kids.length
       ? `<button class="caret ${open ? 'open' : ''}" data-action="toggle-cat" data-id="${c.id}" aria-label="${open ? 'Alt kategorileri gizle' : 'Alt kategorileri göster'}" aria-expanded="${open}">›</button>`
       : '<span class="caret-sp"></span>';
-    return `<div class="list-row ${isChild ? 'child' : ''}">
+    return swRow(`<div class="list-row ${isChild ? 'child' : ''}">
       ${caret}<span class="dot" style="background:${c.color};width:${isChild ? 10 : 14}px;height:${isChild ? 10 : 14}px"></span>
       <div class="m tog" data-action="cat-tx" data-id="${c.id}" title="İşlemlerini göster"><b>${isChild ? '↳ ' : ''}${esc(c.name)}</b><div class="muted" style="font-size:12px">${nAll} işlem${kids.length ? ` · ${kids.length} alt kategori` : ''}${month ? ` · bu ay ${fmt(month, D)}` : ''}</div></div>
-      ${isChild ? '' : `<button class="btn sm" data-action="add-sub" data-id="${c.id}" title="Alt kategori ekle">+ Alt</button>`}
-      <button class="btn sm" data-action="edit-cat" data-id="${c.id}">Düzenle</button>
-      <button class="btn sm danger" data-action="del-cat" data-id="${c.id}">Sil</button>
-    </div>`;
+      <span class="chev-r">›</span>
+    </div>`, swBtn('Düzenle', 'edit-cat', c.id, 'edit') + swBtn('Sil', 'del-cat', c.id));
   };
   const list = tp => {
     const ps = parents(tp);
     return ps.length ? ps.map(p => row(p, false) + (ui.openCats.has(p.id) ? children(p.id).map(k => row(k, true)).join('') : '')).join('') : '<div class="empty">Kategori yok.</div>';
   };
+  return `
+  <div class="grid two">
+    <div class="card"><h2>Gider kategorileri</h2>${list('expense')}</div>
+    <div class="card"><h2>Gelir kategorileri</h2>${list('income')}</div>
+  </div>
+  <p class="muted" style="font-size:12px;margin:0 4px">Kategoriye dokununca işlemleri açılır. Düzenlemek, alt kategori eklemek veya silmek için sola kaydırın.</p>`;
+}
+/* Kategori ekleme / düzenleme paneli. */
+function catSheet() {
+  const e = ui.editCat ? cat(ui.editCat) : null;
   const parentId = e ? (e.parentId || '') : (ui.newCatParent || '');
   const par = cat(parentId);
   const hasKids = e && children(e.id).length > 0;
@@ -963,30 +1034,25 @@ function vCat() {
     parents(tp).filter(p => !e || p.id !== e.id).map(p => `<option value="${p.id}" ${parentId === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</optgroup>`).join('');
   const type = par ? par.type : (e ? e.type : 'expense');
   const color = e ? e.color : par ? par.color : PALETTE[db.categories.length % PALETTE.length];
-  return `
-  <div class="card">
-    <h2>${e ? 'Kategoriyi düzenle' : par ? `"${esc(par.name)}" altına alt kategori ekle` : 'Yeni kategori ekle'}</h2>
-    <form data-form="cat" class="form-row" style="--cols:4">
-      <label>Ad<input name="name" required maxlength="30" placeholder="${par ? 'ör. Benzin, Lastik, Sigorta…' : 'ör. Araba, Ev, Kahve…'}" value="${esc(e?.name)}"></label>
+  openSheet(`<form data-form="cat" class="dlg">${sheetNav(e ? 'Kategoriyi düzenle' : par ? 'Yeni alt kategori' : 'Yeni kategori', e ? 'Kaydet' : 'Ekle')}
+    <div class="sheet-body">
+      <label>Ad<input name="name" required maxlength="30" autocomplete="off" placeholder="${par ? 'ör. Benzin, Lastik, Sigorta…' : 'ör. Araba, Ev, Kahve…'}" value="${esc(e?.name)}"></label>
       <label>Üst kategori<select name="parentId" ${hasKids ? 'disabled title="Alt kategorisi olan kategori başka birinin altına taşınamaz"' : ''}>
         <option value="">— Yok (ana kategori) —</option>${parentOpts}</select></label>
       <label>Tür<select name="type" ${par ? 'disabled title="Alt kategorinin türü üst kategoriyle aynıdır"' : ''}>
         <option value="expense" ${type !== 'income' ? 'selected' : ''}>Gider</option>
         <option value="income" ${type === 'income' ? 'selected' : ''}>Gelir</option></select></label>
       <label>Renk<input type="color" name="color" value="${color}"></label>
-      <div style="display:flex;gap:6px">${e || par ? '<button type="button" class="btn" data-action="cancel-cat">Vazgeç</button>' : ''}<button class="btn primary">${e ? 'Kaydet' : 'Ekle'}</button></div>
-    </form>
-  </div>
-  <div class="grid two">
-    <div class="card"><h2>Gider kategorileri</h2>${list('expense')}</div>
-    <div class="card"><h2>Gelir kategorileri</h2>${list('income')}</div>
-  </div>`;
+      ${e && !e.parentId ? `<button type="button" class="btn block" data-action="add-sub" data-id="${e.id}">+ Alt kategori ekle</button>` : ''}
+      ${e ? `<button type="button" class="btn danger block" data-action="del-cat" data-id="${e.id}">Kategoriyi sil</button>` : ''}
+    </div></form>`);
 }
 
 function vRate() {
   const rs = sortedRates().reverse();
   ui.cvOrder = ['usd', 'iqd', 'rate'];
-  return `
+  ui.lastMkt = 'kur';
+  return mktSeg() + `
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
       <h2 style="margin:0">Piyasa kuru</h2>
@@ -999,15 +1065,6 @@ function vRate() {
     </details>`}
   </div>
   <div class="grid two">
-    <div class="card">
-      <h2>Kur ekle / güncelle</h2>
-      <form data-form="rate" style="display:grid;gap:10px">
-        <label>Tarih<input type="date" name="date" value="${today()}" required></label>
-        <label>1 Dolar kaç Dinar?<div class="amt"><input name="rate" inputmode="decimal" placeholder="${fmtNum(curRate())}" required><span>IQD</span></div></label>
-        <button class="btn primary">Kaydet</button>
-      </form>
-      <p class="muted" style="font-size:12px;margin:10px 0 0">Her işlem, kendi tarihindeki kurla çevrilir. Aynı tarihe tekrar kur girerseniz eskisinin yerine geçer.</p>
-    </div>
     <div class="card">
       <h2>Kur hesaplayıcı</h2>
       <p class="muted" style="font-size:12px;margin:-4px 0 10px">Herhangi ikisini yazın, üçüncüsü otomatik hesaplanır.</p>
@@ -1024,12 +1081,21 @@ function vRate() {
   </div>
   <div class="card">
     <h2>Kur geçmişi</h2>
-    <table><tr><th>Tarih</th><th>1 $ =</th><th></th></tr>
-    ${rs.map((x, i) => `<tr><td>${esc(DAYFMT.format(parse(x.date)))}${i === 0 ? ' <span class="chip">güncel</span>' : ''}</td>
-      <td class="num"><b>${fmtNum(x.rate)}</b> IQD</td>
-      <td style="text-align:right">${db.rates.length > 1 ? `<button class="btn sm danger" data-action="del-rate" data-id="${x.id}">Sil</button>` : ''}</td></tr>`).join('')}
-    </table>
+    ${rs.map((x, i) => {
+      const r = `<div class="list-row"><div class="m">${esc(DAYFMT.format(parse(x.date)))}${i === 0 ? ' <span class="chip">güncel</span>' : ''}</div>
+        <span class="num"><b>${fmtNum(x.rate, x.rate % 1 ? 2 : 0)}</b> IQD</span></div>`;
+      return db.rates.length > 1 ? swRow(r, swBtn('Sil', 'del-rate', x.id)) : r;
+    }).join('')}
+    <p class="muted" style="font-size:12px;margin:10px 0 0">Her işlem, kendi tarihindeki kurla çevrilir. Kur eklemek için sağ üstteki <b>+</b>, silmek için sola kaydırın.</p>
   </div>`;
+}
+function rateSheet() {
+  openSheet(`<form data-form="rate" class="dlg">${sheetNav('Kur ekle', 'Kaydet')}
+    <div class="sheet-body">
+      <label>1 Dolar kaç Dinar?<div class="amt"><input name="rate" inputmode="decimal" autocomplete="off" placeholder="${fmtNum(curRate())}" required><span>IQD</span></div></label>
+      <label>Tarih<input type="date" name="date" value="${today()}" required></label>
+      <p class="muted" style="font-size:12px;margin:0">Aynı tarihe tekrar kur girerseniz eskisinin yerine geçer.</p>
+    </div></form>`);
 }
 
 /* Mesajdaki dolar kurlarını bulur. Irak'ta kur çoğunlukla 100 $ için yazılır (146,750 → 1 $ = 1,467.5).
@@ -1223,7 +1289,8 @@ function goldRates() {
 const goldUsd = (karat, grams) => gold.usd / OZ * karat / 24 * grams;
 function vGold() {
   ui.goldCity = ui.goldCity || 'erbil';
-  return `
+  ui.lastMkt = 'altin';
+  return mktSeg() + `
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
       <h2 style="margin:0">Altın fiyatı</h2>
@@ -1294,15 +1361,15 @@ function debtRow(x) {
   const left = debtLeft(x), open = debtOpen(x), pct = Math.min(100, debtPaid(x) / x.amount * 100);
   const pays = [...x.payments].sort((a, b) => b.date.localeCompare(a.date));
   const source = x.accountId && acc(x.accountId) ? ` · hesap: ${esc(accLabel(acc(x.accountId)))}` : '';
-  return `<div class="list-row debt">
+  return swRow(`<div class="list-row debt">
     <div class="m"><b>${esc(x.person)}</b> <span class="cur">${x.currency}</span>
       <div class="muted" style="font-size:12px">${esc(SHORTDATE.format(parse(x.date)))}${x.opening ? ' · Başlangıç' : ''}${x.note ? ' · ' + esc(x.note) : ''}${source} · toplam ${fmt(x.amount, x.currency)}</div>
       ${x.payments.length ? `<div class="bar-track" style="margin-top:6px"><div class="bar-fill" style="width:${pct}%;background:var(--accent)"></div></div>` : ''}
     </div>
     <b class="num ${!open ? 'muted' : x.dir === 'lent' ? 'inc' : 'exp'}">${open ? fmt(left, x.currency) : 'Kapandı'}</b>
     ${pays.length ? `<div class="pays">${pays.map(p => `<div class="subline"><span>${esc(SHORTDATE.format(parse(p.date)))}${p.note ? ' · ' + esc(p.note) : ''}${p.accountId && acc(p.accountId) ? ' · ' + esc(accLabel(acc(p.accountId))) : ''}</span><span class="num">${fmt(p.amount, x.currency)}<button class="icon xs" data-action="del-pay" data-id="${x.id}" data-pay="${p.id}" aria-label="Ödemeyi sil">✕</button></span></div>`).join('')}</div>` : ''}
-    <div class="acts">${open ? `<button class="btn sm primary" data-action="pay" data-id="${x.id}">${x.dir === 'lent' ? 'Tahsilat' : 'Ödeme'}</button>` : ''}<button class="btn sm danger" data-action="del-debt" data-id="${x.id}">Sil</button></div>
-  </div>`;
+    ${open ? `<div class="acts"><button class="btn sm primary" data-action="pay" data-id="${x.id}">${x.dir === 'lent' ? 'Tahsilat ekle' : 'Ödeme ekle'}</button></div>` : ''}
+  </div>`, swBtn('Sil', 'del-debt', x.id));
 }
 function vDebt() {
   const D = disp(), t = debtTotals();
@@ -1317,11 +1384,15 @@ function vDebt() {
       <div class="kpi"><div class="l">Borcum</div><div class="v num exp">${fmt(t.owed, D)}</div></div>
       <div class="kpi"><div class="l">Net</div><div class="v num ${t.lent - t.owed < 0 ? 'exp' : 'inc'}">${fmt(t.lent - t.owed, D, true)}</div></div>
     </div>
-    <p class="muted" style="font-size:12px;margin:10px 0 0">Yeni borç/alacak kaydında para seçilen hesaba girer veya hesaptan çıkar. Başlangıç kaydı ise önceden var olan borç/alacağı sisteme ekler ve hiçbir hesap bakiyesini değiştirmez. Tahsilat ve ödemeler seçtiğiniz hesaba yansır.</p>
   </div>
-  <div class="card">
-    <h2>Yeni kayıt</h2>
-    <form data-form="debt" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+  ${sect('Alacaklarım', lent, 'Açık alacak yok.')}
+  ${sect('Borçlarım', owed, 'Açık borç yok.')}
+  ${done.length ? `<div class="card"><h2>Kapananlar</h2>${done.map(debtRow).join('')}</div>` : ''}
+  <p class="muted" style="font-size:12px;margin:0 4px">Yeni kayıt için sağ üstteki <b>+</b>, silmek için sola kaydırın.</p>`;
+}
+function debtSheet() {
+  openSheet(`<form data-form="debt" class="dlg">${sheetNav('Yeni borç / alacak', 'Ekle')}
+    <div class="sheet-body" style="grid-template-columns:1fr 1fr">
       <label style="grid-column:1/-1">Kayıt tipi<select name="entryMode" data-debt-mode>
         <option value="live">Yeni borç/alacak hareketi</option>
         <option value="opening">Başlangıç — önceden var olan borç/alacak</option></select></label>
@@ -1334,12 +1405,8 @@ function vDebt() {
       <label style="grid-column:1/-1" data-debt-account-wrap><span data-debt-account-label>Paranın çıktığı hesap</span><select name="accountId" data-debt-account required>${debtAccOptions('IQD')}</select></label>
       <label>Tarih<input type="date" name="date" value="${today()}" required></label>
       <label>Not<input name="note" maxlength="100" autocomplete="off" placeholder="İsteğe bağlı"></label>
-      <button class="btn primary" style="grid-column:1/-1">Ekle</button>
-    </form>
-  </div>
-  ${sect('Alacaklarım', lent, 'Açık alacak yok.')}
-  ${sect('Borçlarım', owed, 'Açık borç yok.')}
-  ${done.length ? `<div class="card"><h2>Kapananlar</h2>${done.map(debtRow).join('')}</div>` : ''}`;
+      <p class="muted" style="grid-column:1/-1;font-size:12px;margin:0">Yeni kayıtta para seçilen hesaba girer veya hesaptan çıkar. Başlangıç kaydı önceden var olan borç/alacağı ekler, hiçbir hesap bakiyesini değiştirmez.</p>
+    </div></form>`);
 }
 function syncDebtForm() {
   const f = document.querySelector('[data-form="debt"]'); if (!f) return;
@@ -1369,7 +1436,7 @@ function openPay(id) {
   $('#payInfo').textContent = `Kalan: ${fmt(debtLeft(x), x.currency)}`;
   $('#payAccLbl').textContent = x.dir === 'lent' ? 'Paranın gireceği hesap' : 'Paranın çıkacağı hesap';
   $('#payCur').textContent = x.currency;
-  $('#payDlg').showModal();
+  showSheet($('#payDlg'));
   setTimeout(() => f.amount.select(), 30);
 }
 function submitPay(e) {
@@ -1388,7 +1455,7 @@ function submitPay(e) {
     accountId: a.id, amount, note: f.note.value.trim(), debtId: x.id, paymentId: pid,
     debtKind: x.dir, person: x.person, locked: true,
   });
-  save(); $('#payDlg').close(); render(); toast(debtOpen(x) ? 'Kaydedildi' : 'Kapandı ✓');
+  save(); closeSheet($('#payDlg')); render(); toast(debtOpen(x) ? 'Kaydedildi' : 'Kapandı ✓');
 }
 
 function vSet() {
@@ -1464,12 +1531,241 @@ async function doBackup() {
   downloadBackup(file);
 }
 
+/* ---------- uygulama kabuğu: alt menü, üst çubuk, büyük başlık ---------- */
+const ICON = {
+  ozet: '<rect x="3" y="12" width="4" height="8" rx="1"/><rect x="10" y="7" width="4" height="13" rx="1"/><rect x="17" y="3" width="4" height="17" rx="1"/>',
+  islemler: '<path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4" cy="6" r=".6"/><circle cx="4" cy="12" r=".6"/><circle cx="4" cy="18" r=".6"/>',
+  borclar: '<path d="M7 4 3 8l4 4M3 8h14M17 12l4 4-4 4M21 16H7"/>',
+  piyasa: '<path d="M3 17l6-6 4 4 8-8M15 7h6v6"/>',
+  daha: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
+  hesaplar: '<rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18M16 14.5h2"/>',
+  kategoriler: '<path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5v7a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 16.5z"/>',
+  silinenler: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/>',
+  ayarlar: '<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+};
+const svg = k => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICON[k]}</svg>`;
+const TABS = [['ozet', 'Özet'], ['islemler', 'İşlemler'], ['borclar', 'Borçlar'], ['piyasa', 'Piyasa'], ['daha', 'Daha fazla']];
+/* Her ekranın alt menüde hangi sekmeye ait olduğu. */
+const TAB_OF = { kur: 'piyasa', altin: 'piyasa', hesaplar: 'daha', kategoriler: 'daha', ayarlar: 'daha', silinenler: 'daha' };
+const TITLES = { ozet: 'Özet', islemler: 'İşlemler', borclar: 'Borç / Alacak', kur: 'Piyasa', altin: 'Piyasa', daha: 'Daha fazla',
+  hesaplar: 'Hesaplar', kategoriler: 'Kategoriler', ayarlar: 'Ayarlar', silinenler: 'Silinenler' };
+const MORE = [
+  [['hesaplar', 'Hesaplar', '#3b82c4'], ['kategoriler', 'Kategoriler', '#e8a33d']],
+  [['silinenler', 'Silinenler', '#e5484d'], ['ayarlar', 'Ayarlar', '#8e8e93']],
+];
+$('#tabbar').innerHTML = TABS.map(([k, l]) => `<button data-action="nav" data-tab="${k}">${svg(k)}<span>${l}</span></button>`).join('');
+/* Üst çubuk: alt sayfalarda geri butonu, sağda o ekranın "ekle" butonu. */
+function drawNav() {
+  const t = ui.tab, sub = TAB_OF[t] === 'daha';
+  $('#navT').textContent = TITLES[t];
+  $('#navL').innerHTML = sub ? '<button class="nav-txt" data-action="tab" data-tab="daha"><span class="chev">‹</span>Daha fazla</button>' : '';
+  const add = { hesaplar: 'new-acc', kategoriler: 'new-cat', borclar: 'new-debt', kur: 'new-rate' }[t];
+  $('#navR').innerHTML = add ? `<button class="nav-txt" data-action="${add}" aria-label="Ekle">${svg('plus')}</button>`
+    : t === 'silinenler' && db.trash.length ? '<button class="nav-txt" data-action="trash-empty">Boşalt</button>' : '';
+}
+const onScroll = () => document.body.classList.toggle('scrolled', scrollY > 34);
+addEventListener('scroll', onScroll, { passive: true });
+
+function vDaha() {
+  const val = { hesaplar: db.accounts.length, kategoriler: db.categories.length, silinenler: db.trash.length || '', ayarlar: '' };
+  return MORE.map(g => `<div class="group">${g.map(([k, l, c]) => `<button class="gitem" data-action="tab" data-tab="${k}">
+    <span class="gi" style="background:${c}">${svg(k)}</span>
+    <span class="gt"><span>${l}</span><span class="gv">${val[k]}<span class="chev-r">›</span></span></span></button>`).join('')}</div>`).join('');
+}
+const mktSeg = () => `<div class="seg mseg"><button data-action="tab" data-tab="kur" class="${ui.tab === 'kur' ? 'on' : ''}">Kur</button><button data-action="tab" data-tab="altin" class="${ui.tab === 'altin' ? 'on' : ''}">Altın</button></div>`;
+
+/* ---------- alttan açılan paneller ---------- */
+function showSheet(d) {
+  clearTimeout(d._t); d.classList.remove('closing'); d.style.transform = '';
+  if (!d.open) d.showModal();
+  d.scrollTop = 0;
+}
+function closeSheet(d) {
+  if (!d || !d.open || d.classList.contains('closing')) return;
+  d.classList.add('closing');
+  d._t = setTimeout(() => { d.close(); d.classList.remove('closing'); d.style.transform = ''; }, 210);
+}
+function openSheet(html) { const d = $('#sheet'); d.innerHTML = html; showSheet(d); }
+const sheetNav = (title, ok, close = 'close-sheet') => `<div class="sheet-nav"><span class="grab"></span>` +
+  `<button type="button" class="nav-txt" data-action="${close}">Vazgeç</button><h2>${esc(title)}</h2>` +
+  `<button type="submit" class="nav-txt b">${ok}</button></div>`;
+document.querySelectorAll('dialog.sheet').forEach(d => {
+  // Esc veya geri: animasyonla kapan.
+  d.addEventListener('cancel', e => { e.preventDefault(); closeSheet(d); });
+  // Panelin dışına (karartılmış alana) dokununca kapan.
+  d.addEventListener('click', e => { if (e.target === d) { const r = d.getBoundingClientRect(); if (e.clientY < r.top || d.id === 'askDlg') closeSheet(d); } });
+});
+$('#sheet').addEventListener('close', () => { ui.editAcc = ui.editCat = ui.newCatParent = ui.newAccParent = null; });
+$('#payDlg').addEventListener('close', () => { payId = null; });
+/* Klavye açılınca panel klavyenin üstünde kalsın (iPhone'da klavye sayfanın üstüne biner). */
+if (window.visualViewport) {
+  const vv = visualViewport, fit = () => {
+    const kb = Math.max(0, innerHeight - vv.height - vv.offsetTop);
+    document.documentElement.style.setProperty('--kb', kb > 60 ? kb + 'px' : '0px');
+    document.documentElement.style.setProperty('--vvh', vv.height + 'px');
+  };
+  vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit); fit();
+}
+
+/* Onay menüsü: tarayıcının gri confirm/alert kutusu yerine. Promise<bool> döner. */
+function ask({ title = '', msg = '', ok = 'Sil', danger = true, cancel = 'Vazgeç' }) {
+  return new Promise(res => {
+    const d = $('#askDlg');
+    if (d._res) d._res(false);
+    d.innerHTML = `<div class="ask-box">${title || msg ? `<div class="ah">${title ? `<b>${esc(title)}</b>` : ''}${esc(msg).replace(/\n+/g, '<br>')}</div>` : ''}` +
+      `<button class="ask-btn ${danger ? 'danger' : ''}" data-ask="1">${esc(ok)}</button></div>` +
+      (cancel ? `<button class="ask-btn cancel" data-ask="0">${esc(cancel)}</button>` : '');
+    d._res = res; showSheet(d);
+  });
+}
+const tell = (msg, title = '') => ask({ title, msg, ok: 'Tamam', danger: false, cancel: '' });
+$('#askDlg').addEventListener('click', e => {
+  const b = e.target.closest('[data-ask]'); if (!b) return;
+  const d = $('#askDlg'), res = d._res; d._res = null;
+  closeSheet(d); if (res) res(b.dataset.ask === '1');
+});
+$('#askDlg').addEventListener('close', () => { const d = $('#askDlg'); if (d._res) { const r = d._res; d._res = null; r(false); } });
+
+/* ---------- dokunma hareketleri: satırı sola kaydır, paneli aşağı çek ---------- */
+const swRow = (inner, acts) => `<div class="sw"><div class="sw-acts">${acts}</div><div class="sw-row">${inner}</div></div>`;
+const swBtn = (label, action, id, kind = 'del') => `<button class="sw-btn ${kind}" data-action="${action}" data-id="${id}">${label}</button>`;
+let drag = null, openSw = null, swallow = false;
+const actsW = row => row.previousElementSibling.offsetWidth;
+function closeSw() { if (openSw) { openSw.style.transform = ''; openSw = null; } }
+document.addEventListener('pointerdown', e => {
+  swallow = false;
+  if (e.button > 0) return;
+  const row = e.target.closest('.sw-row');
+  if (openSw && row !== openSw && !e.target.closest('.sw-acts, dialog')) { closeSw(); swallow = true; return; }
+  const nav = e.target.closest('dialog.sheet .sheet-nav');
+  if (nav) { drag = { kind: 'sheet', el: nav.closest('dialog'), x0: e.clientX, y0: e.clientY, id: e.pointerId, t0: e.timeStamp, on: false, v: 0 }; return; }
+  if (row) drag = { kind: 'row', el: row, x0: e.clientX, y0: e.clientY, id: e.pointerId, base: row === openSw ? -actsW(row) : 0, on: false, v: 0 };
+});
+document.addEventListener('pointermove', e => {
+  if (!drag || e.pointerId !== drag.id) return;
+  const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
+  if (!drag.on) {
+    if (drag.kind === 'row') {
+      if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { drag = null; return; }
+      if (Math.abs(dx) < 8) return;
+    } else if (dy < 8) return;
+    drag.on = true; drag.el.style.transition = 'none';
+    try { drag.el.setPointerCapture(e.pointerId); } catch (_) {}
+  }
+  if (drag.kind === 'row') {
+    const w = actsW(drag.el); let x = Math.min(0, drag.base + dx);
+    if (x < -w) x = -w + (x + w) / 4; // sona gelince lastik gibi
+    drag.x = x; drag.el.style.transform = `translateX(${x}px)`;
+  } else {
+    drag.v = (dy - (drag.dy || 0)) / Math.max(1, e.timeStamp - (drag.t || drag.t0)); drag.t = e.timeStamp;
+    drag.dy = Math.max(0, dy); drag.el.style.transform = `translateY(${drag.dy}px)`;
+  }
+});
+function endDrag(e) {
+  if (!drag || e.pointerId !== drag.id) return;
+  const g = drag; drag = null;
+  if (!g.on) return;
+  swallow = true; g.el.style.transition = '';
+  if (g.kind === 'row') {
+    const w = actsW(g.el);
+    if (e.type !== 'pointercancel' && g.x < -w / 2) { g.el.style.transform = `translateX(${-w}px)`; openSw = g.el; }
+    else { g.el.style.transform = ''; if (openSw === g.el) openSw = null; }
+  } else if (e.type !== 'pointercancel' && (g.dy > 120 || (g.dy > 30 && g.v > 0.6))) closeSheet(g.el);
+  else g.el.style.transform = '';
+}
+document.addEventListener('pointerup', endDrag);
+document.addEventListener('pointercancel', endDrag);
+// Kaydırma/çekme hareketinin sonundaki tıklama bir butona basılmış sayılmasın.
+document.addEventListener('click', e => { if (swallow) { swallow = false; e.stopPropagation(); e.preventDefault(); } }, true);
+
+/* ---------- silinenler ---------- */
+/* Silinen her şey buraya düşer; buradan geri alınabilir. Yedeğe de dahildir. */
+const TRASH_MAX = 500;
+const TRASH_KIND = {
+  tx: ['İşlem', 'islemler', '#64748b'], acc: ['Hesap', 'hesaplar', '#3b82c4'], cat: ['Kategori', 'kategoriler', '#e8a33d'],
+  debt: ['Borç / alacak', 'borclar', '#9b59b6'], pay: ['Ödeme / tahsilat', 'borclar', '#9b59b6'], rate: ['Kur', 'piyasa', '#14b8a6'],
+};
+const copy = o => JSON.parse(JSON.stringify(o));
+function trashPut(kind, label, sub, data) {
+  const id = uid();
+  db.trash.unshift({ id, ts: Date.now(), kind, label, sub, data: copy(data) });
+  if (db.trash.length > TRASH_MAX) db.trash.length = TRASH_MAX;
+  return id;
+}
+const txLabel = t => { const i = txInfo(t), a = acc(t.accountId); return [`${i.title} · ${fmt(t.amount, a ? a.currency : '')}`, `${SHORTDATE.format(parse(t.date))} · ${i.sub}`]; };
+/* Silinmiş bir hesabın adını (çöp kutusunda duruyorsa) bulur. */
+const goneAcc = id => { const x = db.trash.find(y => y.kind === 'acc' && y.data.acc.id === id); return x ? `Önce Silinenler'den "${x.data.acc.name}" hesabını geri alın.` : 'Bu kaydın hesabı artık yok.'; };
+const needAcc = ids => { const m = ids.filter(Boolean).find(id => !acc(id)); return m ? goneAcc(m) : ''; };
+/* Geri alır; olmazsa nedenini döner. */
+function trashRestore(id) {
+  const x = db.trash.find(y => y.id === id); if (!x) return 'Kayıt bulunamadı.';
+  const d = x.data, has = (list, oid) => list.some(o => o.id === oid);
+  if (x.kind === 'tx') {
+    const err = needAcc([d.accountId, d.toAccountId]); if (err) return err;
+    if (!has(db.tx, d.id)) db.tx.push(d);
+  } else if (x.kind === 'acc') {
+    if (!has(db.accounts, d.acc.id)) {
+      if (d.acc.parentId && !acc(d.acc.parentId)) d.acc.parentId = '';
+      db.accounts.push(d.acc);
+      if (!d.acc.parentId) (d.kids || []).forEach(k => { const a = acc(k); if (a && !a.parentId && !accChildren(a.id).length) a.parentId = d.acc.id; });
+    }
+  } else if (x.kind === 'cat') {
+    if (!has(db.categories, d.cat.id)) {
+      if (d.cat.parentId && !cat(d.cat.parentId)) d.cat.parentId = '';
+      db.categories.push(d.cat);
+      if (!d.cat.parentId) (d.kids || []).forEach(k => { const c = cat(k); if (c && !c.parentId && !children(c.id).length) c.parentId = d.cat.id; });
+      (d.txs || []).forEach(tid => { const t = db.tx.find(y => y.id === tid); if (t && !t.categoryId) t.categoryId = d.cat.id; });
+    }
+  } else if (x.kind === 'debt') {
+    const err = needAcc((d.txs || []).map(t => t.accountId)); if (err) return err;
+    if (!has(db.debts, d.debt.id)) { db.debts.push(d.debt); (d.txs || []).forEach(t => { if (!has(db.tx, t.id)) db.tx.push(t); }); }
+  } else if (x.kind === 'pay') {
+    const debt = db.debts.find(y => y.id === d.debtId);
+    if (!debt) return "Bu ödemenin borç/alacak kaydı silinmiş. Önce onu Silinenler'den geri alın.";
+    const err = needAcc([d.tx && d.tx.accountId]); if (err) return err;
+    if (!has(debt.payments, d.pay.id)) { debt.payments.push(d.pay); if (d.tx && !has(db.tx, d.tx.id)) db.tx.push(d.tx); }
+  } else if (x.kind === 'rate') {
+    db.rates = db.rates.filter(r => r.date !== d.date); db.rates.push(d);
+  }
+  db.trash = db.trash.filter(y => y.id !== id);
+  return '';
+}
+function undo(id) {
+  $('#toast').classList.remove('on');
+  const err = trashRestore(id);
+  if (err) { tell(err); return; }
+  save(); render(); toast('Geri alındı');
+}
+function vTrash() {
+  if (!db.trash.length) return `<div class="card"><div class="empty">Silinen bir şey yok.<br><small>Sildiğiniz işlem, hesap, kategori, borç ve kurlar burada görünür; buradan geri alabilirsiniz.</small></div></div>`;
+  let html = '', last = '';
+  for (const x of db.trash) {
+    const day = DAYFMT.format(new Date(x.ts));
+    if (day !== last) { if (last) html += '</div>'; html += `<div class="day"><span>${esc(day)}</span></div><div class="card" style="padding:4px 12px">`; last = day; }
+    const [kname, icon, col] = TRASH_KIND[x.kind] || ['Kayıt', 'silinenler', '#999'];
+    const time = new Date(x.ts).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+    html += swRow(`<div class="list-row trash"><span class="ic" style="background:${col}">${svg(icon)}</span>
+      <div class="m"><b>${esc(x.label)}</b><div class="muted" style="font-size:12px">${esc(kname)} · ${time} silindi${x.sub ? ' · ' + esc(x.sub) : ''}</div></div>
+      <button class="btn sm" data-action="trash-restore" data-id="${x.id}">Geri al</button></div>`, swBtn('Kalıcı sil', 'trash-del', x.id));
+  }
+  return html + '</div><p class="muted" style="font-size:12px;margin:4px 4px 0">Kalıcı silmek için sola kaydırın. Son ' + TRASH_MAX + ' silme saklanır ve yedeğe dahildir.</p>';
+}
+
 function render() {
-  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === ui.tab));
+  const top = TAB_OF[ui.tab] || ui.tab;
+  document.querySelectorAll('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === top));
   document.querySelectorAll('#disp button').forEach(b => b.classList.toggle('on', b.dataset.cur === disp()));
-  $('#rateBadge').innerHTML = `Kur: 1 $ = <b class="num">${fmtNum(curRate())}</b> IQD`;
-  const views = { ozet: vOzet, islemler: vTx, hesaplar: vAcc, borclar: vDebt, kategoriler: vCat, kur: vRate, altin: vGold, ayarlar: vSet };
-  $('#view').innerHTML = views[ui.tab]();
+  $('#disp').classList.toggle('hide', !['ozet', 'islemler', 'borclar', 'hesaplar'].includes(ui.tab));
+  $('#ltitle').textContent = TITLES[ui.tab];
+  document.body.classList.toggle('has-fab', ['ozet', 'islemler'].includes(ui.tab));
+  drawNav();
+  const views = { ozet: vOzet, islemler: vTx, hesaplar: vAcc, borclar: vDebt, kategoriler: vCat, kur: vRate, altin: vGold, ayarlar: vSet, daha: vDaha, silinenler: vTrash };
+  const v = $('#view');
+  v.innerHTML = views[ui.tab]();
+  openSw = null;
+  // Ekran değişince içerik hafifçe kayarak gelir.
+  if (ui.shown !== ui.tab) { ui.shown = ui.tab; v.classList.remove('enter'); void v.offsetWidth; v.classList.add('enter'); }
   if (ui.tab === 'islemler') { drawFilterPick(); renderTxList(); }
   if (ui.tab === 'kur') {
     if (db.settings.bridge) { renderLive(); loadLive(); } else { renderMkt(); loadMkt(); }
@@ -1509,7 +1805,7 @@ function openTx(type, id, preset) {
   }
   $('#txTitle').textContent = t ? 'İşlemi düzenle' : dlg.type === 'transfer' ? 'Hesaplar arası transfer' : dlg.type === 'opening' ? 'Başlangıç Girişi' : 'Yeni işlem';
   $('#txDel').classList.toggle('hide', !t);
-  $('#txDlg').showModal();
+  showSheet($('#txDlg'));
   if (!t) setTimeout(() => f.amount.focus(), 30);
 }
 function fillAccSelect(sel, value, exclude) {
@@ -1618,7 +1914,7 @@ function submitTx(e) {
   }
   const i = db.tx.findIndex(x => x.id === t.id);
   if (i >= 0) db.tx[i] = t; else db.tx.push(t);
-  save(); $('#txDlg').close(); render();
+  save(); closeSheet($('#txDlg')); render();
   toast(i >= 0 ? 'İşlem güncellendi' : 'İşlem eklendi');
 }
 
@@ -1627,7 +1923,30 @@ document.addEventListener('click', e => {
   const el = e.target.closest('[data-action]'); if (!el) return;
   const d = el.dataset;
   switch (d.action) {
-    case 'tab': ui.tab = d.tab; ui.editAcc = ui.editCat = ui.newCatParent = ui.newAccParent = null; render(); scrollTo(0, 0); break;
+    case 'tab': ui.tab = d.tab; render(); scrollTo(0, 0); onScroll(); break;
+    case 'nav': {
+      // Alt menü: Piyasa en son bakılan ekrana (Kur/Altın) döner; açık sekmeye tekrar basınca en başa döner.
+      const t = d.tab === 'piyasa' ? (ui.lastMkt || 'kur') : d.tab;
+      if ((TAB_OF[ui.tab] || ui.tab) === d.tab && scrollY > 0 && ui.tab === t) { scrollTo({ top: 0, behavior: 'smooth' }); break; }
+      ui.tab = t; render(); scrollTo(0, 0); onScroll(); break;
+    }
+    case 'close-sheet': closeSheet($('#sheet')); break;
+    case 'new-acc': ui.editAcc = ui.newAccParent = null; accSheet(); break;
+    case 'new-cat': ui.editCat = ui.newCatParent = null; catSheet(); break;
+    case 'new-debt': openDebtSheet(); break;
+    case 'new-rate': rateSheet(); break;
+    case 'undo': undo(d.id); break;
+    case 'trash-restore': undo(d.id); break;
+    case 'trash-del':
+      ask({ msg: 'Bu kayıt kalıcı olarak silinsin mi? Bir daha geri alınamaz.', ok: 'Kalıcı sil' }).then(ok => {
+        if (ok) { db.trash = db.trash.filter(x => x.id !== d.id); save(); render(); }
+      });
+      break;
+    case 'trash-empty':
+      ask({ msg: `Silinenler listesindeki ${db.trash.length} kayıt kalıcı olarak silinsin mi? Bir daha geri alınamaz.`, ok: 'Hepsini kalıcı sil' }).then(ok => {
+        if (ok) { db.trash = []; save(); render(); }
+      });
+      break;
     case 'disp': db.settings.display = d.cur; save(); render(); break;
     case 'period': ui.period = d.p; render(); break;
     case 'shift': ui.anchor = shift(ui.period, ui.anchor, +d.n); render(); break;
@@ -1664,31 +1983,27 @@ document.addEventListener('click', e => {
       openTx('transfer', null, { from: from.id, to: to.id, amount: iqd, toAmount: usd });
       break;
     }
-    case 'close-dlg': $('#txDlg').close(); break;
-    case 'tx-del':
-      if (confirm('Bu işlem silinsin mi?')) { db.tx = db.tx.filter(t => t.id !== dlg.id); save(); $('#txDlg').close(); render(); toast('İşlem silindi'); }
-      break;
-    case 'edit-acc': ui.editAcc = d.id; ui.newAccParent = null; render(); scrollTo(0, 0); break;
-    case 'add-subacc':
-      ui.editAcc = null; ui.newAccParent = d.id; render(); scrollTo(0, 0);
-      $('[data-form=acc] [name=name]').focus();
-      break;
-    case 'cancel-acc': ui.editAcc = ui.newAccParent = null; render(); break;
+    case 'close-dlg': closeSheet($('#txDlg')); break;
+    case 'tx-del': delTx(dlg.id, true); break;
+    case 'del-tx': delTx(d.id); break;
+    case 'edit-acc': ui.editAcc = d.id; ui.newAccParent = null; accSheet(); break;
+    case 'add-subacc': ui.editAcc = null; ui.newAccParent = d.id; accSheet(); break;
     case 'del-acc': {
-      const a = acc(d.id), n = db.tx.filter(t => t.accountId === d.id || t.toAccountId === d.id).length, kids = accChildren(d.id);
-      if (n) { alert(`"${a.name}" hesabında ${n} işlem var. Önce bu işlemleri silin veya başka hesaba taşıyın.`); break; }
+      const a = acc(d.id); if (!a) break;
+      const n = db.tx.filter(t => t.accountId === d.id || t.toAccountId === d.id).length, kids = accChildren(d.id);
+      if (n) { closeSw(); tell(`"${a.name}" hesabında ${n} işlem var. Önce bu işlemleri silin veya başka hesaba taşıyın.`); break; }
       let msg = `"${a.name}" hesabı silinsin mi?`;
-      if (kids.length) msg += `\n\nAlt hesapları (${kids.map(k => k.name).join(', ')}) silinmeyecek, ana hesap olacak.`;
-      if (confirm(msg)) {
+      if (kids.length) msg += `\nAlt hesapları (${kids.map(k => k.name).join(', ')}) silinmeyecek, ana hesap olacak.`;
+      ask({ msg, ok: 'Hesabı sil' }).then(ok => {
+        if (!ok) return closeSw();
+        const tid = trashPut('acc', a.name, `${a.currency}${a.parentId && acc(a.parentId) ? ' · ' + acc(a.parentId).name + ' altında' : ''}`, { acc: a, kids: kids.map(k => k.id) });
         db.accounts = db.accounts.filter(x => x.id !== d.id);
         kids.forEach(k => { k.parentId = ''; });
-        if (ui.editAcc === d.id) ui.editAcc = null;
-        if (ui.newAccParent === d.id) ui.newAccParent = null;
-        save(); render();
-      }
+        closeSheet($('#sheet')); save(); render(); toastUndo('Hesap silindi', tid);
+      });
       break;
     }
-    case 'edit-cat': ui.editCat = d.id; ui.newCatParent = null; render(); scrollTo(0, 0); break;
+    case 'edit-cat': ui.editCat = d.id; ui.newCatParent = null; closeSw(); catSheet(); break;
     case 'fpick':
       ui.fcShow = !ui.fcShow; if (ui.fcShow) ui.fcOpen = openFor(ui.f.cat); drawFilterPick(); break;
     case 'fpick-tog':
@@ -1706,24 +2021,23 @@ document.addEventListener('click', e => {
       ui.tab = 'islemler'; ui.editCat = ui.newCatParent = null; render(); scrollTo(0, 0); break;
     case 'toggle-cat':
       ui.openCats.has(d.id) ? ui.openCats.delete(d.id) : ui.openCats.add(d.id); render(); break;
-    case 'add-sub':
-      ui.openCats.add(d.id); ui.editCat = null; ui.newCatParent = d.id; render(); scrollTo(0, 0);
-      $('[data-form=cat] [name=name]').focus();
-      break;
-    case 'cancel-cat': ui.editCat = ui.newCatParent = null; render(); break;
+    case 'add-sub': ui.openCats.add(d.id); ui.editCat = null; ui.newCatParent = d.id; catSheet(); break;
     case 'del-cat': {
-      const c = cat(d.id), n = db.tx.filter(t => t.categoryId === d.id).length, kids = children(d.id);
+      const c = cat(d.id); if (!c) break;
+      const txs = db.tx.filter(t => t.categoryId === d.id), kids = children(d.id);
       let msg = `"${c.name}" silinsin mi?`;
-      if (n) msg += `\n\n${n} işlem "Kategorisiz" olacak.`;
-      if (kids.length) msg += `\n\n${kids.length} alt kategorisi (${kids.map(k => k.name).join(', ')}) silinmeyecek, ana kategori olacak.`;
-      if (confirm(msg)) {
+      if (txs.length) msg += `\n${txs.length} işlem "Kategorisiz" olacak.`;
+      if (kids.length) msg += `\n${kids.length} alt kategorisi (${kids.map(k => k.name).join(', ')}) silinmeyecek, ana kategori olacak.`;
+      ask({ msg, ok: 'Kategoriyi sil' }).then(ok => {
+        if (!ok) return closeSw();
+        const p = c.parentId && cat(c.parentId);
+        const tid = trashPut('cat', c.name, `${c.type === 'income' ? 'Gelir' : 'Gider'}${p ? ' · ' + p.name + ' altında' : ''}${txs.length ? ` · ${txs.length} işlem` : ''}`,
+          { cat: c, kids: kids.map(k => k.id), txs: txs.map(t => t.id) });
         db.categories = db.categories.filter(x => x.id !== d.id);
         kids.forEach(k => { k.parentId = ''; });
-        db.tx.forEach(t => { if (t.categoryId === d.id) t.categoryId = ''; });
-        if (ui.newCatParent === d.id) ui.newCatParent = null;
-        if (ui.editCat === d.id) ui.editCat = null;
-        save(); render();
-      }
+        txs.forEach(t => { t.categoryId = ''; });
+        closeSheet($('#sheet')); save(); render(); toastUndo('Kategori silindi', tid);
+      });
       break;
     }
     case 'mkt-reload': loadMkt(true); break;
@@ -1735,20 +2049,25 @@ document.addEventListener('click', e => {
       break;
     }
     case 'bridge-edit':
-      if (confirm('Köprü adresi silinsin mi? Yeni adresi tekrar yapıştırabilirsiniz.')) { db.settings.bridge = ''; live.data = null; save(); render(); }
+      ask({ msg: 'Köprü adresi silinsin mi? Yeni adresi tekrar yapıştırabilirsiniz.', ok: 'Köprüyü kaldır' }).then(ok => {
+        if (ok) { db.settings.bridge = ''; live.data = null; save(); render(); }
+      });
       break;
     case 'use-rate': {
-      const date = today(), old = db.rates.find(r => r.date === date);
-      if (old && old.rate !== +d.rate && !confirm(`${SHORTDATE.format(parse(date))} için kayıtlı kur ${fmtNum(old.rate)} IQD. ${fmtNum(+d.rate, +d.rate % 1 ? 2 : 0)} ile değiştirilsin mi?`)) break;
-      setRate(date, +d.rate); save(); render();
-      toast(`Kur kaydedildi: 1 $ = ${fmtNum(+d.rate, +d.rate % 1 ? 2 : 0)} IQD`);
+      const date = today(), old = db.rates.find(r => r.date === date), R = +d.rate;
+      const go = () => { setRate(date, R); save(); render(); toast(`Kur kaydedildi: 1 $ = ${fmtNum(R, R % 1 ? 2 : 0)} IQD`); };
+      if (old && old.rate !== R) ask({ msg: `${SHORTDATE.format(parse(date))} için kayıtlı kur ${fmtNum(old.rate)} IQD. ${fmtNum(R, R % 1 ? 2 : 0)} ile değiştirilsin mi?`, ok: 'Değiştir', danger: false }).then(ok => ok && go());
+      else go();
       break;
     }
-    case 'del-rate':
-      if (confirm('Bu kur kaydı silinsin mi?')) { db.rates = db.rates.filter(r => r.id !== d.id); save(); render(); }
+    case 'del-rate': {
+      const r = db.rates.find(x => x.id === d.id); if (!r) break;
+      const tid = trashPut('rate', `1 $ = ${fmtNum(r.rate, r.rate % 1 ? 2 : 0)} IQD`, DAYFMT.format(parse(r.date)), r);
+      db.rates = db.rates.filter(x => x.id !== d.id); save(); render(); toastUndo('Kur silindi', tid);
       break;
+    }
     case 'pay': openPay(d.id); break;
-    case 'close-pay': payId = null; $('#payDlg').close(); break;
+    case 'close-pay': closeSheet($('#payDlg')); break;
     case 'pay-all': {
       const x = db.debts.find(y => y.id === payId);
       if (x) $('#payForm').elements.amount.value = fmtIn(debtLeft(x), 'any');
@@ -1756,39 +2075,51 @@ document.addEventListener('click', e => {
     }
     case 'del-pay': {
       const x = db.debts.find(y => y.id === d.id), p = x && x.payments.find(y => y.id === d.pay);
-      if (x && p && confirm(`${fmt(p.amount, x.currency)} tutarındaki ödeme kaydı silinsin mi?`)) {
+      if (!x || !p) break;
+      ask({ msg: `${fmt(p.amount, x.currency)} tutarındaki ${x.dir === 'lent' ? 'tahsilat' : 'ödeme'} kaydı silinsin mi?`, ok: 'Sil' }).then(ok => {
+        if (!ok) return;
+        const tx = p.txId ? db.tx.find(t => t.id === p.txId) : null;
+        const tid = trashPut('pay', `${x.person} · ${fmt(p.amount, x.currency)}`, `${x.dir === 'lent' ? 'Tahsilat' : 'Ödeme'} · ${SHORTDATE.format(parse(p.date))}`, { debtId: x.id, pay: p, tx });
         if (p.txId) db.tx = db.tx.filter(t => t.id !== p.txId);
-        x.payments = x.payments.filter(y => y.id !== d.pay); save(); render(); toast('Ödeme silindi');
-      }
+        x.payments = x.payments.filter(y => y.id !== d.pay); save(); render(); toastUndo('Ödeme silindi', tid);
+      });
       break;
     }
     case 'del-debt': {
       const x = db.debts.find(y => y.id === d.id); if (!x) break;
       const kind = x.dir === 'lent' ? 'alacak' : 'borç';
-      const extra = x.payments.length ? `\n\n${x.payments.length} ödeme/tahsilat kaydı da silinecek.` : '';
-      if (confirm(`“${x.person}” için ${kind} kaydı silinsin mi?${extra}`)) {
+      const extra = x.payments.length ? `\n${x.payments.length} ödeme/tahsilat kaydı da silinecek.` : '';
+      ask({ msg: `“${x.person}” için ${kind} kaydı silinsin mi?${extra}`, ok: 'Sil' }).then(ok => {
+        if (!ok) return closeSw();
         const ids = new Set([x.txId, ...x.payments.map(p => p.txId)].filter(Boolean));
+        const tid = trashPut('debt', `${x.person} · ${fmt(x.amount, x.currency)}`, `${x.dir === 'lent' ? 'Alacak' : 'Borç'} · ${SHORTDATE.format(parse(x.date))}`,
+          { debt: x, txs: db.tx.filter(t => ids.has(t.id)) });
         if (ids.size) db.tx = db.tx.filter(t => !ids.has(t.id));
-        db.debts = db.debts.filter(y => y.id !== d.id); save(); render(); toast('Kayıt silindi');
-      }
+        db.debts = db.debts.filter(y => y.id !== d.id); save(); render(); toastUndo('Kayıt silindi', tid);
+      });
       break;
     }
     case 'export': doBackup(); break;
     case 'import': $('#importFile').click(); break;
     case 'restore-snap': {
       const sn = loadSnap(); if (!sn) { toast('Geri alınacak önceki veri yok.'); break; }
-      if (confirm(`${fmtTs(sn.ts)} tarihindeki önceki veriler geri yüklensin mi?`)) {
+      ask({ msg: `${fmtTs(sn.ts)} tarihindeki önceki veriler geri yüklensin mi?`, ok: 'Geri yükle', danger: false }).then(ok => {
+        if (!ok) return;
         const previous = sn.data;
         takeSnapshot('geri alma öncesi');
         db = norm(previous); save(); ui.tab = 'ozet'; render(); toast('Önceki veriler geri yüklendi');
-      }
+      });
       break;
     }
     case 'reset':
-      if (confirm('TÜM veriler silinecek (işlemler, hesaplar, kategoriler, kurlar). Emin misiniz?') && confirm('Son kez: yedek aldınız mı? Silinsin mi?')) {
-        takeSnapshot('tüm verileri silme öncesi');
-        db = seed(); save(); ui.tab = 'ozet'; render(); toast('Sıfırlandı');
-      }
+      ask({ title: 'Tüm veriler silinsin mi?', msg: 'İşlemler, hesaplar, kategoriler ve kurlar silinecek.', ok: 'Tüm verileri sil' })
+        .then(ok => ok && ask({ msg: 'Son kez: yedek aldınız mı? Silinsin mi?', ok: 'Evet, sil' }))
+        .then(ok => {
+          if (!ok) return;
+          takeSnapshot('tüm verileri silme öncesi');
+          const trash = db.trash; // Silinenler listesi korunur.
+          db = seed(); db.trash = trash; save(); ui.tab = 'ozet'; render(); toast('Sıfırlandı');
+        });
       break;
   }
 });
@@ -1835,6 +2166,7 @@ document.addEventListener('submit', e => {
       // Aynı ana kategoriye art arda alt kategori eklemeyi kolaylaştırmak için form açık kalır.
     }
   } else if (form.dataset.form === 'rate') {
+    if (!v.date) { toast('Tarih seçin.'); return; }
     const rate = num(v.rate);
     if (!(rate > 0)) { toast('Geçerli bir kur girin.'); return; }
     db.rates = db.rates.filter(r => r.date !== v.date);
@@ -1862,6 +2194,7 @@ document.addEventListener('submit', e => {
       toast(v.dir === 'lent' ? 'Başlangıç alacağı eklendi' : 'Başlangıç borcu eklendi');
     }
   }
+  if (form.closest('#sheet')) closeSheet($('#sheet'));
   save(); render();
 });
 
@@ -1908,20 +2241,46 @@ document.addEventListener('change', e => {
       try {
         const d = JSON.parse(r.result);
         if (!Array.isArray(d.accounts) || !Array.isArray(d.categories) || !Array.isArray(d.tx) || !Array.isArray(d.rates)) throw 0;
-        if (!confirm(`Yedekte ${d.tx.length} işlem var. Mevcut verilerin yerine geçsin mi?`)) return;
-        takeSnapshot('yedekten geri yükleme öncesi');
-        db = norm(d); save(); ui.tab = 'ozet'; render(); toast('Yedek yüklendi');
-      } catch (_) { alert('Bu dosya geçerli bir yedek değil.'); }
+        ask({ msg: `Yedekte ${d.tx.length} işlem var. Mevcut verilerin yerine geçsin mi?`, ok: 'Geri yükle', danger: false }).then(ok => {
+          if (!ok) return;
+          takeSnapshot('yedekten geri yükleme öncesi');
+          db = norm(d); save(); ui.tab = 'ozet'; render(); toast('Yedek yüklendi');
+        });
+      } catch (_) { tell('Bu dosya geçerli bir yedek değil.'); }
     };
     r.readAsText(el.files[0]);
   }
 });
 
 let toastT;
-function toast(m) {
-  const t = $('#toast'); t.textContent = m; t.classList.add('on');
-  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2200);
+function toastShow(ms) {
+  const t = $('#toast');
+  if (t.showPopover) { try { t.hidePopover(); } catch (_) {} try { t.showPopover(); } catch (_) {} }
+  t.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), ms);
 }
+function toast(m) {
+  const t = $('#toast'); t.textContent = m; t.classList.remove('undo'); toastShow(2200);
+}
+/* Silmeden sonra birkaç saniye "Geri al" gösterir. */
+function toastUndo(m, id) {
+  const t = $('#toast');
+  t.innerHTML = `<span>${esc(m)}</span><button class="btn sm" data-action="undo" data-id="${id}">Geri al</button>`;
+  t.classList.add('undo'); toastShow(4500);
+}
+/* İşlem silme (listeden kaydırarak veya düzenleme panelinden). */
+function delTx(id, fromSheet) {
+  const t = db.tx.find(x => x.id === id); if (!t || t.locked) return;
+  ask({ msg: 'Bu işlem silinsin mi?', ok: 'İşlemi sil' }).then(ok => {
+    if (!ok) return closeSw();
+    const [label, sub] = txLabel(t);
+    const tid = trashPut('tx', label, sub, t);
+    db.tx = db.tx.filter(x => x.id !== id); save();
+    if (fromSheet) closeSheet($('#txDlg'));
+    render(); toastUndo('İşlem silindi', tid);
+  });
+}
+function openDebtSheet() { debtSheet(); syncDebtForm(); }
 
 render();
 
