@@ -10,6 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Hesap">
 <meta name="theme-color" content="#1f6f5c">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https: wss:; object-src 'none'; base-uri 'none'; form-action 'none'">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
@@ -344,7 +345,17 @@ function norm(d) {
     x.opening = !!x.opening;
   });
   d.settings = Object.assign({ display: 'IQD', weekStart: 1, lastBackup: '', rateCity: 'erbil', bridge: '' }, d.settings);
-  return d;
+  if (!/^https:\/\/[^\s/]+\.[^\s]+$/.test(d.settings.bridge || '')) d.settings.bridge = '';
+  return clean(d);
+}
+/* Güvenlik: kimlik, tarih, renk gibi alanlar ekrana kaçışsız yazılır. Dışarıdan gelen (ör. birinin gönderdiği)
+   bir yedek dosyası bu alanlara kod gizleyemesin diye, serbest yazı alanları dışındaki metinlerden HTML karakterleri atılır. */
+const TEXT_KEYS = new Set(['name', 'note', 'person', 'bridge', 'reason']);
+function clean(v, k) {
+  if (typeof v === 'string') return TEXT_KEYS.has(k) ? v : v.replace(/[<>"'`&\\]/g, '');
+  if (Array.isArray(v)) return v.map(x => clean(x, k));
+  if (v && typeof v === 'object') { for (const key of Object.keys(v)) v[key] = clean(v[key], key); }
+  return v;
 }
 function load() {
   try { const s = localStorage.getItem(KEY); return s ? norm(JSON.parse(s)) : null; } catch (e) { return null; }
