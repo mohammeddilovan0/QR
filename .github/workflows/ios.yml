@@ -1,0 +1,19 @@
+name: iOS derleme
+on:
+  pull_request:
+    paths: ['ios-app/**', 'index.html', '.github/workflows/ios.yml']
+  push:
+    branches: [main]
+    paths: ['ios-app/**', 'index.html', '.github/workflows/ios.yml']
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Uygulamadaki web kopyası güncel mi
+        run: cmp index.html ios-app/ios/App/App/public/index.html || { echo "ios-app'te 'npm run sync' çalıştırın"; exit 1; }
+      - name: Simülatör için derle (imzasız)
+        working-directory: ios-app/ios/App
+        run: xcodebuild -project App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build | tail -40
+        shell: bash -o pipefail {0}
