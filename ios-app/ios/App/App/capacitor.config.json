@@ -1,0 +1,12 @@
+{
+	"appId": "com.mohammeddilovan.kisiselhesap",
+	"appName": "Kişisel Hesap",
+	"webDir": "www",
+	"ios": {
+		"contentInset": "never",
+		"scrollEnabled": true
+	},
+	"packageClassList": [
+		"LocalNotificationsPlugin"
+	]
+}
