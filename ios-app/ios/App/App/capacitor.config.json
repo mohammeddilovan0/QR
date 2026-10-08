@@ -1,6 +1,6 @@
 {
 	"appId": "com.mohammeddilovan.kisiselhesap",
-	"appName": "Kişisel Hesap",
+	"appName": "Kisisel Hesap",
 	"webDir": "www",
 	"ios": {
 		"contentInset": "never",
