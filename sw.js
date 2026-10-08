@@ -1,7 +1,7 @@
 // Uygulama dosyalarını telefonda saklar ki internet yokken de açılsın.
 // İnternet varsa önce yeni sürümü dener (güncellemeler kendiliğinden gelir), yoksa saklananı açar.
 // Not: Verileriniz (işlemler, hesaplar) burada değil, uygulamanın kendi deposunda durur.
-const CACHE = 'kisisel-hesap-v21';
+const CACHE = 'kisisel-hesap-v22';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {

@@ -80,7 +80,10 @@ label>input,label>select,label>.amt{margin-top:4px}
 .check input{width:auto;margin:0}
 .accs{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
 .acc{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--card)}
-.acc .n{font-size:13px;color:var(--muted);display:flex;justify-content:space-between;gap:6px}
+.acc .n{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.acc .n>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acc .n .cur{flex:none}
+.networth{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px;margin:-4px 0 12px}
 .acc .v{font-size:18px;font-weight:650;margin-top:2px}
 .acc.group .sublines{margin-top:8px;border-top:1px solid var(--line);padding-top:6px;display:grid;gap:3px}
 .subline{display:flex;justify-content:space-between;gap:8px;font-size:13px}
@@ -378,6 +381,8 @@ dialog.sheet.closing::backdrop{animation:fadeOut .22s forwards}
     </label>
     <div><button type="button" class="btn sm" data-action="pay-all">Kalanın tamamı</button></div>
     <label><span id="payAccLbl">Hesap</span><select name="accountId" required></select></label>
+    <label id="payRateWrap" class="hide">Kur — 1 $ kaç dinar?<div class="amt"><input name="rate" inputmode="decimal" autocomplete="off"><span>IQD</span></div></label>
+    <div class="muted" id="payHint" style="font-size:13px"></div>
     <label>Tarih<input type="date" name="date" required></label>
     <label>Not<input name="note" maxlength="100" placeholder="İsteğe bağlı" autocomplete="off"></label>
     </div>
@@ -561,6 +566,15 @@ function catOptions(tp, selected) {
 /* ---------- kur & para ---------- */
 function sortedRates() { return [...db.rates].sort((a, b) => a.date.localeCompare(b.date)); }
 function curRate() { const r = sortedRates(); return r.length ? r[r.length - 1].rate : 1310; }
+/* Bugünkü değerleme kuru (bakiyeler, net servet, açık borçlar): canlı Erbil kuru; alınamazsa en son kayıtlı kur.
+   Geçmiş işlemler her zaman kendi tarihindeki kurla çevrilir (rateAt). */
+const liveErbil = () => live.data && live.data.erbil ? live.data.erbil : null;
+function nowRate() { const x = liveErbil(); return x ? x.rate : curRate(); }
+function nowRateNote() {
+  const x = liveErbil(), r = nowRate(), v = fmtNum(r, r % 1 ? 2 : 0);
+  if (x) return `Erbil canlı kuruyla: 1 $ = ${v} IQD · ${ago(x.at)}`;
+  return `Kayıtlı kurla: 1 $ = ${v} IQD${db.settings.bridge ? ' · canlı kur bekleniyor' : ''}`;
+}
 function rateAt(date) {
   const rs = sortedRates(); let r = rs.length ? rs[0].rate : 1310;
   for (const x of rs) { if (x.date <= date) r = x.rate; else break; }
@@ -636,12 +650,17 @@ function range(kind, anchor) {
       : `${s.getDate()} ${MSHORT.format(s)} – ${e.getDate()} ${MSHORT.format(e)} ${e.getFullYear()}`;
     return { start: ymd(s), end: ymd(e), label: lbl, short: `${s.getDate()} ${MSHORT.format(s)}` };
   }
+  if (kind === 'year') {
+    const y = d.getFullYear();
+    return { start: `${y}-01-01`, end: `${y}-12-31`, label: String(y), short: String(y) };
+  }
   const s = new Date(d.getFullYear(), d.getMonth(), 1), e = new Date(d.getFullYear(), d.getMonth() + 1, 0);
   const lbl = MONTH.format(s);
   return { start: ymd(s), end: ymd(e), label: lbl[0].toUpperCase() + lbl.slice(1), short: MSHORT.format(s) };
 }
 function shift(kind, anchor, n) {
   const d = parse(anchor);
+  if (kind === 'year') return ymd(new Date(d.getFullYear() + n, 0, 1));
   return kind === 'week' ? ymd(addDays(d, 7 * n)) : ymd(new Date(d.getFullYear(), d.getMonth() + n, 1));
 }
 function stats(start, end) {
@@ -665,8 +684,10 @@ function stats(start, end) {
 
 /* ---------- görünümler ---------- */
 function vOzet() {
-  const D = disp(), r = curRate();
-  const total = db.accounts.reduce((s, a) => s + conv(balance(a.id), a.currency, D, r), 0);
+  const D = disp(), r = nowRate();
+  const accTotal = db.accounts.reduce((s, a) => s + conv(balance(a.id), a.currency, D, r), 0);
+  // Net servet: hesaplar + alacaklar − borçlar. Borç verilen para hâlâ sizindir, harcanmış sayılmaz.
+  const dt = debtTotals(), total = accTotal + dt.lent - dt.owed, hasDebt = dt.lent || dt.owed;
   const rg = range(ui.period, ui.anchor);
   const st = stats(rg.start, rg.end);
   const t = today();
@@ -692,7 +713,13 @@ function vOzet() {
   }).join('');
 
   const N = ui.period === 'week' ? 8 : 6, cols = [];
-  for (let i = N - 1; i >= 0; i--) {
+  if (ui.period === 'year') {
+    // Yıllık görünümde grafik o yılın 12 ayını gösterir.
+    for (let m = 0; m < 12; m++) {
+      const g = range('month', ymd(new Date(parse(rg.start).getFullYear(), m, 1)));
+      cols.push({ label: g.short, full: g.label, v: stats(g.start, g.end).exp, cur: t >= g.start && t <= g.end });
+    }
+  } else for (let i = N - 1; i >= 0; i--) {
     const g = range(ui.period, shift(ui.period, ui.anchor, -i));
     cols.push({ label: g.short, full: g.label, v: stats(g.start, g.end).exp, cur: i === 0 });
   }
@@ -716,9 +743,10 @@ function vOzet() {
 
   return warn + `
   <div class="card">
-    <div class="muted" style="font-size:13px">Toplam varlık (${D})</div>
-    <div class="big num">${fmt(total, D)}</div>
-    <div class="muted" style="font-size:12px;margin-bottom:12px">Güncel kurla: 1 $ = ${fmtNum(r)} IQD</div>
+    <div class="muted" style="font-size:13px">Net servet (${D})</div>
+    <div class="big num ${total < 0 ? 'exp' : ''}">${fmt(total, D)}</div>
+    ${hasDebt ? `<div class="networth tap" data-action="nav" data-tab="borclar"><span class="muted">Hesaplar <b class="num">${fmt(accTotal, D)}</b></span>${dt.lent ? `<span class="muted">Alacak <b class="num inc">+${fmt(dt.lent, D)}</b></span>` : ''}${dt.owed ? `<span class="muted">Borç <b class="num exp">−${fmt(dt.owed, D)}</b></span>` : ''}</div>` : ''}
+    <div class="muted" style="font-size:12px;margin-bottom:12px">${esc(nowRateNote())}</div>
     ${db.accounts.length ? `<div class="accs">${accParents().map(a => {
       const b = balance(a.id), kids = accChildren(a.id);
       if (!kids.length) return `<div class="acc"><div class="n"><span>${esc(a.name)}</span><span class="cur">${a.currency}</span></div>
@@ -740,6 +768,7 @@ function vOzet() {
       <div class="seg">
         <button data-action="period" data-p="week" class="${ui.period === 'week' ? 'on' : ''}">Haftalık</button>
         <button data-action="period" data-p="month" class="${ui.period === 'month' ? 'on' : ''}">Aylık</button>
+        <button data-action="period" data-p="year" class="${ui.period === 'year' ? 'on' : ''}">Yıllık</button>
       </div>
       <div class="pnav">
         <button class="icon" data-action="shift" data-n="-1" aria-label="Önceki">‹</button>
@@ -747,7 +776,7 @@ function vOzet() {
         <button class="icon" data-action="shift" data-n="1" aria-label="Sonraki">›</button>
         <button class="btn sm" data-action="now">Bugün</button>
       </div>
-      <button class="btn sm" data-action="report" title="Bu ${ui.period === 'week' ? 'haftanın' : 'ayın'} raporunu PDF olarak kaydet">📄 PDF rapor</button>
+      <button class="btn sm" data-action="report" title="Bu ${ui.period === 'week' ? 'haftanın' : ui.period === 'year' ? 'yılın' : 'ayın'} raporunu PDF olarak kaydet">📄 PDF rapor</button>
     </div>
     <div class="kpis">
       <div class="kpi"><div class="l">Harcama</div><div class="v num exp">${fmt(st.exp, D)}</div></div>
@@ -758,7 +787,7 @@ function vOzet() {
     ${nativeLine}
     <h3>Kategoriye göre harcama</h3>
     ${bars || '<div class="empty">Bu dönemde harcama yok.</div>'}
-    <h3>Son ${N} ${ui.period === 'week' ? 'hafta' : 'ay'} — harcama</h3>
+    <h3>${ui.period === 'year' ? `${esc(rg.label)} — aylara göre harcama` : `Son ${N} ${ui.period === 'week' ? 'hafta' : 'ay'} — harcama`}</h3>
     <div class="trend">${trend}</div>
   </div>`;
 }
@@ -769,7 +798,7 @@ function vOzet() {
 function reportHtml(kind, anchor) {
   const D = disp(), rg = range(kind, anchor), st = stats(rg.start, rg.end);
   const prg = range(kind, shift(kind, anchor, -1)), ps = stats(prg.start, prg.end);
-  const t = today(), word = kind === 'week' ? 'hafta' : 'ay';
+  const t = today(), word = kind === 'week' ? 'hafta' : kind === 'year' ? 'yıl' : 'ay';
   let days = daysBetween(rg.start, rg.end) + 1;
   if (t >= rg.start && t <= rg.end) days = daysBetween(rg.start, t) + 1;
   const avg = rg.start > t ? 0 : st.exp / days;
@@ -799,7 +828,7 @@ function reportHtml(kind, anchor) {
     .sort((a, b) => a.date.localeCompare(b.date) || (a.ts || 0) - (b.ts || 0));
   const big = txs.filter(x => x.type === 'expense' && acc(x.accountId))
     .map(x => [x, conv(x.amount, acc(x.accountId).currency, D, rateAt(x.date))])
-    .sort((a, b) => b[1] - a[1]).slice(0, 5);
+    .sort((a, b) => b[1] - a[1]).slice(0, kind === 'year' ? 10 : 5);
   const txTable = list => `<table><tr><th>Tarih</th><th>İşlem</th><th class="r">Tutar</th></tr>${list.map(x => {
     const i = txInfo(x);
     return `<tr><td class="nw">${esc(SHORTDATE.format(parse(x.date)))}</td><td><b>${esc(i.title)}</b><br><small class="muted">${esc(i.sub)}</small></td><td class="num r">${i.amt}</td></tr>`;
@@ -812,10 +841,15 @@ function reportHtml(kind, anchor) {
   }).join('');
   const total = db.accounts.reduce((s, a) => s + conv(balance(a.id, endBal), a.currency, D, rateAt(endBal)), 0);
   const debts = db.debts.filter(debtOpen), dt = debtTotals();
+  // Yıllık raporda tüm işlemler yerine aylara göre özet.
+  const months = kind === 'year' ? Array.from({ length: 12 }, (_, m) => {
+    const g = range('month', `${rg.start.slice(0, 4)}-${pad(m + 1)}-01`), x = stats(g.start, g.end);
+    return `<tr><td>${esc(g.label)}</td><td class="num r exp">${fmt(x.exp, D)}</td><td class="num r inc">${fmt(x.inc, D)}</td><td class="num r ${x.inc - x.exp < 0 ? 'exp' : 'inc'}">${fmt(x.inc - x.exp, D, true)}</td></tr>`;
+  }).join('') : '';
 
   return `
   <div class="rp-head">
-    <div><div class="muted">Kişisel Hesap · ${kind === 'week' ? 'Haftalık' : 'Aylık'} rapor</div><h1>${esc(rg.label)}</h1></div>
+    <div><div class="muted">Kişisel Hesap · ${kind === 'week' ? 'Haftalık' : kind === 'year' ? 'Yıllık' : 'Aylık'} rapor</div><h1>${esc(rg.label)}</h1></div>
     <div class="muted r" style="font-size:12px">Hazırlanma: ${esc(fmtTs(Date.now()))}<br>Tutarlar: ${D} · 1 $ = ${fmtNum(rateAt(endBal))} IQD</div>
   </div>
   <div class="kpis">
@@ -824,16 +858,21 @@ function reportHtml(kind, anchor) {
     <div class="kpi"><div class="l">Net</div><div class="v num ${st.inc - st.exp < 0 ? 'exp' : 'inc'}">${fmt(st.inc - st.exp, D, true)}</div><small>Önceki ${word}: ${fmt(ps.inc - ps.exp, D, true)}</small></div>
     <div class="kpi"><div class="l">Günlük ortalama harcama</div><div class="v num">${fmt(avg, D)}</div><small>${days} gün</small></div>
   </div>
+  ${months ? `<h3>Aylara göre</h3><table><tr><th>Ay</th><th class="r">Harcama</th><th class="r">Gelir</th><th class="r">Net</th></tr>${months}</table>` : ''}
   <h3>Kategoriye göre harcama</h3>
   ${catRows ? `<table><tr><th>Kategori</th><th class="r">Tutar</th><th class="r">Pay</th><th class="r">Önceki ${word}</th><th class="r">Değişim</th></tr>${catRows}</table>` : '<p class="muted">Bu dönemde harcama yok.</p>'}
   ${big.length ? `<h3>En büyük ${big.length} harcama</h3>${txTable(big.map(([x]) => x))}` : ''}
   <h3>Hesap bakiyeleri (${esc(SHORTDATE.format(parse(endBal)))})</h3>
-  <table>${accRows}<tr class="tot"><td>Toplam varlık</td><td class="num r">${fmt(total, D)}</td></tr></table>
+  <table>${accRows}<tr class="tot"><td>Hesaplar toplamı</td><td class="num r">${fmt(total, D)}</td></tr></table>
   ${debts.length ? `<h3>Açık borç / alacak (bugün)</h3>
   <table><tr><th>Kişi</th><th>Tür</th><th class="r">Kalan</th></tr>${debts.map(x => `<tr><td>${esc(x.person)}</td><td>${x.dir === 'lent' ? 'Alacağım' : 'Borcum'}</td><td class="num r ${x.dir === 'lent' ? 'inc' : 'exp'}">${fmt(debtLeft(x), x.currency)}</td></tr>`).join('')}
   <tr class="tot"><td colspan="2">Net (alacak − borç)</td><td class="num r">${fmt(dt.lent - dt.owed, D, true)}</td></tr></table>` : ''}
-  <h3>Tüm işlemler (${txs.length})</h3>
-  ${txs.length ? txTable(txs) : '<p class="muted">Bu dönemde işlem yok.</p>'}`;
+  <h3>Net servet (bugün)</h3>
+  <table><tr><td>Hesaplar</td><td class="num r">${fmt(db.accounts.reduce((s, a) => s + conv(balance(a.id), a.currency, D, nowRate()), 0), D)}</td></tr>
+  <tr><td>Alacaklar</td><td class="num r inc">+${fmt(dt.lent, D)}</td></tr><tr><td>Borçlar</td><td class="num r exp">−${fmt(dt.owed, D)}</td></tr>
+  <tr class="tot"><td>Net servet <small class="muted">(${esc(nowRateNote())})</small></td><td class="num r">${fmt(db.accounts.reduce((s, a) => s + conv(balance(a.id), a.currency, D, nowRate()), 0) + dt.lent - dt.owed, D)}</td></tr></table>
+  ${kind === 'year' ? '' : `<h3>Tüm işlemler (${txs.length})</h3>
+  ${txs.length ? txTable(txs) : '<p class="muted">Bu dönemde işlem yok.</p>'}`}`;
 }
 function printReport() {
   if (typeof window.print !== 'function') { toast('Bu cihazda yazdırma/PDF desteklenmiyor.'); return; }
@@ -964,7 +1003,7 @@ function txRow(t) {
 }
 
 function vAcc() {
-  const D = disp(), r = curRate();
+  const D = disp(), r = nowRate();
   const row = (a, isChild) => {
     const b = balance(a.id), n = db.tx.filter(t => t.accountId === a.id || t.toAccountId === a.id).length;
     const kids = isChild ? [] : accChildren(a.id);
@@ -1066,7 +1105,7 @@ function vRate() {
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
       <h2 style="margin:0">Piyasa kuru</h2>
     </div>
-    <p class="muted" style="font-size:12px;margin:2px 0 4px">${db.settings.bridge ? 'Borsa Erbil (Telegram) · her dakika yenilenir' : 'Günlük çarşı kuru (Iraq Dinar Watch)'} · <b>Kaydet</b> ile bugünün kuru olur</p>
+    <p class="muted" style="font-size:12px;margin:2px 0 4px">${db.settings.bridge ? 'Borsa Erbil (Telegram) · her dakika yenilenir' : 'Günlük çarşı kuru (Iraq Dinar Watch)'} · ${db.settings.bridge ? 'Erbil kuru her gün kendiliğinden kaydedilir' : '<b>Kaydet</b> ile bugünün kuru olur'}</p>
     <div id="${db.settings.bridge ? 'live' : 'mkt'}"></div>
     ${db.settings.bridge ? '' : `<details><summary>Canlı kur için köprü bağla</summary>
       <p class="muted" style="font-size:12px;margin:0 0 8px">Borsa Erbil kanalının son kurunu gösterir. Bir kez ücretsiz köprü kurulur (<a href="https://github.com/mohammeddilovan0/QR/blob/main/kopru/KURULUM.md" target="_blank" rel="noopener">kurulum</a>), adresi buraya yapıştırılır.</p>
@@ -1080,7 +1119,7 @@ function vRate() {
       <div style="display:grid;gap:10px">
         <label>Dinar<div class="amt" id="cvIQDBox"><input id="cvIQD" data-cv="iqd" inputmode="decimal" placeholder="0"><span>IQD</span></div></label>
         <label>Dolar<div class="amt" id="cvUSDBox"><input id="cvUSD" data-cv="usd" inputmode="decimal" placeholder="0"><span>USD</span></div></label>
-        <label>Kur — 1 $ kaç dinar?<div class="amt" id="cvRateBox"><input id="cvRate" data-cv="rate" inputmode="decimal" value="${fmtIn(curRate(), 'rate')}"><span>IQD</span></div></label>
+        <label>Kur — 1 $ kaç dinar?<div class="amt" id="cvRateBox"><input id="cvRate" data-cv="rate" inputmode="decimal" value="${fmtIn(nowRate(), 'rate')}"><span>IQD</span></div></label>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn" data-action="cv-save-rate">Bu kuru bugünün kuru yap</button>
           <button class="btn" data-action="cv-to-tx">Bozdurma olarak kaydet</button>
@@ -1091,7 +1130,7 @@ function vRate() {
   <div class="card">
     <h2>Kur geçmişi</h2>
     ${rs.map((x, i) => {
-      const r = `<div class="list-row"><div class="m">${esc(DAYFMT.format(parse(x.date)))}${i === 0 ? ' <span class="chip">güncel</span>' : ''}</div>
+      const r = `<div class="list-row"><div class="m">${esc(DAYFMT.format(parse(x.date)))}${i === 0 ? ' <span class="chip">güncel</span>' : ''}${x.auto ? ' <span class="muted" style="font-size:12px">· Erbil, otomatik</span>' : ''}</div>
         <span class="num"><b>${fmtNum(x.rate, x.rate % 1 ? 2 : 0)}</b> IQD</span></div>`;
       return db.rates.length > 1 ? swRow(r, swBtn('Sil', 'del-rate', x.id)) : r;
     }).join('')}
@@ -1212,10 +1251,26 @@ function loadLive(force) {
         }
       }
       if (!Object.keys(out).length) throw new Error('son mesajlarda kur bulunamadı');
+      const before = nowRate();
       live.data = out; live.err = ''; live.at = Date.now();
+      // Günün kuru kendiliğinden Erbil kuru olur; o gün elle girilmiş bir kur varsa ona dokunulmaz.
+      if (out.erbil) {
+        const d = today(), old = db.rates.find(r => r.date === d);
+        if (!old || (old.auto && old.rate !== out.erbil.rate)) {
+          db.rates = db.rates.filter(r => r.date !== d);
+          db.rates.push({ id: uid(), date: d, rate: out.erbil.rate, auto: true });
+          save();
+        }
+      }
+      live.changed = before !== nowRate();
     })
     .catch(e => { live.err = e.message || 'alınamadı'; })
-    .finally(() => { live.loading = false; renderLive(); renderGold(); });
+    .finally(() => {
+      live.loading = false; renderLive(); renderGold();
+      // Kur değiştiyse bakiyeler/net servet gösteren ekran yenilenir (açık bir panel yoksa).
+      if (live.changed && ['ozet', 'hesaplar', 'borclar'].includes(ui.tab) && !document.querySelector('dialog[open]')) render();
+      live.changed = false;
+    });
 }
 const ago = at => {
   const min = Math.max(0, Math.round((Date.now() - Date.parse(at)) / 6e4));
@@ -1237,10 +1292,11 @@ function renderLive() {
     </div>`;
   }).join('') + (live.err ? `<p class="hint">Yenilenemedi: ${esc(live.err)}</p>` : '');
 }
-/* Kur sekmesi açıkken her dakika kendiliğinden yenilenir; uygulamaya geri dönünce hemen yenilenir. */
+/* Canlı kur her dakika kendiliğinden yenilenir (tüm ekranlarda; bakiyeler bu kurla hesaplanır); uygulamaya geri dönünce hemen yenilenir. */
 const autoLive = () => {
-  if (document.hidden) return;
-  if (['kur', 'altin'].includes(ui.tab) && db.settings.bridge) { if (ui.tab === 'kur') renderLive(); loadLive(true); }
+  if (document.hidden || !db.settings.bridge) return;
+  if (ui.tab === 'kur') renderLive();
+  loadLive(true);
 };
 setInterval(autoLive, 60e3);
 /* Altın sekmesi açıkken fiyat birkaç saniyede bir çekilir; değişince yeşil/kırmızı yanıp söner. */
@@ -1362,7 +1418,7 @@ function debtAccOptions(cur, selected) {
   return accOptions(list, selected);
 }
 function debtTotals() {
-  const D = disp(), r = curRate(), t = { lent: 0, owed: 0 };
+  const D = disp(), r = nowRate(), t = { lent: 0, owed: 0 };
   for (const x of db.debts) if (debtOpen(x)) t[x.dir] += conv(debtLeft(x), x.currency, D, r);
   return t;
 }
@@ -1376,7 +1432,7 @@ function debtRow(x) {
       ${x.payments.length ? `<div class="bar-track" style="margin-top:6px"><div class="bar-fill" style="width:${pct}%;background:var(--accent)"></div></div>` : ''}
     </div>
     <b class="num ${!open ? 'muted' : x.dir === 'lent' ? 'inc' : 'exp'}">${open ? fmt(left, x.currency) : 'Kapandı'}</b>
-    ${pays.length ? `<div class="pays">${pays.map(p => `<div class="subline"><span>${esc(SHORTDATE.format(parse(p.date)))}${p.note ? ' · ' + esc(p.note) : ''}${p.accountId && acc(p.accountId) ? ' · ' + esc(accLabel(acc(p.accountId))) : ''}</span><span class="num">${fmt(p.amount, x.currency)}<button class="icon xs" data-action="del-pay" data-id="${x.id}" data-pay="${p.id}" aria-label="Ödemeyi sil">✕</button></span></div>`).join('')}</div>` : ''}
+    ${pays.length ? `<div class="pays">${pays.map(p => `<div class="subline"><span>${esc(SHORTDATE.format(parse(p.date)))}${p.note ? ' · ' + esc(p.note) : ''}${p.accountId && acc(p.accountId) ? ' · ' + esc(accLabel(acc(p.accountId))) : ''}</span><span class="num">${fmt(p.amount, x.currency)}${p.paid ? ` <small class="muted">(${fmt(p.paid.amount, p.paid.currency)})</small>` : ''}<button class="icon xs" data-action="del-pay" data-id="${x.id}" data-pay="${p.id}" aria-label="Ödemeyi sil">✕</button></span></div>`).join('')}</div>` : ''}
     ${open ? `<div class="acts"><button class="btn sm primary" data-action="pay" data-id="${x.id}">${x.dir === 'lent' ? 'Tahsilat ekle' : 'Ödeme ekle'}</button></div>` : ''}
   </div>`, swBtn('Sil', 'del-debt', x.id));
 }
@@ -1433,18 +1489,42 @@ function syncDebtForm() {
   }
 }
 let payId = null;
+/* Ödeme/tahsilat herhangi bir hesaba yapılabilir: dolar borcu dinarla (veya tersi) ödenirse
+   tutar o günün kuruyla borcun para birimine çevrilip borçtan düşülür. Tutar, hesabın para biriminde yazılır. */
+const payDate = f => f.date.value || today();
+const payDefRate = f => payDate(f) >= today() ? nowRate() : rateAt(payDate(f));
+const payRateTyped = { v: false };
+function payFull() {
+  const x = db.debts.find(d => d.id === payId), f = $('#payForm').elements, a = acc(f.accountId.value);
+  if (!x || !a) return;
+  const left = debtLeft(x), v = a.currency === x.currency ? left : conv(left, x.currency, a.currency, num(f.rate.value) || payDefRate(f));
+  f.amount.value = fmtIn(a.currency === 'IQD' && a.currency !== x.currency ? Math.round(v) : v, 'any');
+}
+function syncPay() {
+  const x = db.debts.find(d => d.id === payId); if (!x) return;
+  const f = $('#payForm').elements, a = acc(f.accountId.value), cur = a ? a.currency : x.currency, fx = cur !== x.currency;
+  $('#payCur').textContent = cur;
+  $('#payRateWrap').classList.toggle('hide', !fx);
+  if (fx && !payRateTyped.v) f.rate.value = fmtIn(payDefRate(f), 'rate');
+  const amount = num(f.amount.value), R = num(f.rate.value), left = debtLeft(x);
+  const ded = !(amount > 0) ? 0 : fx ? (R > 0 ? conv(amount, cur, x.currency, R) : 0) : amount;
+  $('#payHint').textContent = fx
+    ? (ded ? `Borçtan düşecek: ${fmt(ded, x.currency)} · Kalan: ${fmt(Math.max(0, left - ded), x.currency)}` : `Kalan ${fmt(left, x.currency)} ≈ ${fmt(conv(left, x.currency, cur, R || payDefRate(f)), cur)}`)
+    : '';
+}
 function openPay(id) {
   const x = db.debts.find(d => d.id === id); if (!x) return;
-  payId = id;
+  payId = id; payRateTyped.v = false;
   const f = $('#payForm').elements;
-  const list = debtAccounts(x.currency);
-  f.accountId.innerHTML = debtAccOptions(x.currency, x.accountId);
-  if (x.accountId && list.some(a => a.id === x.accountId)) f.accountId.value = x.accountId;
-  f.date.value = today(); f.amount.value = fmtIn(debtLeft(x), 'any'); f.note.value = '';
+  // Önce aynı para birimindeki hesaplar, sonra diğerleri.
+  const list = accOrdered().sort((a, b) => (a.currency !== x.currency) - (b.currency !== x.currency));
+  f.accountId.innerHTML = list.length ? accOptions(list) : '<option value="">— hesap yok —</option>';
+  if (x.accountId && acc(x.accountId)) f.accountId.value = x.accountId;
+  f.date.value = today(); f.note.value = ''; f.rate.value = '';
   $('#payTitle').textContent = `${x.dir === 'lent' ? 'Tahsilat' : 'Ödeme'} — ${x.person}`;
   $('#payInfo').textContent = `Kalan: ${fmt(debtLeft(x), x.currency)}`;
   $('#payAccLbl').textContent = x.dir === 'lent' ? 'Paranın gireceği hesap' : 'Paranın çıkacağı hesap';
-  $('#payCur').textContent = x.currency;
+  syncPay(); payFull(); syncPay();
   showSheet($('#payDlg'));
   setTimeout(() => f.amount.select(), 30);
 }
@@ -1453,12 +1533,21 @@ function submitPay(e) {
   const x = db.debts.find(d => d.id === payId); if (!x) return;
   const f = $('#payForm').elements, amount = num(f.amount.value), a = acc(f.accountId.value);
   if (!(amount > 0)) { toast('Geçerli bir tutar girin.'); return; }
-  if (!a || a.currency !== x.currency) { toast(`${x.currency} para biriminde bir hesap seçin.`); return; }
+  if (!a) { toast('Bir hesap seçin.'); return; }
   if (!f.date.value) { toast('Tarih seçin.'); return; }
-  if (amount > debtLeft(x) + 0.005) { toast(`Kalan tutardan (${fmt(debtLeft(x), x.currency)}) fazla olamaz.`); return; }
+  const fx = a.currency !== x.currency, R = num(f.rate.value);
+  if (fx && !(R > 0)) { toast('Geçerli bir kur girin.'); return; }
+  const left = debtLeft(x);
+  let ded = fx ? conv(amount, a.currency, x.currency, R) : amount;
+  // Kur çevirisinde küçük yuvarlama farkı (%0,5'e kadar) kalanı kapatır.
+  const tol = fx ? Math.max(0.005, left * 0.005) : 0.005;
+  if (ded > left + tol) { toast(`Kalan tutardan (${fmt(left, x.currency)}) fazla olamaz.`); return; }
+  ded = Math.min(ded, left);
   const pid = uid(), txid = uid();
   const incoming = x.dir === 'lent';
-  x.payments.push({ id: pid, date: f.date.value, amount, note: f.note.value.trim(), accountId: a.id, txId: txid });
+  const pay = { id: pid, date: f.date.value, amount: ded, note: f.note.value.trim(), accountId: a.id, txId: txid };
+  if (fx) pay.paid = { amount, currency: a.currency, rate: R };
+  x.payments.push(pay);
   db.tx.push({
     id: txid, ts: Date.now(), type: incoming ? 'debt-in' : 'debt-out', date: f.date.value,
     accountId: a.id, amount, note: f.note.value.trim(), debtId: x.id, paymentId: pid,
@@ -2082,7 +2171,7 @@ document.addEventListener('click', e => {
     case 'close-pay': closeSheet($('#payDlg')); break;
     case 'pay-all': {
       const x = db.debts.find(y => y.id === payId);
-      if (x) $('#payForm').elements.amount.value = fmtIn(debtLeft(x), 'any');
+      if (x) { payFull(); syncPay(); }
       break;
     }
     case 'del-pay': {
@@ -2214,6 +2303,7 @@ document.addEventListener('input', e => {
   const el = e.target;
   if (el.dataset.filter) { ui.f[el.dataset.filter] = el.value; renderTxList(); return; }
   if (el.closest('#goldCalc')) { renderGoldCalc(); return; }
+  if (el.closest('#payForm')) { if (el.name === 'rate') payRateTyped.v = true; syncPay(); return; }
   if (el.closest('#txForm')) {
     if (['amount', 'toAmount', 'fxRate'].includes(el.name)) touch(dlg.fxOrder, el.name);
     if (el.name === 'fxRate') dlg.rateTyped = true;
@@ -2231,6 +2321,7 @@ document.addEventListener('input', e => {
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.closest('[data-form=debt]') && (el.name === 'currency' || el.name === 'dir' || el.name === 'entryMode')) { syncDebtForm(); return; }
+  if (el.closest('#payForm') && (el.name === 'accountId' || el.name === 'date')) { if (el.name === 'accountId') { payRateTyped.v = false; syncPay(); payFull(); } syncPay(); return; }
   if (el.closest('#txForm') && (el.name === 'accountId' || el.name === 'toAccountId' || el.name === 'date')) {
     if (el.name !== 'date') resetFx();
     syncTx(); return;
@@ -2295,6 +2386,7 @@ function delTx(id, fromSheet) {
 function openDebtSheet() { debtSheet(); syncDebtForm(); }
 
 render();
+if (db.settings.bridge) loadLive();
 
 // İnternet sitesinden açıldığında internetsiz de çalışsın (bilgisayarda dosyadan açınca devre dışı).
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
