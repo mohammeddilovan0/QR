@@ -1,0 +1,7 @@
+App/build
+App/Pods
+App/output
+DerivedData
+xcuserdata
+capacitor-cordova-ios-plugins
+# public/, capacitor.config.json ve config.xml bilerek repoda: Mac'te Node gerekmeden Xcode ile derlensin diye.
