@@ -171,6 +171,8 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 .hide{display:none!important}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
 .chip{background:var(--soft);border-radius:999px;padding:3px 10px;font-size:12px}
+.chip.pick{border:1px solid var(--line);background:var(--card);padding:6px 12px;font-size:13px;cursor:pointer}
+.chip.pick.sel{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
 .toast.undo{display:flex;gap:12px;align-items:center}
 .toast.undo.on{pointer-events:auto}
 .toast .btn{color:var(--ink);padding:3px 10px}
@@ -819,7 +821,11 @@ function renderTxList() {
     else exp += conv(txCost(t), a.currency, D, rateAt(t.date));
   }
   const active = f.q || f.acc || f.cat || f.from || f.to;
-  const summary = `<div class="chips"><span class="chip">${rows.length} işlem</span>
+  // Ana kategori (veya alt kategorisi) seçiliyse: "Tümü" + her alt kategori için seçim çipleri.
+  const fc = cat(f.cat), top = fc ? cat(topOf(fc.id)) : null, subs = top ? children(top.id) : [];
+  const subChip = (id, label) => `<button type="button" class="chip pick ${f.cat === id ? 'sel' : ''}" data-action="fpick-set" data-id="${id}">${esc(label)}</button>`;
+  const subBar = subs.length ? `<div class="chips subchips">${subChip(top.id, `Tümü · ${top.name}`)}${subs.map(k => subChip(k.id, k.name)).join('')}</div>` : '';
+  const summary = subBar + `<div class="chips"><span class="chip">${rows.length} işlem</span>
     <span class="chip">Harcama: <b class="exp num">${fmt(exp, D)}</b></span>
     <span class="chip">Gelir: <b class="inc num">${fmt(inc, D)}</b></span>
     ${active ? '<span class="chip">Filtre açık</span>' : ''}</div>`;
@@ -940,7 +946,7 @@ function vCat() {
       : '<span class="caret-sp"></span>';
     return `<div class="list-row ${isChild ? 'child' : ''}">
       ${caret}<span class="dot" style="background:${c.color};width:${isChild ? 10 : 14}px;height:${isChild ? 10 : 14}px"></span>
-      <div class="m${kids.length ? ' tog' : ''}"${kids.length ? ` data-action="toggle-cat" data-id="${c.id}"` : ''}><b>${isChild ? '↳ ' : ''}${esc(c.name)}</b><div class="muted" style="font-size:12px">${nAll} işlem${kids.length ? ` · ${kids.length} alt kategori` : ''}${month ? ` · bu ay ${fmt(month, D)}` : ''}</div></div>
+      <div class="m tog" data-action="cat-tx" data-id="${c.id}" title="İşlemlerini göster"><b>${isChild ? '↳ ' : ''}${esc(c.name)}</b><div class="muted" style="font-size:12px">${nAll} işlem${kids.length ? ` · ${kids.length} alt kategori` : ''}${month ? ` · bu ay ${fmt(month, D)}` : ''}</div></div>
       ${isChild ? '' : `<button class="btn sm" data-action="add-sub" data-id="${c.id}" title="Alt kategori ekle">+ Alt</button>`}
       <button class="btn sm" data-action="edit-cat" data-id="${c.id}">Düzenle</button>
       <button class="btn sm danger" data-action="del-cat" data-id="${c.id}">Sil</button>
@@ -1695,6 +1701,9 @@ document.addEventListener('click', e => {
       dlg.cpOpen.has(d.id) ? dlg.cpOpen.delete(d.id) : dlg.cpOpen.add(d.id); drawCatPick(); break;
     case 'cpick-set':
       F().categoryId.value = d.id; $('#cpick').classList.add('hide'); drawCatPick(); break;
+    case 'cat-tx':
+      ui.f = { q: '', acc: '', cat: d.id, from: '', to: '' }; ui.fcShow = false;
+      ui.tab = 'islemler'; ui.editCat = ui.newCatParent = null; render(); scrollTo(0, 0); break;
     case 'toggle-cat':
       ui.openCats.has(d.id) ? ui.openCats.delete(d.id) : ui.openCats.add(d.id); render(); break;
     case 'add-sub':
