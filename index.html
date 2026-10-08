@@ -166,6 +166,30 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 table{width:100%;border-collapse:collapse}
 td,th{text-align:left;padding:8px 4px;border-top:1px solid var(--line)}
 th{font-size:12px;color:var(--muted);font-weight:600;border-top:0}
+/* Rapor sadece yazdırırken (PDF) görünür; her zaman açık renkte basılır. */
+#report{display:none}
+@media print{
+  :root,:root[data-theme],:root:not([data-theme="light"]){
+    --bg:#fff;--card:#fff;--ink:#1c1c1a;--muted:#6d6b65;--line:#dedcd5;--soft:#f1efe9;--accent:#1f6f5c;--exp:#b4432f;--inc:#1f7a4a;
+  }
+  @page{margin:12mm}
+  body{background:#fff;font-size:12px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body.printing .wrap,body.printing .fab,body.printing .toast,body.printing dialog{display:none!important}
+  body.printing #report{display:block}
+  #report h1{font-size:22px;margin:2px 0 0}
+  #report h3{margin:18px 0 6px;break-after:avoid}
+  #report .rp-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;border-bottom:2px solid var(--accent);padding-bottom:8px}
+  #report .kpis{grid-template-columns:repeat(4,1fr)}
+  #report .kpi small{display:block;margin-top:4px;color:var(--muted);font-size:10px}
+  #report .kpi .v{font-size:16px}
+  #report td,#report th{padding:5px 4px;vertical-align:top}
+  #report tr{break-inside:avoid}
+  #report .r{text-align:right}
+  #report .nw{white-space:nowrap}
+  #report .dot{display:inline-block;margin-right:6px}
+  #report tr.sub td{color:var(--muted);font-size:11px;padding-left:18px}
+  #report tr.tot td{font-weight:700;border-top:2px solid var(--ink)}
+}
 </style>
 </head>
 <body>
@@ -259,6 +283,7 @@ th{font-size:12px;color:var(--muted);font-weight:600;border-top:0}
 </dialog>
 
 <div class="toast" id="toast"></div>
+<div id="report"></div>
 
 <script>
 const KEY = 'kisisel-hesap-v1';
@@ -411,10 +436,12 @@ function setRate(date, rate) {
   db.rates.push({ id: uid(), date, rate });
 }
 
-function balance(id) {
+/* upto verilirse o tarihin sonundaki bakiye (rapor için). */
+function balance(id, upto) {
   const a = acc(id); if (!a) return 0;
   let b = Number(a.opening) || 0;
   for (const t of db.tx) {
+    if (upto && t.date > upto) continue;
     if (t.accountId === id) {
       if (t.type === 'income' || t.type === 'opening' || t.type === 'debt-in') b += t.amount;
       else if (t.type === 'expense' || t.type === 'debt-out') b -= t.amount;
@@ -553,6 +580,7 @@ function vOzet() {
         <button class="icon" data-action="shift" data-n="1" aria-label="Sonraki">›</button>
         <button class="btn sm" data-action="now">Bugün</button>
       </div>
+      <button class="btn sm" data-action="report" title="Bu ${ui.period === 'week' ? 'haftanın' : 'ayın'} raporunu PDF olarak kaydet">📄 PDF rapor</button>
     </div>
     <div class="kpis">
       <div class="kpi"><div class="l">Harcama</div><div class="v num exp">${fmt(st.exp, D)}</div></div>
@@ -566,6 +594,89 @@ function vOzet() {
     <h3>Son ${N} ${ui.period === 'week' ? 'hafta' : 'ay'} — harcama</h3>
     <div class="trend">${trend}</div>
   </div>`;
+}
+
+/* ---------- rapor (PDF) ---------- */
+/* Rapor, tarayıcının yazdırma ekranıyla PDF'e dönüşür.
+   iPhone'da: Yazdır ekranında Paylaş simgesi → Dosyalar'a Kaydet; bilgisayarda: Hedef → PDF olarak kaydet. */
+function reportHtml(kind, anchor) {
+  const D = disp(), rg = range(kind, anchor), st = stats(rg.start, rg.end);
+  const prg = range(kind, shift(kind, anchor, -1)), ps = stats(prg.start, prg.end);
+  const t = today(), word = kind === 'week' ? 'hafta' : 'ay';
+  let days = daysBetween(rg.start, rg.end) + 1;
+  if (t >= rg.start && t <= rg.end) days = daysBetween(rg.start, t) + 1;
+  const avg = rg.start > t ? 0 : st.exp / days;
+  // Önceki döneme göre değişim; harcamada artış kötü (kırmızı), gelirde iyi.
+  const chg = (v, p, good) => {
+    if (!p) return '<span class="muted">—</span>';
+    const pct = Math.round((v - p) / p * 100);
+    const cls = pct === 0 ? 'muted' : (pct > 0) === good ? 'inc' : 'exp';
+    return `<span class="${cls}">${pct > 0 ? '+' : pct < 0 ? '−' : ''}${Math.abs(pct)}%</span>`;
+  };
+  const catName = id => { const c = cat(id); return c ? c.name : id === FEE ? 'Transfer ücretleri' : 'Kategorisiz'; };
+  const catRows = Object.entries(st.byTop).sort((a, b) => b[1] - a[1]).map(([id, v]) => {
+    const c = cat(id), col = c ? c.color : id === FEE ? '#64748b' : '#999';
+    let html = `<tr><td><span class="dot" style="background:${col}"></span>${esc(catName(id))}</td>
+      <td class="num r">${fmt(v, D)}</td><td class="num r">${Math.round(v / st.exp * 100)}%</td>
+      <td class="num r">${fmt(ps.byTop[id] || 0, D)}</td><td class="num r">${chg(v, ps.byTop[id], false)}</td></tr>`;
+    if (id && id !== FEE) {
+      const subs = children(id).filter(x => st.byCat[x.id]).map(x => [x.name, st.byCat[x.id]]);
+      if (subs.length && st.byCat[id]) subs.push([`${c.name} (genel)`, st.byCat[id]]);
+      html += subs.sort((a, b) => b[1] - a[1]).map(([n, sv]) => `<tr class="sub"><td>↳ ${esc(n)}</td>
+        <td class="num r">${fmt(sv, D)}</td><td class="num r">${Math.round(sv / st.exp * 100)}%</td><td></td><td></td></tr>`).join('');
+    }
+    return html;
+  }).join('');
+
+  const txs = db.tx.filter(x => x.date >= rg.start && x.date <= rg.end)
+    .sort((a, b) => a.date.localeCompare(b.date) || (a.ts || 0) - (b.ts || 0));
+  const big = txs.filter(x => x.type === 'expense' && acc(x.accountId))
+    .map(x => [x, conv(x.amount, acc(x.accountId).currency, D, rateAt(x.date))])
+    .sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const txTable = list => `<table><tr><th>Tarih</th><th>İşlem</th><th class="r">Tutar</th></tr>${list.map(x => {
+    const i = txInfo(x);
+    return `<tr><td class="nw">${esc(SHORTDATE.format(parse(x.date)))}</td><td><b>${esc(i.title)}</b><br><small class="muted">${esc(i.sub)}</small></td><td class="num r">${i.amt}</td></tr>`;
+  }).join('')}</table>`;
+
+  const endBal = rg.end < t ? rg.end : t;
+  const accRows = accOrdered().map(a => {
+    const b = balance(a.id, endBal);
+    return `<tr><td>${esc(accLabel(a))}</td><td class="num r ${b < 0 ? 'exp' : ''}">${fmt(b, a.currency)}</td></tr>`;
+  }).join('');
+  const total = db.accounts.reduce((s, a) => s + conv(balance(a.id, endBal), a.currency, D, rateAt(endBal)), 0);
+  const debts = db.debts.filter(debtOpen), dt = debtTotals();
+
+  return `
+  <div class="rp-head">
+    <div><div class="muted">Kişisel Hesap · ${kind === 'week' ? 'Haftalık' : 'Aylık'} rapor</div><h1>${esc(rg.label)}</h1></div>
+    <div class="muted r" style="font-size:12px">Hazırlanma: ${esc(fmtTs(Date.now()))}<br>Tutarlar: ${D} · 1 $ = ${fmtNum(rateAt(endBal))} IQD</div>
+  </div>
+  <div class="kpis">
+    <div class="kpi"><div class="l">Harcama</div><div class="v num exp">${fmt(st.exp, D)}</div><small>Önceki ${word}: ${fmt(ps.exp, D)} · ${chg(st.exp, ps.exp, false)}</small></div>
+    <div class="kpi"><div class="l">Gelir</div><div class="v num inc">${fmt(st.inc, D)}</div><small>Önceki ${word}: ${fmt(ps.inc, D)} · ${chg(st.inc, ps.inc, true)}</small></div>
+    <div class="kpi"><div class="l">Net</div><div class="v num ${st.inc - st.exp < 0 ? 'exp' : 'inc'}">${fmt(st.inc - st.exp, D, true)}</div><small>Önceki ${word}: ${fmt(ps.inc - ps.exp, D, true)}</small></div>
+    <div class="kpi"><div class="l">Günlük ortalama harcama</div><div class="v num">${fmt(avg, D)}</div><small>${days} gün</small></div>
+  </div>
+  <h3>Kategoriye göre harcama</h3>
+  ${catRows ? `<table><tr><th>Kategori</th><th class="r">Tutar</th><th class="r">Pay</th><th class="r">Önceki ${word}</th><th class="r">Değişim</th></tr>${catRows}</table>` : '<p class="muted">Bu dönemde harcama yok.</p>'}
+  ${big.length ? `<h3>En büyük ${big.length} harcama</h3>${txTable(big.map(([x]) => x))}` : ''}
+  <h3>Hesap bakiyeleri (${esc(SHORTDATE.format(parse(endBal)))})</h3>
+  <table>${accRows}<tr class="tot"><td>Toplam varlık</td><td class="num r">${fmt(total, D)}</td></tr></table>
+  ${debts.length ? `<h3>Açık borç / alacak (bugün)</h3>
+  <table><tr><th>Kişi</th><th>Tür</th><th class="r">Kalan</th></tr>${debts.map(x => `<tr><td>${esc(x.person)}</td><td>${x.dir === 'lent' ? 'Alacağım' : 'Borcum'}</td><td class="num r ${x.dir === 'lent' ? 'inc' : 'exp'}">${fmt(debtLeft(x), x.currency)}</td></tr>`).join('')}
+  <tr class="tot"><td colspan="2">Net (alacak − borç)</td><td class="num r">${fmt(dt.lent - dt.owed, D, true)}</td></tr></table>` : ''}
+  <h3>Tüm işlemler (${txs.length})</h3>
+  ${txs.length ? txTable(txs) : '<p class="muted">Bu dönemde işlem yok.</p>'}`;
+}
+function printReport() {
+  if (typeof window.print !== 'function') { toast('Bu cihazda yazdırma/PDF desteklenmiyor.'); return; }
+  const rg = range(ui.period, ui.anchor), title = document.title;
+  $('#report').innerHTML = reportHtml(ui.period, ui.anchor);
+  document.body.classList.add('printing');
+  // Bilgisayarda PDF dosyasının adı sayfa başlığından gelir.
+  document.title = `Hesap raporu - ${rg.label}`;
+  addEventListener('afterprint', () => { document.title = title; document.body.classList.remove('printing'); }, { once: true });
+  window.print();
 }
 
 function vTx() {
@@ -639,7 +750,8 @@ function renderTxList() {
   }
   el.innerHTML = html;
 }
-function txRow(t) {
+/* İşlemin başlığı, alt satırı, rengi ve tutarı — listede ve raporda ortak. */
+function txInfo(t) {
   const a = acc(t.accountId), cur = a ? a.currency : '';
   let title, sub, col, ic, amt, locked = false;
   if (t.type === 'transfer') {
@@ -668,6 +780,10 @@ function txRow(t) {
     amt = `<span class="num ${t.type === 'expense' ? 'exp' : 'inc'}">${t.type === 'expense' ? '−' : '+'}${fmt(t.amount, cur)}</span>`;
   }
   if (t.note) sub += ' · ' + t.note;
+  return { title, sub, col, ic, amt, locked };
+}
+function txRow(t) {
+  const { title, sub, col, ic, amt, locked } = txInfo(t);
   return `<div class="tx" ${locked ? '' : `data-action="edit-tx" data-id="${t.id}"`}>
     <div class="ic" style="background:${col}">${ic}</div>
     <div class="m"><div class="t">${esc(title)}</div><div class="s">${esc(sub)}</div></div>
@@ -1152,6 +1268,7 @@ document.addEventListener('click', e => {
     case 'period': ui.period = d.p; render(); break;
     case 'shift': ui.anchor = shift(ui.period, ui.anchor, +d.n); render(); break;
     case 'now': ui.anchor = today(); render(); break;
+    case 'report': printReport(); break;
     case 'drill': {
       const rg = range(ui.period, ui.anchor);
       ui.f = { q: '', acc: '', cat: d.cat === FEE ? '__transfer' : d.cat, from: rg.start, to: rg.end };
