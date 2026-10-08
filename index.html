@@ -167,6 +167,8 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 table{width:100%;border-collapse:collapse}
 td,th{text-align:left;padding:8px 4px;border-top:1px solid var(--line)}
 th{font-size:12px;color:var(--muted);font-weight:600;border-top:0}
+details{border-top:1px solid var(--line);margin-top:8px}
+details summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:14px;padding:10px 0}
 /* Rapor sadece yazdırırken (PDF) görünür; her zaman açık renkte basılır. */
 #report{display:none}
 @media print{
@@ -886,23 +888,22 @@ function vRate() {
   ui.cvOrder = ['usd', 'iqd', 'rate'];
   return `
   <div class="card">
-    <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:6px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
       <h2 style="margin:0">Piyasa kuru</h2>
-      <label style="display:flex;gap:6px;align-items:center">Kaydedilecek tarih<input type="date" id="rateTextDate" value="${today()}" style="width:auto;margin:0"></label>
+      ${db.settings.bridge ? '<button class="icon" data-action="live-reload" aria-label="Yenile" title="Yenile">↻</button>' : ''}
     </div>
-    <h3 style="margin-top:8px">Canlı: Borsa Erbil</h3>
-    ${db.settings.bridge ? `<div id="live"></div>` : `<p class="muted" style="font-size:12px;margin:-4px 0 8px">Telegram'daki Borsa Erbil kanalının son kurunu uygulamayı açtığın anda gösterir. Bunun için bir kez ücretsiz kur köprüsü kurulur (<a href="https://github.com/mohammeddilovan0/QR/blob/main/kopru/KURULUM.md" target="_blank" rel="noopener">kurulum</a>); sonra adresini buraya yapıştırın.</p>
-    <div style="display:flex;gap:8px"><input id="bridgeUrl" placeholder="https://kur.….workers.dev" inputmode="url" autocomplete="off"><button class="btn primary" data-action="bridge-save">Bağla</button></div>`}
-    <h3>Günlük (Iraq Dinar Watch)</h3>
-    <div id="mkt"></div>
-    <p class="muted" style="font-size:12px;margin:6px 0 0">Kaynak: <a href="https://github.com/HusseinKh90/Iraq-parallel-exchange-rate" target="_blank" rel="noopener">Iraq Dinar Watch</a> — çarşı kurlarını açık Telegram kanallarından günde bir kez derler. Resmî kur değildir. Duhok ayrıca yayınlanmadığı için en yakın çarşı Erbil'dir; Duhok kuru için aşağıdan mesaj yapıştırın.</p>
-    <h3>Mesajdan oku</h3>
-    <p class="muted" style="font-size:12px;margin:-4px 0 10px">WhatsApp veya başka bir uygulamadaki kur mesajını kopyalayıp buraya yapıştırın; içindeki kur bulunur. Kur resim olarak geldiyse resimdeki yazıya basılı tutup <b>Kopyala</b> deyin. 100 $ için yazılan kur (ör. 146,750) 1 $'a çevrilir; Arapça rakamlar da okunur.</p>
-    <textarea id="rateText" rows="3" placeholder="ör. الدولار 146,750 / Dolar 1475"></textarea>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">
-      <button class="btn" data-action="paste-rate">Panodan yapıştır</button>
-    </div>
-    <div id="rateFound"></div>
+    <p class="muted" style="font-size:12px;margin:2px 0 4px">${db.settings.bridge ? 'Borsa Erbil (Telegram) · her dakika yenilenir' : 'Günlük çarşı kuru (Iraq Dinar Watch)'} · <b>Kaydet</b> ile bugünün kuru olur</p>
+    <div id="${db.settings.bridge ? 'live' : 'mkt'}"></div>
+    ${db.settings.bridge ? '' : `<details><summary>Canlı kur için köprü bağla</summary>
+      <p class="muted" style="font-size:12px;margin:0 0 8px">Borsa Erbil kanalının son kurunu gösterir. Bir kez ücretsiz köprü kurulur (<a href="https://github.com/mohammeddilovan0/QR/blob/main/kopru/KURULUM.md" target="_blank" rel="noopener">kurulum</a>), adresi buraya yapıştırılır.</p>
+      <div style="display:flex;gap:8px"><input id="bridgeUrl" placeholder="https://kur.….workers.dev" inputmode="url" autocomplete="off"><button class="btn primary" data-action="bridge-save">Bağla</button></div>
+    </details>`}
+    <details><summary>Mesajdan oku (Duhok vb.)</summary>
+      <p class="muted" style="font-size:12px;margin:0 0 8px">WhatsApp'taki kur mesajını yapıştırın; içindeki kurlar listelenir, doğrusunu kaydedin.</p>
+      <textarea id="rateText" rows="3" placeholder="ör. دهوك 165,500"></textarea>
+      <button class="btn" data-action="paste-rate" style="margin-top:8px">Panodan yapıştır</button>
+      <div id="rateFound"></div>
+    </details>
   </div>
   <div class="grid two">
     <div class="card">
@@ -1025,7 +1026,8 @@ function renderMkt() {
 
 /* Canlı kur: kendi Cloudflare köprümüz Borsa Erbil kanalının son mesajlarını verir; kur, mesajdan okuyucuyla bulunur. */
 const live = { loading: false, at: 0, data: null, err: '' };
-const ERBIL = /هەولێر|أربيل|اربيل|erbil/i;
+/* Borsa Erbil kanalı Erbil, Bağdat ve Basra kurlarını karışık sırayla yazar; her şehir için en yeni satır alınır. */
+const LIVE_CITIES = { erbil: ['Erbil', /هەولێر|أربيل|اربيل|erbil/i], baghdad: ['Bağdat', /بغداد|بەغدا|baghdad/i] };
 function loadLive(force) {
   const url = db.settings.bridge;
   if (!url || live.loading || (!force && live.data && Date.now() - live.at < 60e3)) return;
@@ -1034,37 +1036,43 @@ function loadLive(force) {
     .then(r => r.json())
     .then(j => {
       if (!Array.isArray(j.posts)) throw new Error(j.error || 'beklenmeyen cevap');
-      // En yeni Erbil kuru; kanal arada Bağdat/Basra da yazdığı için önce tüm mesajlarda Erbil aranır.
-      const posts = [...j.posts].reverse();
-      for (const pick of [y => ERBIL.test(y.label), y => y.usd]) {
+      const posts = [...j.posts].reverse().map(p => ({ at: p.at, rates: readRates(p.text) })), out = {};
+      for (const [k, [, re]] of Object.entries(LIVE_CITIES)) {
         for (const p of posts) {
-          const x = readRates(p.text).find(pick);
-          if (x) { live.data = { ...x, at: p.at }; live.err = ''; live.at = Date.now(); return; }
+          const x = p.rates.find(y => re.test(y.label));
+          if (x) { out[k] = { ...x, at: p.at }; break; }
         }
       }
-      throw new Error('son mesajlarda kur bulunamadı');
+      if (!Object.keys(out).length) throw new Error('son mesajlarda kur bulunamadı');
+      live.data = out; live.err = ''; live.at = Date.now();
     })
     .catch(e => { live.err = e.message || 'alınamadı'; })
     .finally(() => { live.loading = false; renderLive(); });
 }
+const ago = at => {
+  const min = Math.max(0, Math.round((Date.now() - Date.parse(at)) / 6e4));
+  return min < 60 ? `${min} dk önce` : min < 1440 ? `${Math.round(min / 60)} saat önce` : `${Math.round(min / 1440)} gün önce`;
+};
 function renderLive() {
   const el = $('#live'); if (!el) return;
-  const edit = '<button class="btn sm" data-action="bridge-edit">Köprü adresini değiştir</button>';
   if (!live.data) {
     el.innerHTML = live.loading ? '<p class="hint">Son kur alınıyor…</p>'
-      : `<p class="hint">Kur alınamadı (${esc(live.err)}). <button class="btn sm" data-action="live-reload">Tekrar dene</button> ${edit}</p>`;
+      : `<p class="hint">Kur alınamadı (${esc(live.err)}). <button class="btn sm" data-action="live-reload">Tekrar dene</button> <button class="btn sm" data-action="bridge-edit">Köprüyü değiştir</button></p>`;
     return;
   }
-  const x = live.data, min = Math.max(0, Math.round((Date.now() - Date.parse(x.at)) / 6e4));
-  const ago = min < 60 ? `${min} dk önce` : min < 1440 ? `${Math.round(min / 60)} saat önce` : `${Math.round(min / 1440)} gün önce`;
-  const time = new Date(x.at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-  el.innerHTML = `<div class="list-row" style="border-top:0">
-      <div class="m"><b class="num">1 $ = ${fmtNum(x.rate, x.rate % 1 ? 2 : 0)} IQD</b>
-        <div class="muted" style="font-size:12px">Borsa Erbil · ${esc(time)} (${ago}) · “${esc(x.tok)}”${x.label ? ' · ' + esc(x.label) : ''}</div></div>
-      <button class="icon" data-action="live-reload" aria-label="Yenile" title="Yenile">↻</button>
+  el.innerHTML = Object.entries(LIVE_CITIES).filter(([k]) => live.data[k]).map(([k, [name]]) => {
+    const x = live.data[k];
+    return `<div class="list-row">
+      <div class="m"><b>${name}</b> <span class="muted" style="font-size:12px">· ${ago(x.at)}</span>
+        <div class="num" style="font-size:20px;font-weight:700">${fmtNum(x.rate, x.rate % 1 ? 2 : 0)} <small class="muted">IQD</small></div></div>
       <button class="btn sm primary" data-action="use-rate" data-rate="${x.rate}">Kaydet</button>
-    </div>${live.err ? `<p class="hint">Yenilenemedi: ${esc(live.err)}</p>` : ''}`;
+    </div>`;
+  }).join('') + (live.err ? `<p class="hint">Yenilenemedi: ${esc(live.err)}</p>` : '');
 }
+/* Kur sekmesi açıkken her dakika kendiliğinden yenilenir; uygulamaya geri dönünce hemen yenilenir. */
+const autoLive = () => { if (ui.tab === 'kur' && db.settings.bridge && !document.hidden) { renderLive(); loadLive(true); } };
+setInterval(autoLive, 60e3);
+document.addEventListener('visibilitychange', autoLive);
 
 function renderFound() {
   const el = $('#rateFound'); if (!el) return;
@@ -1276,7 +1284,9 @@ function render() {
   const views = { ozet: vOzet, islemler: vTx, hesaplar: vAcc, borclar: vDebt, kategoriler: vCat, kur: vRate, ayarlar: vSet };
   $('#view').innerHTML = views[ui.tab]();
   if (ui.tab === 'islemler') renderTxList();
-  if (ui.tab === 'kur') { renderLive(); loadLive(); renderMkt(); loadMkt(); }
+  if (ui.tab === 'kur') {
+    if (db.settings.bridge) { renderLive(); loadLive(); } else { renderMkt(); loadMkt(); }
+  }
 }
 
 /* ---------- işlem penceresi ---------- */
@@ -1523,7 +1533,7 @@ document.addEventListener('click', e => {
       if (confirm('Köprü adresi silinsin mi? Yeni adresi tekrar yapıştırabilirsiniz.')) { db.settings.bridge = ''; live.data = null; save(); render(); }
       break;
     case 'use-rate': {
-      const date = $('#rateTextDate').value || today(), old = db.rates.find(r => r.date === date);
+      const date = today(), old = db.rates.find(r => r.date === date);
       if (old && old.rate !== +d.rate && !confirm(`${SHORTDATE.format(parse(date))} için kayıtlı kur ${fmtNum(old.rate)} IQD. ${fmtNum(+d.rate, +d.rate % 1 ? 2 : 0)} ile değiştirilsin mi?`)) break;
       setRate(date, +d.rate); save(); render();
       toast(`Kur kaydedildi: 1 $ = ${fmtNum(+d.rate, +d.rate % 1 ? 2 : 0)} IQD`);
