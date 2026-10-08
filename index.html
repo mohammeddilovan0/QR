@@ -212,6 +212,7 @@ details summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:14p
     <button class="tab" data-action="tab" data-tab="borclar">Borç/Alacak</button>
     <button class="tab" data-action="tab" data-tab="kategoriler">Kategoriler</button>
     <button class="tab" data-action="tab" data-tab="kur">Kur</button>
+    <button class="tab" data-action="tab" data-tab="altin">Altın</button>
     <button class="tab" data-action="tab" data-tab="ayarlar">Ayarlar</button>
   </nav>
   <main id="view"></main>
@@ -1041,7 +1042,7 @@ function loadLive(force) {
       live.data = out; live.err = ''; live.at = Date.now();
     })
     .catch(e => { live.err = e.message || 'alınamadı'; })
-    .finally(() => { live.loading = false; renderLive(); });
+    .finally(() => { live.loading = false; renderLive(); renderGold(); });
 }
 const ago = at => {
   const min = Math.max(0, Math.round((Date.now() - Date.parse(at)) / 6e4));
@@ -1064,9 +1065,94 @@ function renderLive() {
   }).join('') + (live.err ? `<p class="hint">Yenilenemedi: ${esc(live.err)}</p>` : '');
 }
 /* Kur sekmesi açıkken her dakika kendiliğinden yenilenir; uygulamaya geri dönünce hemen yenilenir. */
-const autoLive = () => { if (ui.tab === 'kur' && db.settings.bridge && !document.hidden) { renderLive(); loadLive(true); } };
+const autoLive = () => {
+  if (document.hidden) return;
+  if (['kur', 'altin'].includes(ui.tab) && db.settings.bridge) { if (ui.tab === 'kur') renderLive(); loadLive(true); }
+  if (ui.tab === 'altin') loadGold(true);
+};
 setInterval(autoLive, 60e3);
 document.addEventListener('visibilitychange', autoLive);
+
+/* ---------- altın ---------- */
+/* Ons fiyatı gold-api.com'dan (ücretsiz, anahtarsız, CORS açık). Irak'ta altın miskal (5 gr) ile satılır.
+   Fiyatlar saf altın değeridir; kuyumcu işçiliği ve kâr payı dahil değildir. */
+const OZ = 31.1034768, MISKAL = 5;
+const KARATS = [24, 22, 21, 18];
+const gold = { loading: false, at: 0, usd: 0, upd: '', err: '' };
+function loadGold(force) {
+  if (gold.loading || (!force && gold.usd && Date.now() - gold.at < 60e3)) return;
+  gold.loading = true; renderGold();
+  fetch('https://api.gold-api.com/price/XAU', { cache: 'no-store' })
+    .then(r => r.json())
+    .then(j => {
+      if (!(j.price > 0)) throw new Error('fiyat yok');
+      gold.usd = j.price; gold.upd = j.updatedAt || new Date().toISOString(); gold.err = ''; gold.at = Date.now();
+    })
+    .catch(e => { gold.err = e.message || 'alınamadı'; })
+    .finally(() => { gold.loading = false; renderGold(); });
+}
+/* Dinara çevirmek için kullanılabilecek kurlar: canlı şehir kurları + uygulamadaki kayıtlı kur. */
+function goldRates() {
+  const out = Object.entries(LIVE_CITIES).filter(([k]) => live.data && live.data[k])
+    .map(([k, [name]]) => ({ k, name, rate: live.data[k].rate }));
+  out.push({ k: 'saved', name: 'Kayıtlı kur', rate: curRate() });
+  return out;
+}
+const goldUsd = (karat, grams) => gold.usd / OZ * karat / 24 * grams;
+function vGold() {
+  ui.goldCity = ui.goldCity || 'erbil';
+  return `
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <h2 style="margin:0">Altın fiyatı</h2>
+      <button class="icon" data-action="gold-reload" aria-label="Yenile" title="Yenile">↻</button>
+    </div>
+    <p class="muted" style="font-size:12px;margin:2px 0 8px">Dünya ons fiyatından · her dakika yenilenir · işçilik hariç</p>
+    <div id="gold"></div>
+  </div>
+  <div class="card" id="goldCalc">
+    <h2>Altın hesapla</h2>
+    <div style="display:flex;gap:8px">
+      <input id="gAmt" type="number" inputmode="decimal" min="0" step="any" placeholder="Miktar" value="${ui.gAmt || 1}" style="flex:1">
+      <select id="gUnit" style="width:auto">${[['m', 'miskal'], ['g', 'gram']].map(([v, t]) => `<option value="${v}"${(ui.gUnit || 'm') === v ? ' selected' : ''}>${t}</option>`).join('')}</select>
+      <select id="gKarat" style="width:auto">${KARATS.map(k => `<option value="${k}"${(ui.gKarat || 21) == k ? ' selected' : ''}>${k} ayar</option>`).join('')}</select>
+    </div>
+    <div id="gOut"></div>
+  </div>`;
+}
+function renderGold() {
+  const el = $('#gold'); if (!el) return;
+  if (!gold.usd) {
+    el.innerHTML = gold.loading ? '<p class="hint">Altın fiyatı alınıyor…</p>'
+      : `<p class="hint">Altın fiyatı alınamadı (${esc(gold.err)}). <button class="btn sm" data-action="gold-reload">Tekrar dene</button></p>`;
+    renderGoldCalc(); return;
+  }
+  const rates = goldRates(), city = rates.find(r => r.k === ui.goldCity) || rates[0];
+  el.innerHTML = `
+    <div class="num" style="font-size:22px;font-weight:700">1 ons = ${fmtNum(gold.usd, 2)} $</div>
+    <p class="muted" style="font-size:12px;margin:2px 0 10px">${ago(gold.upd)}${gold.err ? ' · yenilenemedi: ' + esc(gold.err) : ''}</p>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">${rates.map(r =>
+      `<button class="btn sm${r.k === city.k ? ' primary' : ''}" data-action="gold-city" data-city="${r.k}">${r.name} ${fmtNum(r.rate, r.rate % 1 ? 2 : 0)}</button>`).join('')}</div>
+    <table><thead><tr><th>Ayar</th><th style="text-align:right">1 gram</th><th style="text-align:right">1 miskal</th></tr></thead><tbody>
+    ${KARATS.map(k => {
+      const g = goldUsd(k, 1), m = goldUsd(k, MISKAL);
+      return `<tr><td><b>${k}</b></td>
+        <td style="text-align:right" class="num">${fmtNum(g, 2)} $<br><small class="muted">${fmtNum(Math.round(g * city.rate))} IQD</small></td>
+        <td style="text-align:right" class="num">${fmtNum(m, 2)} $<br><small class="muted">${fmtNum(Math.round(m * city.rate))} IQD</small></td></tr>`;
+    }).join('')}
+    </tbody></table>`;
+  renderGoldCalc();
+}
+function renderGoldCalc() {
+  const el = $('#gOut'); if (!el) return;
+  ui.gAmt = $('#gAmt').value; ui.gUnit = $('#gUnit').value; ui.gKarat = +$('#gKarat').value;
+  const amt = parseFloat(ui.gAmt) || 0;
+  if (!gold.usd || !amt) { el.innerHTML = ''; return; }
+  const usd = goldUsd(ui.gKarat, amt * (ui.gUnit === 'm' ? MISKAL : 1));
+  el.innerHTML = `<div class="list-row" style="margin-top:8px"><div class="m"><b>Dolar</b></div><b class="num">${fmtNum(usd, 2)} $</b></div>`
+    + goldRates().map(r => `<div class="list-row"><div class="m">${r.name} <small class="muted num">· ${fmtNum(r.rate, r.rate % 1 ? 2 : 0)}</small></div>
+      <b class="num">${fmtNum(Math.round(usd * r.rate))} IQD</b></div>`).join('');
+}
 
 /* ---------- borç / alacak ---------- */
 /* Borç ve alacak hareketleri gerçek hesap bakiyelerine bağlıdır; gelir/gider istatistiğine dahil edilmez. */
@@ -1263,12 +1349,13 @@ function render() {
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === ui.tab));
   document.querySelectorAll('#disp button').forEach(b => b.classList.toggle('on', b.dataset.cur === disp()));
   $('#rateBadge').innerHTML = `Kur: 1 $ = <b class="num">${fmtNum(curRate())}</b> IQD`;
-  const views = { ozet: vOzet, islemler: vTx, hesaplar: vAcc, borclar: vDebt, kategoriler: vCat, kur: vRate, ayarlar: vSet };
+  const views = { ozet: vOzet, islemler: vTx, hesaplar: vAcc, borclar: vDebt, kategoriler: vCat, kur: vRate, altin: vGold, ayarlar: vSet };
   $('#view').innerHTML = views[ui.tab]();
   if (ui.tab === 'islemler') renderTxList();
   if (ui.tab === 'kur') {
     if (db.settings.bridge) { renderLive(); loadLive(); } else { renderMkt(); loadMkt(); }
   }
+  if (ui.tab === 'altin') { renderGold(); loadGold(); if (db.settings.bridge) loadLive(); }
 }
 
 /* ---------- işlem penceresi ---------- */
@@ -1500,6 +1587,8 @@ document.addEventListener('click', e => {
     }
     case 'mkt-reload': loadMkt(true); break;
     case 'live-reload': loadLive(true); break;
+    case 'gold-reload': loadGold(true); if (db.settings.bridge) loadLive(true); break;
+    case 'gold-city': ui.goldCity = d.city; renderGold(); break;
     case 'bridge-save': {
       const u = $('#bridgeUrl').value.trim();
       if (!/^https:\/\/[^\s/]+\.[^\s]+$/.test(u)) { toast('https:// ile başlayan köprü adresini yapıştırın.'); break; }
@@ -1639,6 +1728,7 @@ document.addEventListener('submit', e => {
 document.addEventListener('input', e => {
   const el = e.target;
   if (el.dataset.filter) { ui.f[el.dataset.filter] = el.value; renderTxList(); return; }
+  if (el.closest('#goldCalc')) { renderGoldCalc(); return; }
   if (el.closest('#txForm')) {
     if (['amount', 'toAmount', 'fxRate'].includes(el.name)) touch(dlg.fxOrder, el.name);
     if (el.name === 'fxRate') dlg.rateTyped = true;
