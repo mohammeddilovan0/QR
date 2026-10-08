@@ -138,7 +138,7 @@ label>input,label>select,label>.amt{margin-top:4px}
 .tcol.cur .tbar{background:var(--accent)}
 .tcol .tl{font-size:11px;color:var(--muted);white-space:nowrap}
 .tcol .tv{font-size:11px;color:var(--muted);white-space:nowrap}
-.filters{display:grid;gap:8px;grid-template-columns:1fr 1fr}
+.filters{display:grid;gap:8px;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 @media (min-width:760px){.filters{grid-template-columns:2fr 1fr 1fr 1fr 1fr auto}}
 .day{font-size:12px;color:var(--muted);font-weight:600;padding:12px 2px 6px;display:flex;justify-content:space-between}
 .tx{display:flex;gap:12px;align-items:center;padding:10px;border-radius:10px;cursor:pointer}
@@ -267,7 +267,11 @@ dialog.sheet.closing::backdrop{animation:fadeOut .22s forwards}
 .sheet-nav .nav-txt:first-of-type{justify-self:start}.sheet-nav .nav-txt.b{justify-self:end}
 .grab{position:absolute;top:5px;left:50%;width:36px;height:5px;margin-left:-18px;border-radius:3px;background:var(--line)}
 .dlg{display:block}
-.sheet-body{padding:16px;display:grid;gap:14px}
+.sheet-body{padding:16px;display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
+/* iPhone'da tarih/saat kutusu kendi genişliğini dayatıp paneli yana taşırıyordu. */
+input[type=date],input[type=time]{-webkit-appearance:none;appearance:none;display:block;max-width:100%;min-height:42px;text-align:left}
+input::-webkit-date-and-time-value{text-align:left}
+dialog.sheet{overflow-x:hidden;touch-action:pan-y}
 .btn.block{width:100%;padding:12px;font-weight:600}
 .btn.danger.block{background:color-mix(in srgb,var(--exp) 12%,var(--card));border-color:transparent}
 /* Onay menüsü (iOS eylem menüsü gibi) */
@@ -314,7 +318,7 @@ dialog.sheet.closing::backdrop{animation:fadeOut .22s forwards}
 .krow{display:flex;align-items:center;gap:12px}
 .knext{font-size:28px;font-weight:700;letter-spacing:-.02em;margin:14px 0 2px}
 .kbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
-.ktimes{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ktimes{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
 .ktimes input{width:100%}
 .kdays{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.kdays .chip.pick{padding:7px 0;text-align:center}
 .snd{display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;border-top:1px solid var(--line);padding:12px 4px;font:inherit;color:var(--ink);text-align:left;cursor:pointer}
@@ -1487,7 +1491,7 @@ function vDebt() {
 function debtSheet(e) {
   const v = k => e ? esc(e[k]) : '';
   openSheet(`<form data-form="debt" class="dlg"${e ? ` data-id="${e.id}"` : ''}>${sheetNav(e ? 'Borç / alacağı düzenle' : 'Yeni borç / alacak', e ? 'Kaydet' : 'Ekle')}
-    <div class="sheet-body" style="grid-template-columns:1fr 1fr">
+    <div class="sheet-body" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
       ${e ? `<p class="muted" style="grid-column:1/-1;margin:0">${e.dir === 'lent' ? 'Alacak' : 'Borç'} · ${e.currency}${e.opening ? ' · Başlangıç kaydı' : ''}</p>` : `
       <label style="grid-column:1/-1">Kayıt tipi<select name="entryMode" data-debt-mode>
         <option value="live">Yeni borç/alacak hareketi</option>
