@@ -305,6 +305,25 @@ dialog.sheet.closing::backdrop{animation:fadeOut .22s forwards}
   #report tr.sub td{color:var(--muted);font-size:11px;padding-left:18px}
   #report tr.tot td{font-weight:700;border-top:2px solid var(--ink)}
 }
+/* Ayağa kalk hatırlatıcısı */
+.tgl{position:relative;width:51px;height:31px;border-radius:16px;background:var(--line);border:0;padding:0;flex:none;transition:background .2s;cursor:pointer}
+.tgl::after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.25);transition:transform .2s}
+.tgl.on{background:#34c759}.tgl.on::after{transform:translateX(20px)}
+.krow{display:flex;align-items:center;gap:12px}
+.knext{font-size:28px;font-weight:700;letter-spacing:-.02em;margin:14px 0 2px}
+.kbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.ktimes{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ktimes input{width:100%}
+.kdays{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.kdays .chip.pick{padding:7px 0;text-align:center}
+.snd{display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;border-top:1px solid var(--line);padding:12px 4px;font:inherit;color:var(--ink);text-align:left;cursor:pointer}
+.snd:first-of-type{border-top:0}
+.snd .ck{margin-left:auto;color:var(--accent);font-weight:700;visibility:hidden}
+.snd.sel .ck{visibility:visible}
+.snd:active{background:var(--soft)}
+.kban{position:fixed;inset:auto;top:calc(10px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);margin:0;width:min(420px,calc(100vw - 24px));background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:16px;padding:14px 16px;box-shadow:0 10px 30px rgba(0,0,0,.25);display:none;align-items:center;gap:12px;z-index:30}
+.kban.on{display:flex;animation:kbIn .3s ease-out}
+.kban b{display:block;font-size:16px}
+@keyframes kbIn{from{opacity:0;transform:translate(-50%,-16px)}to{opacity:1;transform:translate(-50%,0)}}
 </style>
 </head>
 <body>
@@ -393,6 +412,7 @@ dialog.sheet.closing::backdrop{animation:fadeOut .22s forwards}
 <dialog id="askDlg" class="sheet"></dialog>
 
 <div class="toast" id="toast" popover="manual"></div>
+<div class="kban" id="kalkBan" popover="manual" data-kalk="ban-close"><span style="font-size:30px">🧍</span><div style="flex:1"><b id="kalkBanT"></b><span class="muted" id="kalkBanB"></span></div><button class="btn primary sm">Tamam</button></div>
 <div id="report"></div>
 
 <script>
@@ -1644,14 +1664,16 @@ const ICON = {
   silinenler: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/>',
   ayarlar: '<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  kalk: '<circle cx="12" cy="4.5" r="2"/><path d="M12 8v6.5M12 14.5l-3 6M12 14.5l3 6M6.5 11l5.5-2.5 5.5 2.5"/>',
 };
 const svg = k => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICON[k]}</svg>`;
 const TABS = [['ozet', 'Özet'], ['islemler', 'İşlemler'], ['borclar', 'Borçlar'], ['piyasa', 'Piyasa'], ['daha', 'Daha fazla']];
 /* Her ekranın alt menüde hangi sekmeye ait olduğu. */
-const TAB_OF = { kur: 'piyasa', altin: 'piyasa', hesaplar: 'daha', kategoriler: 'daha', ayarlar: 'daha', silinenler: 'daha' };
+const TAB_OF = { kalk: 'daha', kur: 'piyasa', altin: 'piyasa', hesaplar: 'daha', kategoriler: 'daha', ayarlar: 'daha', silinenler: 'daha' };
 const TITLES = { ozet: 'Özet', islemler: 'İşlemler', borclar: 'Borç / Alacak', kur: 'Piyasa', altin: 'Piyasa', daha: 'Daha fazla',
-  hesaplar: 'Hesaplar', kategoriler: 'Kategoriler', ayarlar: 'Ayarlar', silinenler: 'Silinenler' };
+  hesaplar: 'Hesaplar', kategoriler: 'Kategoriler', ayarlar: 'Ayarlar', silinenler: 'Silinenler', kalk: 'Ayağa kalk' };
 const MORE = [
+  [['kalk', 'Ayağa kalk', '#30a46c']],
   [['hesaplar', 'Hesaplar', '#3b82c4'], ['kategoriler', 'Kategoriler', '#e8a33d']],
   [['silinenler', 'Silinenler', '#e5484d'], ['ayarlar', 'Ayarlar', '#8e8e93']],
 ];
@@ -1669,7 +1691,7 @@ const onScroll = () => document.body.classList.toggle('scrolled', scrollY > 34);
 addEventListener('scroll', onScroll, { passive: true });
 
 function vDaha() {
-  const val = { hesaplar: db.accounts.length, kategoriler: db.categories.length, silinenler: db.trash.length || '', ayarlar: '' };
+  const val = { kalk: kalkOn() ? 'Açık' : 'Kapalı', hesaplar: db.accounts.length, kategoriler: db.categories.length, silinenler: db.trash.length || '', ayarlar: '' };
   return MORE.map(g => `<div class="group">${g.map(([k, l, c]) => `<button class="gitem" data-action="tab" data-tab="${k}">
     <span class="gi" style="background:${c}">${svg(k)}</span>
     <span class="gt"><span>${l}</span><span class="gv">${val[k]}<span class="chev-r">›</span></span></span></button>`).join('')}</div>`).join('');
@@ -1861,7 +1883,7 @@ function render() {
   $('#ltitle').textContent = TITLES[ui.tab];
   document.body.classList.toggle('has-fab', ['ozet', 'islemler'].includes(ui.tab));
   drawNav();
-  const views = { ozet: vOzet, islemler: vTx, hesaplar: vAcc, borclar: vDebt, kategoriler: vCat, kur: vRate, altin: vGold, ayarlar: vSet, daha: vDaha, silinenler: vTrash };
+  const views = { ozet: vOzet, islemler: vTx, hesaplar: vAcc, borclar: vDebt, kategoriler: vCat, kur: vRate, altin: vGold, ayarlar: vSet, daha: vDaha, silinenler: vTrash, kalk: vKalk };
   const v = $('#view');
   v.innerHTML = views[ui.tab]();
   openSw = null;
@@ -1873,6 +1895,7 @@ function render() {
   }
   if (ui.tab === 'altin') { renderGold(); loadGold(); if (db.settings.bridge) loadLive(); }
   goldStream();
+  if (ui.tab === 'kalk') kalkCheck();
 }
 
 /* ---------- işlem penceresi ---------- */
@@ -2384,6 +2407,257 @@ function delTx(id, fromSheet) {
   });
 }
 function openDebtSheet() { debtSheet(); syncDebtForm(); }
+
+/* ---------- ayağa kalk hatırlatıcısı ----------
+   Ayarlar bu cihaza özeldir (yedeğe girmez). Uygulama açıkken hatırlatmayı uygulama kendisi yapar ve seçilen sesi çalar.
+   iPhone'da uygulama kapalıyken zamanlayıcı çalışmadığı için, kapalıyken bildirim köprü (Cloudflare Worker) üzerinden
+   Web Push ile gelir; köprü her dakika aynı kuralla (due) zamanı gelmiş mi bakar. */
+const KALK = KEY + '-kalk';
+const KALK_DEF = { on: false, every: 20, start: '09:00', end: '22:00', days: [0, 1, 2, 3, 4, 5, 6], sound: 'zil', pause: 0 };
+const KALK_EVERY = [15, 20, 25, 30, 45, 60];
+const KALK_DAYS = [[1, 'Pzt'], [2, 'Sal'], [3, 'Çar'], [4, 'Per'], [5, 'Cum'], [6, 'Cmt'], [0, 'Paz']];
+const SOUNDS = [['zil', 'Zil'], ['marimba', 'Marimba'], ['kus', 'Kuş cıvıltısı'], ['gong', 'Gong'], ['yumusak', 'Yumuşak'], ['bip', 'Bip bip'], ['yok', 'Sessiz']];
+const hm = s => { const m = /^(\d\d):(\d\d)$/.exec(s || ''); return m && +m[1] < 24 && +m[2] < 60 ? +m[1] * 60 + +m[2] : null; };
+function loadKalk() {
+  let k = {};
+  try { k = JSON.parse(localStorage.getItem(KALK)) || {}; } catch (e) {}
+  k = Object.assign({}, KALK_DEF, k);
+  k.on = !!k.on;
+  k.every = +k.every >= 5 && +k.every <= 240 ? Math.round(+k.every) : 20;
+  if (hm(k.start) === null) k.start = KALK_DEF.start;
+  if (hm(k.end) === null) k.end = KALK_DEF.end;
+  k.days = Array.isArray(k.days) ? KALK_DAYS.map(d => d[0]).filter(d => k.days.includes(d)) : KALK_DEF.days.slice();
+  if (!SOUNDS.some(s => s[0] === k.sound)) k.sound = 'zil';
+  k.pause = +k.pause || 0;
+  return k;
+}
+let K = loadKalk();
+const kalkOn = () => K.on;
+function saveKalk(sync = true) {
+  try { localStorage.setItem(KALK, JSON.stringify(K)); } catch (e) {}
+  if (sync) pushSyncSoon();
+}
+const kalkAyar = () => ({ on: K.on, every: K.every, start: K.start, end: K.end, days: K.days, pause: K.pause, tz: new Date().getTimezoneOffset() });
+
+/* Köprüdeki (kopru/worker.js) due() ile aynı kural: çalışma saatleri içinde başlangıçtan itibaren her "every" dakikada bir,
+   başlangıç anında değil (09:00 başlıyorsa ilki 09:20). Bitiş başlangıçtan küçükse aralık gece yarısını aşar. */
+function kalkDue(a, ts) {
+  if (!a.on || ts < a.pause) return false;
+  const local = new Date(ts - a.tz * 60e3);
+  const m = local.getUTCHours() * 60 + local.getUTCMinutes();
+  const s = hm(a.start), e = hm(a.end);
+  const span = ((e - s + 1440) % 1440) || 1440, off = (m - s + 1440) % 1440;
+  if (off === 0 || off > span || off % a.every) return false;
+  return a.days.includes(new Date(ts - a.tz * 60e3 - off * 60e3).getUTCDay());
+}
+function kalkNext(from = Date.now()) {
+  const a = kalkAyar(), t0 = Math.floor(from / 60e3) * 60e3;
+  for (let i = 1; i <= 8 * 1440; i++) if (kalkDue(a, t0 + i * 60e3)) return t0 + i * 60e3;
+  return 0;
+}
+const hhmm = ts => new Date(ts).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+function whenLabel(ts) {
+  const d = daysBetween(today(), ymd(new Date(ts)));
+  return d === 0 ? hhmm(ts) : d === 1 ? `Yarın ${hhmm(ts)}` : new Date(ts).toLocaleDateString('tr-TR', { weekday: 'long' }) + ' ' + hhmm(ts);
+}
+
+/* Sesler: dosya yerine tarayıcıda üretilir (internetsiz de çalışır). iPhone ses çalmak için bir dokunuşla "uyandırılmalı". */
+let actx = null;
+function audio() {
+  const C = window.AudioContext || window.webkitAudioContext;
+  if (!C) return null;
+  if (!actx) actx = new C();
+  if (actx.state !== 'running') actx.resume().catch(() => {});
+  return actx;
+}
+['touchend', 'click'].forEach(ev => document.addEventListener(ev, () => { if (K.on && K.sound !== 'yok') audio(); }, { passive: true }));
+function tone(c, t, f, dur, type = 'sine', vol = .3, f2) {
+  const o = c.createOscillator(), g = c.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur * .7);
+  g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .012); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + dur + .05);
+}
+const PLAY = {
+  zil: (c, t) => { for (const d of [0, .4, 1.6, 2]) { tone(c, t + d, 1318, 1.1, 'sine', .28); tone(c, t + d, 2637, .5, 'sine', .07); } },
+  marimba: (c, t) => { for (const r of [0, 1.3]) [523, 659, 784, 1047].forEach((f, i) => tone(c, t + r + i * .13, f, .5, 'sine', .32)); },
+  kus: (c, t) => { for (let i = 0; i < 5; i++) tone(c, t + i * .15, 2300, .11, 'sine', .2, 3700); tone(c, t + 1, 3000, .2, 'sine', .2, 2000); tone(c, t + 1.3, 3000, .2, 'sine', .2, 2000); },
+  gong: (c, t) => { tone(c, t, 196, 3.5, 'sine', .45); tone(c, t, 392, 2.4, 'sine', .16); tone(c, t, 588, 1.6, 'sine', .08); },
+  yumusak: (c, t) => { tone(c, t, 660, 1.5, 'triangle', .22); tone(c, t + .3, 990, 1.8, 'triangle', .16); tone(c, t + .6, 1320, 1.8, 'triangle', .08); },
+  bip: (c, t) => { for (const r of [0, 1]) for (let i = 0; i < 3; i++) tone(c, t + r + i * .2, 1000, .12, 'square', .08); },
+};
+function playSound(k) {
+  const c = PLAY[k] && audio();
+  if (c) PLAY[k](c, c.currentTime + .05);
+}
+
+/* Uygulama açıkken: zamanı gelince üstte uyarı + seçilen ses. */
+let kalkLast = 0, kalkBanT;
+function kalkFire(title, body) {
+  $('#kalkBanT').textContent = title; $('#kalkBanB').textContent = body;
+  const b = $('#kalkBan');
+  if (b.showPopover) { try { b.hidePopover(); } catch (_) {} try { b.showPopover(); } catch (_) {} }
+  b.classList.add('on');
+  clearTimeout(kalkBanT); kalkBanT = setTimeout(kalkBanClose, 60e3);
+  if (K.sound !== 'yok') playSound(K.sound);
+}
+function kalkBanClose() { const b = $('#kalkBan'); b.classList.remove('on'); if (b.hidePopover) try { b.hidePopover(); } catch (_) {} }
+function kalkTick() {
+  const t = Math.floor(Date.now() / 60e3) * 60e3;
+  if (document.hidden || t === kalkLast || !kalkDue(kalkAyar(), t)) return;
+  kalkLast = t;
+  kalkFire('Kalk biraz 🧍', `${K.every} dakikadır oturuyorsun. Kalk, birkaç adım yürü.`);
+  if (ui.tab === 'kalk') render();
+}
+setInterval(kalkTick, 5e3);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && ui.tab === 'kalk') render(); });
+
+/* ---------- uygulama kapalıyken: Web Push ---------- */
+const pushOk = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window && location.protocol === 'https:';
+const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const unb64u = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), c => c.charCodeAt(0));
+const b64uEq = (buf, s) => { try { const a = new Uint8Array(buf), b = unb64u(s); return a.length === b.length && a.every((x, i) => x === b[i]); } catch (e) { return false; } };
+async function bridgeCall(action, body) {
+  const r = await fetch(new URL('/push/' + action, db.settings.bridge), body ? { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify(body) } : {});
+  let j = {}; try { j = await r.json(); } catch (e) {}
+  // Eski köprü /push/ yolunu tanımaz, kur listesi döner.
+  if (j.posts || j.channel) throw Object.assign(new Error('eski-kopru'), { code: 'eski-kopru' });
+  if (!r.ok || j.error) throw Object.assign(new Error(j.error || 'HTTP ' + r.status), { code: j.error === 'kv-yok' ? 'kv-yok' : 'hata' });
+  return j;
+}
+async function pushSub(create) {
+  const reg = await navigator.serviceWorker.ready;
+  let s = await reg.pushManager.getSubscription();
+  if (create) {
+    const { key } = await bridgeCall('anahtar');
+    // Köprü değiştiyse (başka anahtar) eski aboneliği bırakıp yenisini al.
+    if (s && !b64uEq(s.options.applicationServerKey, key)) { await s.unsubscribe().catch(() => {}); s = null; }
+    if (!s) s = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: unb64u(key) });
+  }
+  return s;
+}
+async function pushSync(create) {
+  const s = await pushSub(create);
+  if (!s) return null;
+  await bridgeCall('abone', { sub: s.toJSON(), ayar: kalkAyar(), origin: location.origin });
+  return s;
+}
+let pushT;
+function pushSyncSoon() {
+  clearTimeout(pushT);
+  if (!pushOk() || !db.settings.bridge || Notification.permission !== 'granted') return;
+  pushT = setTimeout(() => pushSync(K.on).then(() => kalkCheck(true)).catch(e => { kalkPush = { st: e.code || 'hata', err: e.message }; drawPush(); }), 500);
+}
+/* Bildirim durumu: kapalıyken bildirim gelebilir mi, gelmiyorsa neden. */
+let kalkPush = { st: 'bakiliyor' }, kalkChecked = 0;
+async function kalkCheck(force) {
+  if (!force && Date.now() - kalkChecked < 30e3) return drawPush();
+  kalkChecked = Date.now();
+  if (!pushOk()) kalkPush = { st: isIOS() && !standalone() ? 'ana-ekran' : 'desteklenmiyor' };
+  else if (!db.settings.bridge) kalkPush = { st: 'kopru-yok' };
+  else if (Notification.permission === 'denied') kalkPush = { st: 'reddedildi' };
+  else if (Notification.permission !== 'granted') kalkPush = { st: 'izin' };
+  else {
+    try {
+      const s = await pushSub(false);
+      if (!s) kalkPush = { st: 'izin' };
+      else { const d = await bridgeCall('durum', { endpoint: s.endpoint }); kalkPush = d.kayitli ? { st: 'hazir', last: d.last, ep: s.endpoint } : { st: 'izin' }; }
+    } catch (e) { kalkPush = { st: e.code || 'hata', err: e.message }; }
+  }
+  drawPush();
+}
+function drawPush() { const el = $('#kalkPush'); if (el) el.innerHTML = vPush(); }
+function vPush() {
+  const guide = '<a href="https://github.com/mohammeddilovan0/QR/blob/main/kopru/KURULUM.md#ayağa-kalk-hatırlatıcısı" target="_blank" rel="noopener">kurulum</a>';
+  const p = kalkPush;
+  const body = {
+    bakiliyor: '<p class="muted">Bakılıyor…</p>',
+    'ana-ekran': '<p class="muted">Bildirimler sadece ana ekrana eklenmiş uygulamada çalışır. Uygulamayı ana ekrandaki simgesinden açın.</p>',
+    desteklenmiyor: '<p class="muted">Bu cihaz/tarayıcı web bildirimlerini desteklemiyor (iPhone’da iOS 16.4 veya üstü gerekir). Hatırlatıcı yalnızca uygulama açıkken çalışır.</p>',
+    'kopru-yok': `<p class="muted">Uygulama kapalıyken bildirim için köprü gerekir. <button class="btn sm" data-action="tab" data-tab="kur">Kur sekmesinde bağla</button></p>`,
+    reddedildi: '<p class="muted">Bildirim izni kapalı. iPhone <b>Ayarlar → Bildirimler → Hesap</b> içinden <b>Bildirimlere İzin Ver</b>’i açın, sonra buraya dönün.</p>',
+    izin: `<p class="muted" style="margin-top:0">Uygulama kapalıyken de hatırlatma gelsin diye bildirim izni gerekir.</p><button class="btn primary" data-kalk="push-on">Bildirimleri aç</button>`,
+    'eski-kopru': `<p class="muted">Köprü güncel değil: hatırlatma için köprüye yeni kodun yüklenmesi ve bir depo + zamanlayıcı eklenmesi gerekiyor (${guide}, 3 adım).</p><button class="btn sm" data-kalk="check">Tekrar dene</button>`,
+    'kv-yok': `<p class="muted">Köprü güncel ama hatırlatma deposu bağlı değil: Cloudflare’de <b>HATIRLATICI</b> adlı KV deposunu köprüye bağlayın (${guide}).</p><button class="btn sm" data-kalk="check">Tekrar dene</button>`,
+    hata: `<p class="muted">Köprüye ulaşılamadı (${esc(p.err || '')}).</p><button class="btn sm" data-kalk="check">Tekrar dene</button>`,
+    hazir: `<p style="margin-top:0"><span class="ok">✓</span> Uygulama kapalıyken de bildirim gelir.</p>
+      <p class="muted" style="font-size:12px">${p.last ? `Son gönderilen hatırlatma: ${esc(fmtTs(p.last))}` : 'Henüz zamanı gelen hatırlatma gönderilmedi.'}</p>
+      <button class="btn sm" data-kalk="test">Deneme bildirimi gönder</button>`,
+  }[p.st] || '';
+  return `<h2>Uygulama kapalıyken</h2>${body}`;
+}
+function pushEnable() {
+  // iPhone izni sadece dokunuşun içinde sorar: izin isteği await'ten önce.
+  const perm = Notification.permission === 'default' ? Notification.requestPermission() : Promise.resolve(Notification.permission);
+  kalkPush = { st: 'bakiliyor' }; drawPush();
+  perm.then(p => {
+    if (p !== 'granted') return kalkCheck(true);
+    return pushSync(true).then(() => { toast('Bildirimler açıldı'); kalkCheck(true); });
+  }).catch(e => { kalkPush = { st: e.code || 'hata', err: e.message }; drawPush(); });
+}
+
+function vKalk() {
+  const now = Date.now(), paused = K.on && K.pause > now, next = K.on ? kalkNext(Math.max(now, K.pause - 60e3)) : 0;
+  const status = !K.on ? 'Kapalı' : !K.days.length ? 'Hiç gün seçili değil' : `Her ${K.every} dk · ${K.start}–${K.end}`;
+  return `
+  <div class="card">
+    <div class="krow"><div style="flex:1"><b style="font-size:17px">Ayağa kalk hatırlatıcısı</b><div class="muted" style="font-size:13px">${esc(status)}</div></div>
+      <button class="tgl ${K.on ? 'on' : ''}" data-kalk="toggle" role="switch" aria-checked="${K.on}" aria-label="Hatırlatıcı"></button></div>
+    ${K.on && next ? `<div class="knext num">${esc(whenLabel(next))}</div>
+      <div class="muted" style="font-size:13px">${paused ? 'Ara verildi · sonraki hatırlatma' : 'Sonraki hatırlatma'}</div>
+      <div class="kbtns">${paused ? '<button class="btn" data-kalk="resume">Devam et</button>'
+        : '<button class="btn" data-kalk="pause" data-min="60">1 saat ara ver</button><button class="btn" data-kalk="pause-day">Bugünlük yeter</button>'}</div>` : ''}
+  </div>
+  <div class="card">
+    <h2>Ne sıklıkla?</h2>
+    <div class="chips" style="margin-top:0">${KALK_EVERY.map(m => `<button class="chip pick ${K.every === m ? 'sel' : ''}" data-kalk="every" data-v="${m}">${m} dk</button>`).join('')}</div>
+    <h2 style="margin-top:18px">Hangi saatlerde?</h2>
+    <div class="ktimes"><label>Başlangıç<input type="time" data-kalk-set="start" value="${K.start}"></label><label>Bitiş<input type="time" data-kalk-set="end" value="${K.end}"></label></div>
+    <div class="chips kdays">${KALK_DAYS.map(([d, l]) => `<button class="chip pick ${K.days.includes(d) ? 'sel' : ''}" data-kalk="day" data-v="${d}">${l}</button>`).join('')}</div>
+    <p class="muted" style="font-size:12px;margin:10px 0 0">Bu saatlerin dışında (ör. gece) hatırlatma gelmez.</p>
+  </div>
+  <div class="card" style="padding-top:8px;padding-bottom:6px">
+    <h2 style="margin-top:8px">Ses</h2>
+    ${SOUNDS.map(([k, l]) => `<button class="snd ${K.sound === k ? 'sel' : ''}" data-kalk="sound" data-v="${k}"><span>${l}</span><span class="ck">✓</span></button>`).join('')}
+    <p class="muted" style="font-size:12px;margin:6px 4px 10px">Dokununca dinlersiniz. Seçilen ses uygulama açıkken çalar. Uygulama kapalıyken iPhone bildirimde kendi sesini çalar; web uygulamalarında bu sesi değiştirmeye iOS izin vermiyor.</p>
+  </div>
+  <div class="card" id="kalkPush">${vPush()}</div>`;
+}
+
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-kalk]'); if (!el) return;
+  const v = el.dataset.v;
+  switch (el.dataset.kalk) {
+    case 'ban-close': kalkBanClose(); return;
+    case 'toggle':
+      K.on = !K.on; K.pause = 0; saveKalk(); render();
+      if (K.on) { audio(); if (pushOk() && db.settings.bridge && Notification.permission === 'default') pushEnable(); }
+      return;
+    case 'every': K.every = +v; break;
+    case 'day': { const d = +v; K.days = K.days.includes(d) ? K.days.filter(x => x !== d) : [...K.days, d]; break; }
+    case 'sound': K.sound = v; saveKalk(false); playSound(v); render(); return;
+    case 'pause': K.pause = Date.now() + (+el.dataset.min) * 60e3; toast('1 saat ara verildi'); break;
+    case 'pause-day': { const t = new Date(); t.setHours(24, 0, 0, 0); K.pause = t.getTime(); toast('Yarına kadar hatırlatma yok'); break; }
+    case 'resume': K.pause = 0; break;
+    case 'push-on': pushEnable(); return;
+    case 'check': kalkCheck(true); return;
+    case 'test':
+      el.disabled = true;
+      bridgeCall('test', { endpoint: kalkPush.ep }).then(() => toast('Gönderildi, birkaç saniye içinde gelir'))
+        .catch(e => toast('Gönderilemedi: ' + e.message)).finally(() => { el.disabled = false; });
+      return;
+    default: return;
+  }
+  saveKalk(); render();
+});
+document.addEventListener('change', e => {
+  const k = e.target.dataset && e.target.dataset.kalkSet;
+  if (!k || hm(e.target.value) === null) return;
+  K[k] = e.target.value; saveKalk(); render();
+});
+// Açılışta: köprüdeki ayarlar güncel kalsın (saat dilimi, iPhone'un yenilediği abonelik).
+if (K.on) pushSyncSoon();
 
 render();
 if (db.settings.bridge) loadLive();
