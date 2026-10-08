@@ -1114,7 +1114,7 @@ function vGold() {
     <h2>Altın hesapla</h2>
     <div style="display:flex;gap:8px">
       <input id="gAmt" type="number" inputmode="decimal" min="0" step="any" placeholder="Miktar" value="${ui.gAmt || 1}" style="flex:1">
-      <select id="gUnit" style="width:auto">${[['m', 'miskal'], ['g', 'gram']].map(([v, t]) => `<option value="${v}"${(ui.gUnit || 'm') === v ? ' selected' : ''}>${t}</option>`).join('')}</select>
+      <select id="gUnit" style="width:auto">${[['m', 'miskal'], ['g', 'gram'], ['o', 'ons']].map(([v, t]) => `<option value="${v}"${(ui.gUnit || 'm') === v ? ' selected' : ''}>${t}</option>`).join('')}</select>
       <select id="gKarat" style="width:auto">${KARATS.map(k => `<option value="${k}"${(ui.gKarat || 21) == k ? ' selected' : ''}>${k} ayar</option>`).join('')}</select>
     </div>
     <div id="gOut"></div>
@@ -1133,13 +1133,11 @@ function renderGold() {
     <p class="muted" style="font-size:12px;margin:2px 0 10px">${ago(gold.upd)}${gold.err ? ' · yenilenemedi: ' + esc(gold.err) : ''}</p>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">${rates.map(r =>
       `<button class="btn sm${r.k === city.k ? ' primary' : ''}" data-action="gold-city" data-city="${r.k}">${r.name} ${fmtNum(r.rate, r.rate % 1 ? 2 : 0)}</button>`).join('')}</div>
-    <table><thead><tr><th>Ayar</th><th style="text-align:right">1 gram</th><th style="text-align:right">1 miskal</th></tr></thead><tbody>
-    ${KARATS.map(k => {
-      const g = goldUsd(k, 1), m = goldUsd(k, MISKAL);
-      return `<tr><td><b>${k}</b></td>
-        <td style="text-align:right" class="num">${fmtNum(g, 2)} $<br><small class="muted">${fmtNum(Math.round(g * city.rate))} IQD</small></td>
-        <td style="text-align:right" class="num">${fmtNum(m, 2)} $<br><small class="muted">${fmtNum(Math.round(m * city.rate))} IQD</small></td></tr>`;
-    }).join('')}
+    <table><thead><tr><th>Ayar <small>($ / IQD)</small></th>${['1 gram', '1 miskal', '1 ons'].map(t => `<th style="text-align:right">${t}</th>`).join('')}</tr></thead><tbody>
+    ${KARATS.map(k => `<tr><td><b>${k}</b></td>${[1, MISKAL, OZ].map(gr => {
+      const u = goldUsd(k, gr);
+      return `<td style="text-align:right;font-size:13px" class="num">${fmtNum(u, u < 1000 ? 2 : 0)} $<br><small class="muted" style="font-size:11px">${fmtNum(Math.round(u * city.rate))}</small></td>`;
+    }).join('')}</tr>`).join('')}
     </tbody></table>`;
   renderGoldCalc();
 }
@@ -1148,7 +1146,7 @@ function renderGoldCalc() {
   ui.gAmt = $('#gAmt').value; ui.gUnit = $('#gUnit').value; ui.gKarat = +$('#gKarat').value;
   const amt = parseFloat(ui.gAmt) || 0;
   if (!gold.usd || !amt) { el.innerHTML = ''; return; }
-  const usd = goldUsd(ui.gKarat, amt * (ui.gUnit === 'm' ? MISKAL : 1));
+  const usd = goldUsd(ui.gKarat, amt * ({ m: MISKAL, g: 1, o: OZ }[ui.gUnit] || 1));
   el.innerHTML = `<div class="list-row" style="margin-top:8px"><div class="m"><b>Dolar</b></div><b class="num">${fmtNum(usd, 2)} $</b></div>`
     + goldRates().map(r => `<div class="list-row"><div class="m">${r.name} <small class="muted num">· ${fmtNum(r.rate, r.rate % 1 ? 2 : 0)}</small></div>
       <b class="num">${fmtNum(Math.round(usd * r.rate))} IQD</b></div>`).join('');
