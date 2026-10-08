@@ -896,7 +896,6 @@ function vRate() {
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
       <h2 style="margin:0">Piyasa kuru</h2>
-      ${db.settings.bridge ? '<button class="icon" data-action="live-reload" aria-label="Yenile" title="Yenile">↻</button>' : ''}
     </div>
     <p class="muted" style="font-size:12px;margin:2px 0 4px">${db.settings.bridge ? 'Borsa Erbil (Telegram) · her dakika yenilenir' : 'Günlük çarşı kuru (Iraq Dinar Watch)'} · <b>Kaydet</b> ile bugünün kuru olur</p>
     <div id="${db.settings.bridge ? 'live' : 'mkt'}"></div>
@@ -1057,7 +1056,7 @@ function renderLive() {
   const el = $('#live'); if (!el) return;
   if (!live.data) {
     el.innerHTML = live.loading ? '<p class="hint">Son kur alınıyor…</p>'
-      : `<p class="hint">Kur alınamadı (${esc(live.err)}). <button class="btn sm" data-action="live-reload">Tekrar dene</button> <button class="btn sm" data-action="bridge-edit">Köprüyü değiştir</button></p>`;
+      : `<p class="hint">Kur alınamadı (${esc(live.err)}), birazdan kendiliğinden tekrar denenecek. <button class="btn sm" data-action="bridge-edit">Köprüyü değiştir</button></p>`;
     return;
   }
   el.innerHTML = Object.entries(LIVE_CITIES).filter(([k]) => live.data[k]).map(([k, [name]]) => {
@@ -1134,7 +1133,6 @@ function vGold() {
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
       <h2 style="margin:0">Altın fiyatı</h2>
-      <button class="icon" data-action="gold-reload" aria-label="Yenile" title="Yenile">↻</button>
     </div>
     <p class="muted" style="font-size:12px;margin:2px 0 8px">Dünya ons fiyatı · anlık · işçilik hariç</p>
     <div id="gold"></div>
@@ -1153,7 +1151,7 @@ function renderGold() {
   const el = $('#gold'); if (!el) return;
   if (!gold.usd) {
     el.innerHTML = gold.loading ? '<p class="hint">Altın fiyatı alınıyor…</p>'
-      : `<p class="hint">Altın fiyatı alınamadı (${esc(gold.err)}). <button class="btn sm" data-action="gold-reload">Tekrar dene</button></p>`;
+      : `<p class="hint">Altın fiyatı alınamadı (${esc(gold.err)}), birkaç saniye içinde tekrar denenecek.</p>`;
     renderGoldCalc(); return;
   }
   const rates = goldRates(), city = rates.find(r => r.k === ui.goldCity) || rates[0];
@@ -1614,8 +1612,6 @@ document.addEventListener('click', e => {
       break;
     }
     case 'mkt-reload': loadMkt(true); break;
-    case 'live-reload': loadLive(true); break;
-    case 'gold-reload': loadGold(true); if (db.settings.bridge) loadLive(true); break;
     case 'gold-city': ui.goldCity = d.city; renderGold(); break;
     case 'bridge-save': {
       const u = $('#bridgeUrl').value.trim();
