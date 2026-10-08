@@ -1034,10 +1034,13 @@ function loadLive(force) {
     .then(r => r.json())
     .then(j => {
       if (!Array.isArray(j.posts)) throw new Error(j.error || 'beklenmeyen cevap');
-      // En yeni mesajdan geriye: Erbil satırı olan ilk kur; yoksa dolar geçen ilk kur.
-      for (const p of [...j.posts].reverse()) {
-        const c = readRates(p.text), x = c.find(y => ERBIL.test(y.label)) || c.find(y => y.usd);
-        if (x) { live.data = { ...x, at: p.at }; live.err = ''; live.at = Date.now(); return; }
+      // En yeni Erbil kuru; kanal arada Bağdat/Basra da yazdığı için önce tüm mesajlarda Erbil aranır.
+      const posts = [...j.posts].reverse();
+      for (const pick of [y => ERBIL.test(y.label), y => y.usd]) {
+        for (const p of posts) {
+          const x = readRates(p.text).find(pick);
+          if (x) { live.data = { ...x, at: p.at }; live.err = ''; live.at = Date.now(); return; }
+        }
       }
       throw new Error('son mesajlarda kur bulunamadı');
     })
