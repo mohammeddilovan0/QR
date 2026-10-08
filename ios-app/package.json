@@ -1,0 +1,19 @@
+{
+  "name": "kisisel-hesap-ios",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Kişisel Hesap iPhone uygulaması (Capacitor ile index.html'in yerel sarmalı)",
+  "scripts": {
+    "www": "node scripts/www.cjs",
+    "sync": "node scripts/sync.cjs",
+    "open": "cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/ios": "^7.0.0",
+    "@capacitor/local-notifications": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0"
+  }
+}
