@@ -2553,6 +2553,15 @@ function kalkTick() {
   if (ui.tab === 'kalk') render();
 }
 setInterval(kalkTick, 5e3);
+// Köprüden gelen hatırlatma uygulama açıkken buraya da düşer: seçilen sesle uyar (aynı dakikada ikinci kez değil).
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => {
+  const d = e.data || {};
+  if (!d.kalk) return;
+  const t = Math.floor(Date.now() / 60e3) * 60e3;
+  if (Math.abs(t - kalkLast) < 120e3) return;
+  kalkLast = t;
+  kalkFire(String(d.title || 'Kalk biraz 🧍'), String(d.body || ''));
+});
 document.addEventListener('visibilitychange', () => { if (!document.hidden && ui.tab === 'kalk') render(); });
 
 /* ---------- uygulama kapalıyken: Web Push ---------- */
