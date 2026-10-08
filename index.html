@@ -898,12 +898,6 @@ function vRate() {
       <p class="muted" style="font-size:12px;margin:0 0 8px">Borsa Erbil kanalının son kurunu gösterir. Bir kez ücretsiz köprü kurulur (<a href="https://github.com/mohammeddilovan0/QR/blob/main/kopru/KURULUM.md" target="_blank" rel="noopener">kurulum</a>), adresi buraya yapıştırılır.</p>
       <div style="display:flex;gap:8px"><input id="bridgeUrl" placeholder="https://kur.….workers.dev" inputmode="url" autocomplete="off"><button class="btn primary" data-action="bridge-save">Bağla</button></div>
     </details>`}
-    <details><summary>Mesajdan oku (Duhok vb.)</summary>
-      <p class="muted" style="font-size:12px;margin:0 0 8px">WhatsApp'taki kur mesajını yapıştırın; içindeki kurlar listelenir, doğrusunu kaydedin.</p>
-      <textarea id="rateText" rows="3" placeholder="ör. دهوك 165,500"></textarea>
-      <button class="btn" data-action="paste-rate" style="margin-top:8px">Panodan yapıştır</button>
-      <div id="rateFound"></div>
-    </details>
   </div>
   <div class="grid two">
     <div class="card">
@@ -1027,7 +1021,7 @@ function renderMkt() {
 /* Canlı kur: kendi Cloudflare köprümüz Borsa Erbil kanalının son mesajlarını verir; kur, mesajdan okuyucuyla bulunur. */
 const live = { loading: false, at: 0, data: null, err: '' };
 /* Borsa Erbil kanalı Erbil, Bağdat ve Basra kurlarını karışık sırayla yazar; her şehir için en yeni satır alınır. */
-const LIVE_CITIES = { erbil: ['Erbil', /هەولێر|أربيل|اربيل|erbil/i], baghdad: ['Bağdat', /بغداد|بەغدا|baghdad/i] };
+const LIVE_CITIES = { erbil: ['Erbil', /هەولێر|أربيل|اربيل|erbil/i], baghdad: ['Bağdat', /بغداد|بەغدا|baghdad/i], basra: ['Basra', /بصر[ەة]|بەسرە|basra/i] };
 function loadLive(force) {
   const url = db.settings.bridge;
   if (!url || live.loading || (!force && live.data && Date.now() - live.at < 60e3)) return;
@@ -1073,18 +1067,6 @@ function renderLive() {
 const autoLive = () => { if (ui.tab === 'kur' && db.settings.bridge && !document.hidden) { renderLive(); loadLive(true); } };
 setInterval(autoLive, 60e3);
 document.addEventListener('visibilitychange', autoLive);
-
-function renderFound() {
-  const el = $('#rateFound'); if (!el) return;
-  const txt = $('#rateText').value.trim();
-  if (!txt) { el.innerHTML = ''; return; }
-  const list = readRates(txt);
-  el.innerHTML = list.length ? `<div style="margin-top:10px">${list.map(x => `<div class="list-row">
-      <div class="m"><b class="num">1 $ = ${fmtNum(x.rate, x.rate % 1 ? 2 : 0)} IQD</b>
-        <div class="muted" style="font-size:12px">“${esc(x.tok)}”${x.per100 ? ' (100 $ için)' : ''}${x.label ? ' · ' + esc(x.label) : ''}</div></div>
-      <button class="btn sm primary" data-action="use-rate" data-rate="${x.rate}">Kaydet</button></div>`).join('')}</div>`
-    : '<p class="hint">Mesajda kur bulunamadı. 1 $ için 900–3,000 ya da 100 $ için 90,000–300,000 arası bir sayı olmalı.</p>';
-}
 
 /* ---------- borç / alacak ---------- */
 /* Borç ve alacak hareketleri gerçek hesap bakiyelerine bağlıdır; gelir/gider istatistiğine dahil edilmez. */
@@ -1516,11 +1498,6 @@ document.addEventListener('click', e => {
       }
       break;
     }
-    case 'paste-rate':
-      if (!navigator.clipboard || !navigator.clipboard.readText) { toast('Kutuya basılı tutup Yapıştır deyin.'); break; }
-      navigator.clipboard.readText().then(txt => { $('#rateText').value = txt; renderFound(); })
-        .catch(() => toast('Yapıştırılamadı — kutuya basılı tutup Yapıştır deyin.'));
-      break;
     case 'mkt-reload': loadMkt(true); break;
     case 'live-reload': loadLive(true); break;
     case 'bridge-save': {
@@ -1662,7 +1639,6 @@ document.addEventListener('submit', e => {
 document.addEventListener('input', e => {
   const el = e.target;
   if (el.dataset.filter) { ui.f[el.dataset.filter] = el.value; renderTxList(); return; }
-  if (el.id === 'rateText') { renderFound(); return; }
   if (el.closest('#txForm')) {
     if (['amount', 'toAmount', 'fxRate'].includes(el.name)) touch(dlg.fxOrder, el.name);
     if (el.name === 'fxRate') dlg.rateTyped = true;
