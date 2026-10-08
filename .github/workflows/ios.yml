@@ -1,4 +1,7 @@
-name: iOS derleme
+name: iOS uygulaması
+# iPhone uygulamasını (ios-app) imzasız .ipa olarak derler. SideStore kurarken kendi Apple ID'nizle imzalar.
+# main'e her gönderimde .ipa şu adreste güncellenir:
+# https://github.com/mohammeddilovan0/QR/releases/download/ios/KisiselHesap.ipa
 on:
   pull_request:
     paths: ['ios-app/**', 'index.html', '.github/workflows/ios.yml']
@@ -6,14 +9,38 @@ on:
     branches: [main]
     paths: ['ios-app/**', 'index.html', '.github/workflows/ios.yml']
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
-  build:
+  ipa:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      - name: Uygulamadaki web kopyası güncel mi
-        run: cmp index.html ios-app/ios/App/App/public/index.html || { echo "ios-app'te 'npm run sync' çalıştırın"; exit 1; }
-      - name: Simülatör için derle (imzasız)
+      - name: Web uygulamasının güncel hâlini pakete koy
+        run: cp index.html manifest.webmanifest icon-180.png icon-192.png icon-512.png ios-app/ios/App/App/public/
+      - name: Derle (imzasız, iPhone)
         working-directory: ios-app/ios/App
-        run: xcodebuild -project App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build | tail -40
         shell: bash -o pipefail {0}
+        run: |
+          xcodebuild -project App.xcodeproj -scheme App -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' -derivedDataPath build \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build | tail -30
+      - name: .ipa oluştur
+        run: |
+          mkdir Payload
+          cp -R ios-app/ios/App/build/Build/Products/Release-iphoneos/App.app Payload/
+          zip -qry KisiselHesap.ipa Payload
+          ls -la KisiselHesap.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KisiselHesap-ipa
+          path: KisiselHesap.ipa
+      - name: İndirme bağlantısını güncelle
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete ios -y --cleanup-tag || true
+          gh release create ios KisiselHesap.ipa --target "$GITHUB_SHA" --title "iPhone uygulaması" --latest=false \
+            --notes "SideStore ile yükleyin: Safari'de bu dosyayı indirin, SideStore → My Apps → + ile seçin."
