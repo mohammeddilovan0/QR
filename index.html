@@ -109,6 +109,7 @@ label>input,label>select,label>.amt{margin-top:4px}
 .list-row.child .m b{font-weight:500}
 .caret{background:none;border:0;color:var(--muted);font:inherit;font-size:26px;line-height:1;width:28px;height:28px;margin:-4px -6px -4px -8px;padding:0;cursor:pointer;flex:none;display:grid;place-items:center;transition:transform .15s}
 .caret.open{transform:rotate(90deg)}
+.cpick-btn.empty{color:var(--muted)}
 .cpick-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;margin-top:4px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px;cursor:pointer}
 .cpick-btn::after{content:'›';font-size:22px;line-height:1;color:var(--muted);transform:rotate(90deg);transition:transform .15s}
 .cpick-btn.open{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
@@ -564,7 +565,8 @@ const openFor = id => { const c = cat(id); return new Set(c && c.parentId ? [c.p
 function drawCatPick() {
   const v = F().categoryId.value, tp = dlg.type;
   const c = cat(v), btn = $('#cpickBtn'), box = $('#cpick');
-  btn.textContent = c ? catLabel(c) : '— Belirtme —';
+  btn.textContent = c ? catLabel(c) : tp === 'expense' ? 'Kategori seçin' : '— Belirtme —';
+  btn.classList.toggle('empty', !c && tp === 'expense');
   btn.classList.toggle('open', !box.classList.contains('hide'));
   box.innerHTML = catTree({ types: [tp], value: v, open: dlg.cpOpen, set: 'cpick-set', tog: 'cpick-tog',
     extras: tp === 'income' ? [['', '— Belirtme —']] : [] });
@@ -696,6 +698,13 @@ function shift(kind, anchor, n) {
   if (kind === 'year') return ymd(new Date(d.getFullYear() + n, 0, 1));
   return kind === 'week' ? ymd(addDays(d, 7 * n)) : ymd(new Date(d.getFullYear(), d.getMonth() + n, 1));
 }
+/* Günlük ortalama için gün sayısı: dönemin içinde, ilk işlem gününden (uygulamayı kullanmaya başladığın gün) bugüne kadar. */
+function avgDays(rg) {
+  let first = '';
+  for (const t of db.tx) if (!first || t.date < first) first = t.date;
+  const s = first > rg.start ? first : rg.start, e = today() < rg.end ? today() : rg.end;
+  return first && s <= e ? daysBetween(s, e) + 1 : 0;
+}
 function stats(start, end) {
   const D = disp(); let exp = 0, inc = 0; const byCat = {}, byTop = {}; const native = { IQD: 0, USD: 0 };
   for (const t of db.tx) {
@@ -724,9 +733,7 @@ function vOzet() {
   const rg = range(ui.period, ui.anchor);
   const st = stats(rg.start, rg.end);
   const t = today();
-  let days = daysBetween(rg.start, rg.end) + 1;
-  if (t >= rg.start && t <= rg.end) days = daysBetween(rg.start, t) + 1;
-  const avg = rg.start > t ? 0 : st.exp / days;
+  const days = avgDays(rg), avg = days ? st.exp / days : 0;
 
   const cats = Object.entries(st.byTop).sort((a, b) => b[1] - a[1]);
   const max = cats.length ? cats[0][1] : 1;
@@ -764,7 +771,7 @@ function vOzet() {
       <div class="tl">${esc(c.label)}</div></div>`).join('');
 
   const nativeLine = (st.native.IQD || st.native.USD)
-    ? `<div class="muted" style="margin-top:10px;font-size:13px">Hesap para birimine göre harcanan: <b class="num">${fmt(st.native.IQD, 'IQD')}</b> + <b class="num">${fmt(st.native.USD, 'USD')}</b></div>` : '';
+    ? `<div class="muted" style="margin-top:10px;font-size:13px">Hesap para birimine göre harcanan: ${[st.native.IQD && fmt(st.native.IQD, 'IQD'), st.native.USD && fmt(st.native.USD, 'USD')].filter(Boolean).map(x => `<b class="num">${x}</b>`).join(' + ')}</div>` : '';
 
   const warn = backupStale() ? `<div class="card warn">
     <div class="m"><b>Yedek almayı unutmayın</b><small class="muted">${backupAge() === null
@@ -832,9 +839,7 @@ function reportHtml(kind, anchor) {
   const D = disp(), rg = range(kind, anchor), st = stats(rg.start, rg.end);
   const prg = range(kind, shift(kind, anchor, -1)), ps = stats(prg.start, prg.end);
   const t = today(), word = kind === 'week' ? 'hafta' : kind === 'year' ? 'yıl' : 'ay';
-  let days = daysBetween(rg.start, rg.end) + 1;
-  if (t >= rg.start && t <= rg.end) days = daysBetween(rg.start, t) + 1;
-  const avg = rg.start > t ? 0 : st.exp / days;
+  const days = avgDays(rg), avg = days ? st.exp / days : 0;
   // Önceki döneme göre değişim; harcamada artış kötü (kırmızı), gelirde iyi.
   const chg = (v, p, good) => {
     if (!p) return '<span class="muted">—</span>';
@@ -1926,6 +1931,7 @@ function openTx(type, id, preset) {
   const f = F();
   resetFx();
   f.toAccountId.innerHTML = '';
+  if (!t) f.categoryId.innerHTML = '';
   f.date.value = t ? t.date : today();
   const lastAcc = dlg.type === 'income' ? ui.lastIncAcc : dlg.type === 'expense' ? ui.lastExpAcc : dlg.type === 'opening' ? ui.lastOpeningAcc : ui.lastTrAcc;
   fillAccSelect(f.accountId, preset ? preset.from : t ? t.accountId : lastAcc);
@@ -1975,7 +1981,8 @@ function syncTx(t) {
   $('#toWrap').classList.toggle('hide', !isTr);
   if (!isTr && !isOpening) {
     const prev = t ? t.categoryId : f.categoryId.value;
-    f.categoryId.innerHTML = (tp === 'income' ? '<option value="">— Belirtme —</option>' : '') + catOptions(tp);
+    // Gider kategorisi boş başlar: seçmeyi unutunca harcama yanlışlıkla ilk kategoriye (Yemek) yazılmasın.
+    f.categoryId.innerHTML = '<option value="">—</option>' + catOptions(tp);
     if (prev !== undefined && [...f.categoryId.options].some(o => o.value === prev)) f.categoryId.value = prev;
     // Seçili alt kategorinin ana kategorisi açık gelir; diğerleri kapalı.
     dlg.cpOpen = openFor(f.categoryId.value);
@@ -2051,6 +2058,10 @@ function submitTx(e) {
     ui.lastOpeningAcc = t.accountId;
   } else {
     t.categoryId = f.categoryId.value;
+    const was = dlg.id && db.tx.find(x => x.id === dlg.id);
+    if (dlg.type === 'expense' && !t.categoryId && (!was || was.categoryId)) {
+      toast('Kategori seçin.'); $('#cpick').classList.remove('hide'); drawCatPick(); return;
+    }
     if (dlg.type === 'income') ui.lastIncAcc = t.accountId; else ui.lastExpAcc = t.accountId;
   }
   const i = db.tx.findIndex(x => x.id === t.id);
