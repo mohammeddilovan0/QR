@@ -167,6 +167,11 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 table{width:100%;border-collapse:collapse}
 td,th{text-align:left;padding:8px 4px;border-top:1px solid var(--line)}
 th{font-size:12px;color:var(--muted);font-weight:600;border-top:0}
+@keyframes flashUp{from{background:rgba(34,197,94,.35)}to{background:transparent}}
+@keyframes flashDown{from{background:rgba(239,68,68,.35)}to{background:transparent}}
+.gold-px{border-radius:8px;padding:0 4px;margin:0 -4px}
+.gold-px.up{color:#16a34a;animation:flashUp 1s}
+.gold-px.down{color:#dc2626;animation:flashDown 1s}
 details{border-top:1px solid var(--line);margin-top:8px}
 details summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:14px;padding:10px 0}
 /* Rapor sadece yazdırırken (PDF) görünür; her zaman açık renkte basılır. */
@@ -1068,9 +1073,10 @@ function renderLive() {
 const autoLive = () => {
   if (document.hidden) return;
   if (['kur', 'altin'].includes(ui.tab) && db.settings.bridge) { if (ui.tab === 'kur') renderLive(); loadLive(true); }
-  if (ui.tab === 'altin') loadGold(true);
 };
 setInterval(autoLive, 60e3);
+/* Altın sekmesi açıkken fiyat birkaç saniyede bir çekilir; değişince yeşil/kırmızı yanıp söner. */
+setInterval(() => { if (ui.tab === 'altin' && !document.hidden) loadGold(true); }, 5e3);
 document.addEventListener('visibilitychange', autoLive);
 
 /* ---------- altın ---------- */
@@ -1078,14 +1084,15 @@ document.addEventListener('visibilitychange', autoLive);
    Fiyatlar saf altın değeridir; kuyumcu işçiliği ve kâr payı dahil değildir. */
 const OZ = 31.1034768, MISKAL = 5;
 const KARATS = [24, 22, 21, 18];
-const gold = { loading: false, at: 0, usd: 0, upd: '', err: '' };
+const gold = { loading: false, at: 0, usd: 0, upd: '', err: '', dir: '' };
 function loadGold(force) {
   if (gold.loading || (!force && gold.usd && Date.now() - gold.at < 60e3)) return;
-  gold.loading = true; renderGold();
+  gold.loading = true; if (!gold.usd) renderGold();
   fetch('https://api.gold-api.com/price/XAU', { cache: 'no-store' })
     .then(r => r.json())
     .then(j => {
       if (!(j.price > 0)) throw new Error('fiyat yok');
+      gold.dir = gold.usd && j.price !== gold.usd ? (j.price > gold.usd ? 'up' : 'down') : '';
       gold.usd = j.price; gold.upd = j.updatedAt || new Date().toISOString(); gold.err = ''; gold.at = Date.now();
     })
     .catch(e => { gold.err = e.message || 'alınamadı'; })
@@ -1107,7 +1114,7 @@ function vGold() {
       <h2 style="margin:0">Altın fiyatı</h2>
       <button class="icon" data-action="gold-reload" aria-label="Yenile" title="Yenile">↻</button>
     </div>
-    <p class="muted" style="font-size:12px;margin:2px 0 8px">Dünya ons fiyatından · her dakika yenilenir · işçilik hariç</p>
+    <p class="muted" style="font-size:12px;margin:2px 0 8px">Dünya ons fiyatından · canlı · işçilik hariç</p>
     <div id="gold"></div>
   </div>
   <div class="card" id="goldCalc">
@@ -1129,8 +1136,8 @@ function renderGold() {
   }
   const rates = goldRates(), city = rates.find(r => r.k === ui.goldCity) || rates[0];
   el.innerHTML = `
-    <div class="num" style="font-size:22px;font-weight:700">1 ons = ${fmtNum(gold.usd, 2)} $</div>
-    <p class="muted" style="font-size:12px;margin:2px 0 10px">${ago(gold.upd)}${gold.err ? ' · yenilenemedi: ' + esc(gold.err) : ''}</p>
+    <div class="num gold-px ${gold.dir}" style="font-size:22px;font-weight:700">1 ons = ${fmtNum(gold.usd, 2)} $ ${gold.dir === 'up' ? '▲' : gold.dir === 'down' ? '▼' : ''}</div>
+    <p class="muted" style="font-size:12px;margin:2px 0 10px">son güncelleme ${new Date(gold.upd).toLocaleTimeString("tr-TR")}${gold.err ? ' · yenilenemedi: ' + esc(gold.err) : ''}</p>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">${rates.map(r =>
       `<button class="btn sm${r.k === city.k ? ' primary' : ''}" data-action="gold-city" data-city="${r.k}">${r.name} ${fmtNum(r.rate, r.rate % 1 ? 2 : 0)}</button>`).join('')}</div>
     <table><thead><tr><th>Ayar <small>($ / IQD)</small></th>${['1 gram', '1 miskal', '1 ons'].map(t => `<th style="text-align:right">${t}</th>`).join('')}</tr></thead><tbody>
