@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Hesap">
 <meta name="theme-color" content="#1f6f5c">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https: wss:; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; connect-src 'self' https: wss:; object-src 'none'; base-uri 'none'; form-action 'none'">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
@@ -2470,7 +2470,17 @@ function audio() {
   if (actx.state !== 'running') actx.resume().catch(() => {});
   return actx;
 }
-['touchend', 'click'].forEach(ev => document.addEventListener(ev, () => { if (K.on && K.sound !== 'yok') audio(); }, { passive: true }));
+let sndUnlocked = false;
+['touchend', 'click'].forEach(ev => document.addEventListener(ev, () => {
+  if (!K.on || K.sound === 'yok') return;
+  audio();
+  // Dokunuşla bir kez (sessizce) çalınan <audio>, sonra zamanlayıcıyla da çalabilir.
+  if (!sndUnlocked && sndEl && sndUrl[K.sound]) {
+    sndUnlocked = true; sndEl.src = sndUrl[K.sound]; sndEl.muted = true;
+    const p = sndEl.play(); const un = () => { sndEl.pause(); sndEl.muted = false; };
+    if (p && p.then) p.then(un, un); else un();
+  }
+}, { passive: true }));
 function tone(c, t, f, dur, type = 'sine', vol = .3, f2) {
   const o = c.createOscillator(), g = c.createGain();
   o.type = type; o.frequency.setValueAtTime(f, t);
@@ -2486,8 +2496,41 @@ const PLAY = {
   yumusak: (c, t) => { tone(c, t, 660, 1.5, 'triangle', .22); tone(c, t + .3, 990, 1.8, 'triangle', .16); tone(c, t + .6, 1320, 1.8, 'triangle', .08); },
   bip: (c, t) => { for (const r of [0, 1]) for (let i = 0; i < 3; i++) tone(c, t + r + i * .2, 1000, .12, 'square', .08); },
 };
+/* iPhone'da sessiz mod düğmesi açıkken Web Audio sesi kısılır; <audio> öğesi ise çalar.
+   Bu yüzden sesler açılışta bir kez dosyaya (WAV) çevrilip <audio> ile çalınır; olmazsa Web Audio'ya düşer. */
+const sndUrl = {};
+const sndEl = typeof Audio === 'function' ? new Audio() : null;
+function wavUrl(buf) {
+  const d = buf.getChannelData(0), n = d.length, v = new DataView(new ArrayBuffer(44 + n * 2));
+  const str = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+  str(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); str(8, 'WAVEfmt '); v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, buf.sampleRate, true); v.setUint32(28, buf.sampleRate * 2, true);
+  v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, 'data'); v.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, d[i] * 1.6)) * 32767, true);
+  return URL.createObjectURL(new Blob([v], { type: 'audio/wav' }));
+}
+(function renderSounds() {
+  const O = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  if (!O || !sndEl) return;
+  for (const k of Object.keys(PLAY)) {
+    try {
+      const c = new O(1, 22050 * 4, 22050);
+      PLAY[k](c, .02);
+      const r = c.startRendering();
+      const done = b => { sndUrl[k] = wavUrl(b); };
+      if (r && r.then) r.then(done).catch(() => {}); else c.oncomplete = e => done(e.renderedBuffer);
+    } catch (e) {}
+  }
+})();
 function playSound(k) {
-  const c = PLAY[k] && audio();
+  if (!PLAY[k]) return;
+  if (sndUrl[k]) {
+    sndEl.pause(); sndEl.src = sndUrl[k]; sndEl.currentTime = 0;
+    const p = sndEl.play();
+    if (p && p.catch) p.catch(() => { const c = audio(); if (c) PLAY[k](c, c.currentTime + .05); });
+    return;
+  }
+  const c = audio();
   if (c) PLAY[k](c, c.currentTime + .05);
 }
 
