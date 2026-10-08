@@ -114,6 +114,19 @@ label>input,label>select,label>.amt{margin-top:4px}
 .list-row.child .m b{font-weight:500}
 .caret{background:none;border:0;color:var(--muted);font:inherit;font-size:26px;line-height:1;width:28px;height:28px;margin:-4px -6px -4px -8px;padding:0;cursor:pointer;flex:none;display:grid;place-items:center;transition:transform .15s}
 .caret.open{transform:rotate(90deg)}
+.cpick-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;margin-top:4px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px;cursor:pointer}
+.cpick-btn::after{content:'›';font-size:22px;line-height:1;color:var(--muted);transform:rotate(90deg);transition:transform .15s}
+.cpick-btn.open{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+.cpick-btn.open::after{transform:rotate(-90deg)}
+.cpick{margin-top:6px;border:1px solid var(--line);border-radius:10px;max-height:300px;overflow:auto;background:var(--card)}
+.cpick-row{display:flex;align-items:center;gap:8px;padding:0 8px;border-top:1px solid var(--line)}
+.cpick-row:first-child{border-top:0}
+.cpick-row.child{padding-left:40px}
+.cpick-row .nm{flex:1;min-width:0;background:none;border:0;text-align:left;padding:11px 0;cursor:pointer;color:var(--ink)}
+.cpick-row.child .nm{color:var(--ink)}
+.cpick-row.sel{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.cpick-row.sel .nm{font-weight:600}
+.cpick-row .n{font-size:12px;color:var(--muted)}
 .caret-sp{width:14px;flex:none}
 .list-row .m.tog{cursor:pointer}
 .dot{width:10px;height:10px;border-radius:50%;flex:none}
@@ -248,7 +261,11 @@ details summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:14p
       <div class="amt" id="amtBox"><input name="amount" inputmode="decimal" autocomplete="off" placeholder="0"><span id="amtCur">IQD</span></div>
       <div class="hint" id="amtHint"></div>
     </label>
-    <label id="catWrap">Kategori<select name="categoryId"></select></label>
+    <div id="catWrap"><label>Kategori</label>
+      <select name="categoryId" class="hide" tabindex="-1"></select>
+      <button type="button" class="cpick-btn" data-action="cpick" id="cpickBtn"></button>
+      <div id="cpick" class="cpick hide"></div>
+    </div>
     <label id="toWrap">Hedef hesap<select name="toAccountId"></select></label>
     <div id="toEmpty" class="fxbox hide">
       <div style="font-size:13px">Transfer için ikinci bir hesap gerekli — paranın gireceği başka hesap yok.</div>
@@ -409,6 +426,27 @@ function accOptions(list, selected) {
     const text = child ? (ids.has(a.parentId) ? `   ↳ ${a.name}` : accLabel(a)) : a.name;
     return `<option value="${a.id}" ${selected === a.id ? 'selected' : ''}>${esc(text)} (${a.currency})</option>`;
   }).join('');
+}
+/* İşlem formundaki kategori seçici: ana kategoriler, alt kategorileri ok ile açılır/kapanır.
+   Değer gizli <select name="categoryId"> içinde tutulur. */
+function drawCatPick() {
+  const sel = F().categoryId, v = sel.value, tp = dlg.type;
+  const c = cat(v), btn = $('#cpickBtn'), box = $('#cpick');
+  btn.textContent = c ? catLabel(c) : '— Belirtme —';
+  btn.classList.toggle('open', !box.classList.contains('hide'));
+  const item = (x, isChild) => {
+    const kids = isChild ? [] : children(x.id), open = dlg.cpOpen.has(x.id);
+    const caret = isChild ? '' : kids.length
+      ? `<button type="button" class="caret ${open ? 'open' : ''}" data-action="cpick-tog" data-id="${x.id}" aria-label="Alt kategoriler" aria-expanded="${open}">›</button>`
+      : '<span class="caret-sp"></span>';
+    return `<div class="cpick-row ${isChild ? 'child' : ''} ${x.id === v ? 'sel' : ''}">${caret}` +
+      `<span class="dot" style="background:${x.color}"></span>` +
+      `<button type="button" class="nm" data-action="cpick-set" data-id="${x.id}">${esc(x.name)}</button>` +
+      `${kids.length && !open ? `<span class="n">${kids.length} alt</span>` : ''}</div>` +
+      (open ? kids.map(k => item(k, true)).join('') : '');
+  };
+  box.innerHTML = (tp === 'income' ? `<div class="cpick-row ${v ? '' : 'sel'}"><span class="caret-sp"></span><button type="button" class="nm" data-action="cpick-set" data-id="">— Belirtme —</button></div>` : '') +
+    (parents(tp).map(p => item(p, false)).join('') || '<div class="empty">Kategori yok.</div>');
 }
 /* Ana kategoriler ve altlarında girintili alt kategoriler; seçilen değer işaretlenir. */
 function catOptions(tp, selected) {
@@ -1407,7 +1445,7 @@ function render() {
 /* ---------- işlem penceresi ---------- */
 /* Döviz alanları: dinar, dolar ve kurdan en son yazılan ikisi korunur, en eski olanı hesaplanır. */
 const FX_DEFAULT = () => ['toAmount', 'fxRate', 'amount'];
-const dlg = { type: 'expense', id: null, fxOrder: FX_DEFAULT(), rateTyped: false };
+const dlg = { type: 'expense', id: null, fxOrder: FX_DEFAULT(), rateTyped: false, cpOpen: new Set() };
 const F = () => $('#txForm').elements;
 function resetFx() { dlg.fxOrder = FX_DEFAULT(); dlg.rateTyped = false; F().toAmount.value = ''; }
 function openTx(type, id, preset) {
@@ -1466,6 +1504,11 @@ function syncTx(t) {
     const prev = t ? t.categoryId : f.categoryId.value;
     f.categoryId.innerHTML = (tp === 'income' ? '<option value="">— Belirtme —</option>' : '') + catOptions(tp);
     if (prev !== undefined && [...f.categoryId.options].some(o => o.value === prev)) f.categoryId.value = prev;
+    // Seçili alt kategorinin ana kategorisi açık gelir; diğerleri kapalı.
+    const selCat = cat(f.categoryId.value);
+    dlg.cpOpen = new Set(selCat && selCat.parentId ? [selCat.parentId] : []);
+    $('#cpick').classList.add('hide');
+    drawCatPick();
   } else if (isTr) {
     // Hedef hesap: açık olan seçim korunur, yoksa en son transferde kullanılan, o da yoksa ilk uygun hesap.
     const from = f.accountId.value, keep = f.toAccountId.value;
@@ -1611,6 +1654,12 @@ document.addEventListener('click', e => {
       break;
     }
     case 'edit-cat': ui.editCat = d.id; ui.newCatParent = null; render(); scrollTo(0, 0); break;
+    case 'cpick':
+      $('#cpick').classList.toggle('hide'); drawCatPick(); break;
+    case 'cpick-tog':
+      dlg.cpOpen.has(d.id) ? dlg.cpOpen.delete(d.id) : dlg.cpOpen.add(d.id); drawCatPick(); break;
+    case 'cpick-set':
+      F().categoryId.value = d.id; $('#cpick').classList.add('hide'); drawCatPick(); break;
     case 'toggle-cat':
       ui.openCats.has(d.id) ? ui.openCats.delete(d.id) : ui.openCats.add(d.id); render(); break;
     case 'add-sub':
