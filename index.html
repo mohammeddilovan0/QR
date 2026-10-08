@@ -322,7 +322,7 @@ function seed() {
     })(),
     tx: [],
     debts: [],
-    settings: { display: 'IQD', weekStart: 1, lastBackup: '', rateCity: 'erbil' },
+    settings: { display: 'IQD', weekStart: 1, lastBackup: '', rateCity: 'erbil', bridge: '' },
   };
 }
 /* Eski kayıtlarda/yedeklerde olmayan alanları tamamlar (ör. borç/alacak listesi). */
@@ -335,7 +335,7 @@ function norm(d) {
     if (!x.txId) x.txId = '';
     x.opening = !!x.opening;
   });
-  d.settings = Object.assign({ display: 'IQD', weekStart: 1, lastBackup: '', rateCity: 'erbil' }, d.settings);
+  d.settings = Object.assign({ display: 'IQD', weekStart: 1, lastBackup: '', rateCity: 'erbil', bridge: '' }, d.settings);
   return d;
 }
 function load() {
@@ -890,7 +890,10 @@ function vRate() {
       <h2 style="margin:0">Piyasa kuru</h2>
       <label style="display:flex;gap:6px;align-items:center">Kaydedilecek tarih<input type="date" id="rateTextDate" value="${today()}" style="width:auto;margin:0"></label>
     </div>
-    <h3 style="margin-top:8px">İnternetten</h3>
+    <h3 style="margin-top:8px">Canlı: Borsa Erbil</h3>
+    ${db.settings.bridge ? `<div id="live"></div>` : `<p class="muted" style="font-size:12px;margin:-4px 0 8px">Telegram'daki Borsa Erbil kanalının son kurunu uygulamayı açtığın anda gösterir. Bunun için bir kez ücretsiz kur köprüsü kurulur (<a href="https://github.com/mohammeddilovan0/QR/blob/main/kopru/KURULUM.md" target="_blank" rel="noopener">kurulum</a>); sonra adresini buraya yapıştırın.</p>
+    <div style="display:flex;gap:8px"><input id="bridgeUrl" placeholder="https://kur.….workers.dev" inputmode="url" autocomplete="off"><button class="btn primary" data-action="bridge-save">Bağla</button></div>`}
+    <h3>Günlük (Iraq Dinar Watch)</h3>
     <div id="mkt"></div>
     <p class="muted" style="font-size:12px;margin:6px 0 0">Kaynak: <a href="https://github.com/HusseinKh90/Iraq-parallel-exchange-rate" target="_blank" rel="noopener">Iraq Dinar Watch</a> — çarşı kurlarını açık Telegram kanallarından günde bir kez derler. Resmî kur değildir. Duhok ayrıca yayınlanmadığı için en yakın çarşı Erbil'dir; Duhok kuru için aşağıdan mesaj yapıştırın.</p>
     <h3>Mesajdan oku</h3>
@@ -1018,6 +1021,46 @@ function renderMkt() {
         <div class="muted" style="font-size:12px">${esc(SHORTDATE.format(parse(x.date)))} kapanışı${age > 1 ? ` · ${age} gün önce` : ''}${others ? ` · ${esc(others)}` : ''}</div></div>
       <button class="btn sm primary" data-action="use-rate" data-rate="${x.rate}">Kaydet</button>
     </div>`;
+}
+
+/* Canlı kur: kendi Cloudflare köprümüz Borsa Erbil kanalının son mesajlarını verir; kur, mesajdan okuyucuyla bulunur. */
+const live = { loading: false, at: 0, data: null, err: '' };
+const ERBIL = /هەولێر|أربيل|اربيل|erbil/i;
+function loadLive(force) {
+  const url = db.settings.bridge;
+  if (!url || live.loading || (!force && live.data && Date.now() - live.at < 60e3)) return;
+  live.loading = true; renderLive();
+  fetch(url.replace(/\/+$/, '') + '/?ch=Borsa_Erbil', { cache: 'no-store' })
+    .then(r => r.json())
+    .then(j => {
+      if (!Array.isArray(j.posts)) throw new Error(j.error || 'beklenmeyen cevap');
+      // En yeni mesajdan geriye: Erbil satırı olan ilk kur; yoksa dolar geçen ilk kur.
+      for (const p of [...j.posts].reverse()) {
+        const c = readRates(p.text), x = c.find(y => ERBIL.test(y.label)) || c.find(y => y.usd);
+        if (x) { live.data = { ...x, at: p.at }; live.err = ''; live.at = Date.now(); return; }
+      }
+      throw new Error('son mesajlarda kur bulunamadı');
+    })
+    .catch(e => { live.err = e.message || 'alınamadı'; })
+    .finally(() => { live.loading = false; renderLive(); });
+}
+function renderLive() {
+  const el = $('#live'); if (!el) return;
+  const edit = '<button class="btn sm" data-action="bridge-edit">Köprü adresini değiştir</button>';
+  if (!live.data) {
+    el.innerHTML = live.loading ? '<p class="hint">Son kur alınıyor…</p>'
+      : `<p class="hint">Kur alınamadı (${esc(live.err)}). <button class="btn sm" data-action="live-reload">Tekrar dene</button> ${edit}</p>`;
+    return;
+  }
+  const x = live.data, min = Math.max(0, Math.round((Date.now() - Date.parse(x.at)) / 6e4));
+  const ago = min < 60 ? `${min} dk önce` : min < 1440 ? `${Math.round(min / 60)} saat önce` : `${Math.round(min / 1440)} gün önce`;
+  const time = new Date(x.at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  el.innerHTML = `<div class="list-row" style="border-top:0">
+      <div class="m"><b class="num">1 $ = ${fmtNum(x.rate, x.rate % 1 ? 2 : 0)} IQD</b>
+        <div class="muted" style="font-size:12px">Borsa Erbil · ${esc(time)} (${ago}) · “${esc(x.tok)}”${x.label ? ' · ' + esc(x.label) : ''}</div></div>
+      <button class="icon" data-action="live-reload" aria-label="Yenile" title="Yenile">↻</button>
+      <button class="btn sm primary" data-action="use-rate" data-rate="${x.rate}">Kaydet</button>
+    </div>${live.err ? `<p class="hint">Yenilenemedi: ${esc(live.err)}</p>` : ''}`;
 }
 
 function renderFound() {
@@ -1230,7 +1273,7 @@ function render() {
   const views = { ozet: vOzet, islemler: vTx, hesaplar: vAcc, borclar: vDebt, kategoriler: vCat, kur: vRate, ayarlar: vSet };
   $('#view').innerHTML = views[ui.tab]();
   if (ui.tab === 'islemler') renderTxList();
-  if (ui.tab === 'kur') { renderMkt(); loadMkt(); }
+  if (ui.tab === 'kur') { renderLive(); loadLive(); renderMkt(); loadMkt(); }
 }
 
 /* ---------- işlem penceresi ---------- */
@@ -1466,6 +1509,16 @@ document.addEventListener('click', e => {
         .catch(() => toast('Yapıştırılamadı — kutuya basılı tutup Yapıştır deyin.'));
       break;
     case 'mkt-reload': loadMkt(true); break;
+    case 'live-reload': loadLive(true); break;
+    case 'bridge-save': {
+      const u = $('#bridgeUrl').value.trim();
+      if (!/^https:\/\/[^\s/]+\.[^\s]+$/.test(u)) { toast('https:// ile başlayan köprü adresini yapıştırın.'); break; }
+      db.settings.bridge = u; live.data = null; save(); render(); toast('Köprü bağlandı');
+      break;
+    }
+    case 'bridge-edit':
+      if (confirm('Köprü adresi silinsin mi? Yeni adresi tekrar yapıştırabilirsiniz.')) { db.settings.bridge = ''; live.data = null; save(); render(); }
+      break;
     case 'use-rate': {
       const date = $('#rateTextDate').value || today(), old = db.rates.find(r => r.date === date);
       if (old && old.rate !== +d.rate && !confirm(`${SHORTDATE.format(parse(date))} için kayıtlı kur ${fmtNum(old.rate)} IQD. ${fmtNum(+d.rate, +d.rate % 1 ? 2 : 0)} ile değiştirilsin mi?`)) break;
