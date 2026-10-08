@@ -112,6 +112,10 @@ label>input,label>select,label>.amt{margin-top:4px}
 .bar-row.sub .bar-fill{opacity:.65}
 .list-row.child{padding-left:28px}
 .list-row.child .m b{font-weight:500}
+.caret{background:none;border:0;color:var(--muted);font:inherit;font-size:26px;line-height:1;width:28px;height:28px;margin:-4px -6px -4px -8px;padding:0;cursor:pointer;flex:none;display:grid;place-items:center;transition:transform .15s}
+.caret.open{transform:rotate(90deg)}
+.caret-sp{width:14px;flex:none}
+.list-row .m.tog{cursor:pointer}
 .dot{width:10px;height:10px;border-radius:50%;flex:none}
 .bar-track{height:10px;background:var(--soft);border-radius:6px;overflow:hidden}
 .bar-fill{height:100%;border-radius:6px}
@@ -381,6 +385,7 @@ const ui = {
   tab: 'ozet', period: 'month', anchor: today(),
   f: { q: '', acc: '', cat: '', from: '', to: '' },
   editAcc: null, editCat: null,
+  openCats: new Set(), // alt kategorileri açık olan ana kategoriler (varsayılan kapalı)
 };
 
 const acc = id => db.accounts.find(a => a.id === id);
@@ -861,9 +866,13 @@ function vCat() {
     const kids = isChild ? [] : children(c.id);
     const nAll = n + kids.reduce((s, k) => s + db.tx.filter(t => t.categoryId === k.id).length, 0);
     const month = c.type === 'expense' ? (isChild ? st.byCat[c.id] : st.byTop[c.id]) : 0;
+    const open = ui.openCats.has(c.id);
+    const caret = isChild ? '' : kids.length
+      ? `<button class="caret ${open ? 'open' : ''}" data-action="toggle-cat" data-id="${c.id}" aria-label="${open ? 'Alt kategorileri gizle' : 'Alt kategorileri göster'}" aria-expanded="${open}">›</button>`
+      : '<span class="caret-sp"></span>';
     return `<div class="list-row ${isChild ? 'child' : ''}">
-      <span class="dot" style="background:${c.color};width:${isChild ? 10 : 14}px;height:${isChild ? 10 : 14}px"></span>
-      <div class="m"><b>${isChild ? '↳ ' : ''}${esc(c.name)}</b><div class="muted" style="font-size:12px">${nAll} işlem${kids.length ? ` · ${kids.length} alt kategori` : ''}${month ? ` · bu ay ${fmt(month, D)}` : ''}</div></div>
+      ${caret}<span class="dot" style="background:${c.color};width:${isChild ? 10 : 14}px;height:${isChild ? 10 : 14}px"></span>
+      <div class="m${kids.length ? ' tog' : ''}"${kids.length ? ` data-action="toggle-cat" data-id="${c.id}"` : ''}><b>${isChild ? '↳ ' : ''}${esc(c.name)}</b><div class="muted" style="font-size:12px">${nAll} işlem${kids.length ? ` · ${kids.length} alt kategori` : ''}${month ? ` · bu ay ${fmt(month, D)}` : ''}</div></div>
       ${isChild ? '' : `<button class="btn sm" data-action="add-sub" data-id="${c.id}" title="Alt kategori ekle">+ Alt</button>`}
       <button class="btn sm" data-action="edit-cat" data-id="${c.id}">Düzenle</button>
       <button class="btn sm danger" data-action="del-cat" data-id="${c.id}">Sil</button>
@@ -871,7 +880,7 @@ function vCat() {
   };
   const list = tp => {
     const ps = parents(tp);
-    return ps.length ? ps.map(p => row(p, false) + children(p.id).map(k => row(k, true)).join('')).join('') : '<div class="empty">Kategori yok.</div>';
+    return ps.length ? ps.map(p => row(p, false) + (ui.openCats.has(p.id) ? children(p.id).map(k => row(k, true)).join('') : '')).join('') : '<div class="empty">Kategori yok.</div>';
   };
   const parentId = e ? (e.parentId || '') : (ui.newCatParent || '');
   const par = cat(parentId);
@@ -1602,8 +1611,10 @@ document.addEventListener('click', e => {
       break;
     }
     case 'edit-cat': ui.editCat = d.id; ui.newCatParent = null; render(); scrollTo(0, 0); break;
+    case 'toggle-cat':
+      ui.openCats.has(d.id) ? ui.openCats.delete(d.id) : ui.openCats.add(d.id); render(); break;
     case 'add-sub':
-      ui.editCat = null; ui.newCatParent = d.id; render(); scrollTo(0, 0);
+      ui.openCats.add(d.id); ui.editCat = null; ui.newCatParent = d.id; render(); scrollTo(0, 0);
       $('[data-form=cat] [name=name]').focus();
       break;
     case 'cancel-cat': ui.editCat = ui.newCatParent = null; render(); break;
@@ -1726,6 +1737,7 @@ document.addEventListener('submit', e => {
       ui.editCat = null; toast('Kategori güncellendi');
     } else {
       db.categories.push({ id: uid(), name, type, color: v.color, parentId: par ? par.id : '' });
+      if (par) ui.openCats.add(par.id);
       toast(par ? `"${par.name}" altına eklendi` : 'Kategori eklendi');
       // Aynı ana kategoriye art arda alt kategori eklemeyi kolaylaştırmak için form açık kalır.
     }
