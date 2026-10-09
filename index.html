@@ -2822,6 +2822,7 @@ let canliSoruyor = false;
 async function canliKontrol() {
   const left = imzaBitis - Date.now();
   if (!NATIVE || !imzaBitis || left <= 0 || left > 864e5 || canliSoruyor) return;
+  try { if (localStorage.getItem('imzaCanliYok')) return; } catch (e) {}
   let d = {};
   try { d = await Capacitor.nativePromise('Imza', 'canliDurum'); } catch (e) { return; }
   if (!d.destek || d.aktif) return;
@@ -2832,9 +2833,11 @@ async function canliKontrol() {
   if (!ok) return;
   try { await Capacitor.nativePromise('Imza', 'canliBaslat', { bitis: imzaBitis }); toast('Sayaç kilit ekranında'); }
   catch (e) {
-    let t = {};
-    try { t = await Capacitor.nativePromise('Imza', 'teshis'); } catch (_) {}
-    tell(`${String(e.message || e)}\n\nUygulama: ${t.app || '?'}\nWidget: ${t.uzanti || '?'}\niOS ${t.ios || '?'} · plist: ${t.plist}\n\nBu ekranın görüntüsünü at, sebebini buradan bulacağım.`, 'Sayaç başlatılamadı');
+    // SideStore'un ücretsiz imzasıyla iOS canlı sayaca izin vermiyor; her açılışta tekrar sorup hata göstermesin.
+    if (/denied/i.test(String(e.message || e))) {
+      try { localStorage.setItem('imzaCanliYok', '1'); } catch (_) {}
+      tell("iPhone, SideStore ile kurulan uygulamalarda kilit ekranı canlı sayacına izin vermiyor. Yerine kilit ekranına Kisisel Hesap widget'ını ekle: kilit ekranına uzun bas → Özelleştir → Kilit Ekranı → widget alanı → Kisisel Hesap. Son 24 saatte her saat başı bildirim de gelmeye devam eder.", 'Canlı sayaç kullanılamıyor');
+    } else toast('Sayaç başlatılamadı: ' + String(e.message || e));
   }
 }
 /* Son 2 günde her ekranın en üstünde kırmızı şerit; dokununca süre kartı açılır. */
@@ -2862,7 +2865,7 @@ function imzaCard(urgentOnly) {
     ${urgent || !urgentOnly ? `<ol class="muted" style="font-size:13px;margin:10px 0 0;padding-left:20px;line-height:1.6">
       <li><b>LocalDevVPN</b>'i aç ve bağlan.</li><li><b>SideStore</b> → <b>My Apps</b> → <b>Refresh All</b>.</li>
       <li>Bitince buraya dön; süre yeniden 7 gün olur.</li></ol>
-      <p class="muted" style="font-size:12px;margin:8px 0 0">2 gün kala ve son 24 saatte her saat başı bildirim gelir; son 2 günde her ekranın üstünde kırmızı uyarı, son 24 saatte kilit ekranında canlı sayaç çıkar. Ana ekrana ya da kilit ekranına <b>Kisisel Hesap</b> widget'ını ekleyerek kalan süreyi hep görebilirsin.</p>` : ''}
+      <p class="muted" style="font-size:12px;margin:8px 0 0">2 gün kala ve son 24 saatte her saat başı bildirim gelir; son 2 günde her ekranın üstünde kırmızı uyarı çıkar. Ana ekrana ya da kilit ekranına <b>Kisisel Hesap</b> widget'ını ekleyerek kalan süreyi hep görebilirsin.</p>` : ''}
   </div>`;
 }
 function imzaAc() {
