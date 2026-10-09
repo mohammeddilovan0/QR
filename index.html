@@ -2731,7 +2731,7 @@ function pushEnable() {
 
 /* iOS en fazla 64 bekleyen bildirim tutar. Ayarlar elverirse haftalık/günlük tekrar eden bildirimler kurulur (bir kez kurulur,
    hep çalışır); ara verildiyse ya da saatler çok uzunsa sonraki 60 hatırlatma tek tek kurulur ve uygulama her açıldığında yenilenir. */
-const NAT_MAX = 60;
+const NAT_MAX = 36; // iOS 64 bekleyen bildirim sınırı: 36 hatırlatıcı + 25 imza (2 gün kala + son 24 saat her saat)
 let natT, natRolling = false;
 function nativeScheduleSoon() { if (!NATIVE) return; clearTimeout(natT); natT = setTimeout(nativeSchedule, 300); }
 function kalkSlots() {
@@ -2779,7 +2779,7 @@ if (NATIVE) {
 /* ---------- SideStore imza süresi (yalnız iPhone uygulamasında) ----------
    Ücretsiz Apple ID ile imza 7 gün geçerli; dolarsa uygulama açılmaz, SideStore'dan yenilemek gerekir.
    Gerçek bitiş tarihi paketteki imzadan okunur (ImzaPlugin); okunamazsa ilk açılıştan 7 gün sayılır. */
-const IMZA = KEY + '-imza', IMZA_IDS = [2001, 2002, 2003];
+const IMZA = KEY + '-imza', IMZA_IDS = [2001, 2002, 2003, ...Array.from({ length: 30 }, (_, i) => 2010 + i)];
 let imzaBitis = 0, imzaTahmin = false;
 async function imzaYukle() {
   if (!NATIVE) return;
@@ -2794,25 +2794,44 @@ async function imzaYukle() {
   const changed = t !== imzaBitis;
   imzaBitis = t;
   imzaBarDraw();
+  canliKontrol();
   if (!changed) return;
   imzaPlanla();
   if (['daha', 'ozet'].includes(ui.tab) && !document.querySelector('dialog[open]')) render();
 }
+/* 2 gün kala bir bildirim; son 24 saatte her saat başı. Her birine basınca uygulama açılır ve kilit ekranı sayacı önerilir. */
 async function imzaPlanla() {
   try {
     await LN('cancel', { notifications: IMZA_IDS.map(id => ({ id })) });
-    // Son hatırlatma bitişten 3 saat önce; gece yarısıyla sabah 8 arasına düşerse önceki akşam 20:00.
-    const b = imzaBitis, now = Date.now(), sekiz = new Date(b);
-    sekiz.setHours(8, 0, 0, 0);
-    let son = b - 3 * 36e5;
-    if (son < sekiz.getTime()) { const a = new Date(b); a.setDate(a.getDate() - 1); a.setHours(20, 0, 0, 0); son = a.getTime(); }
-    const sonNe = `${ymd(new Date(son)) === ymd(new Date(b)) ? 'bugün' : 'yarın'} saat ${hhmm(b)} olunca`;
-    const list = [[2001, b - 2 * 864e5, '2 gün sonra'], [2002, b - 864e5, 'yarın bu saatte'], [2003, son, sonNe]]
-      .filter(([, at]) => at > now + 60e3)
-      .map(([id, at, ne]) => ({ id, title: 'SideStore yenilemesi 📲', sound: 'kalk-zil.wav', schedule: { at: new Date(at) },
-        body: `Uygulamanın süresi ${ne} doluyor. SideStore'u aç → My Apps → Refresh All.` }));
-    if (list.length) await LN('schedule', { notifications: list });
+    const b = imzaBitis, now = Date.now(), list = [], base = { title: 'SideStore yenilemesi 📲', sound: 'kalk-zil.wav' };
+    if (b - 2 * 864e5 > now + 60e3)
+      list.push({ id: 2001, at: b - 2 * 864e5, body: "Uygulamanın süresi 2 gün sonra doluyor. SideStore'u aç → My Apps → Refresh All." });
+    const ilk = new Date(b - 864e5);
+    if (ilk.getMinutes() || ilk.getSeconds()) ilk.setHours(ilk.getHours() + 1, 0, 0, 0);
+    for (let t = ilk.getTime(), i = 0; t < b && i < 24; t += 36e5, i++) {
+      if (t <= now + 60e3) continue;
+      const h = Math.max(1, Math.ceil((b - t) / 36e5));
+      list.push({ id: 2010 + i, at: t, body: `${h === 1 ? 'Son 1 saat!' : h + ' saat kaldı.'} SideStore → My Apps → Refresh All. Dokun: kilit ekranına sayaç koy.` });
+    }
+    if (list.length) await LN('schedule', { notifications: list.map(({ id, at, body }) => ({ id, body, ...base, schedule: { at: new Date(at) } })) });
   } catch (e) {}
+}
+/* Son 24 saatte kilit ekranı / Dynamic Island canlı sayacı. iOS bunu en fazla birkaç saat açık tutar;
+   uygulama her öne geldiğinde sayaç yoksa yeniden başlatmayı sorar. */
+let canliSoruyor = false;
+async function canliKontrol() {
+  const left = imzaBitis - Date.now();
+  if (!NATIVE || !imzaBitis || left <= 0 || left > 864e5 || canliSoruyor) return;
+  let d = {};
+  try { d = await Capacitor.nativePromise('Imza', 'canliDurum'); } catch (e) { return; }
+  if (!d.destek || d.aktif) return;
+  if (!d.izin) { toast('Canlı sayaç için Ayarlar → Kisisel Hesap → Canlı Etkinlikler açık olmalı'); return; }
+  canliSoruyor = true;
+  const ok = await ask({ title: 'Kilit ekranı sayacı', msg: 'Uygulamanın süresi 24 saatten az. Kilit ekranına ve Dynamic Island’a canlı geri sayım konsun mu?', ok: 'Başlat', danger: false, cancel: 'Şimdi değil' });
+  canliSoruyor = false;
+  if (!ok) return;
+  try { await Capacitor.nativePromise('Imza', 'canliBaslat', { bitis: imzaBitis }); toast('Sayaç kilit ekranında'); }
+  catch (e) { toast('Sayaç başlatılamadı: ' + (e.message || e)); }
 }
 /* Son 2 günde her ekranın en üstünde kırmızı şerit; dokununca süre kartı açılır. */
 function imzaBarDraw() {
@@ -2839,7 +2858,7 @@ function imzaCard(urgentOnly) {
     ${urgent || !urgentOnly ? `<ol class="muted" style="font-size:13px;margin:10px 0 0;padding-left:20px;line-height:1.6">
       <li><b>LocalDevVPN</b>'i aç ve bağlan.</li><li><b>SideStore</b> → <b>My Apps</b> → <b>Refresh All</b>.</li>
       <li>Bitince buraya dön; süre yeniden 7 gün olur.</li></ol>
-      <p class="muted" style="font-size:12px;margin:8px 0 0">Bitmeden 2 gün, 1 gün önce ve son gün bildirim gelir; son 2 günde her ekranın üstünde kırmızı uyarı çıkar.</p>` : ''}
+      <p class="muted" style="font-size:12px;margin:8px 0 0">2 gün kala ve son 24 saatte her saat başı bildirim gelir; son 2 günde her ekranın üstünde kırmızı uyarı, son 24 saatte kilit ekranında canlı sayaç çıkar. Ana ekrana ya da kilit ekranına <b>Kisisel Hesap</b> widget'ını ekleyerek kalan süreyi hep görebilirsin.</p>` : ''}
   </div>`;
 }
 function imzaAc() {

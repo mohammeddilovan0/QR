@@ -30,6 +30,7 @@ jobs:
         run: |
           mkdir Payload
           cp -R ios-app/ios/App/build/Build/Products/Release-iphoneos/App.app Payload/
+          test -d Payload/App.app/PlugIns/ImzaWidget.appex || { echo 'widget uzantısı pakette yok'; exit 1; }
           zip -qry KisiselHesap.ipa Payload
           ls -la KisiselHesap.ipa
       - uses: actions/upload-artifact@v4
