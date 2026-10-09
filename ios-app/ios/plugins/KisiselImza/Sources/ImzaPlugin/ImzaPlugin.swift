@@ -11,17 +11,27 @@ public class ImzaPlugin: CAPPlugin, CAPBridgedPlugin {
     public let jsName = "Imza"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "bitis", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "pdf", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "pdf", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "ac", returnType: CAPPluginReturnPromise)
     ]
 
     @objc func bitis(_ call: CAPPluginCall) {
         // Yenilemeden sonra widget'lar yeni tarihi hemen göstersin.
         WidgetCenter.shared.reloadAllTimelines()
-        guard let exp = ImzaPlugin.expiration() else {
-            call.resolve([:])
-            return
+        var r: [String: Any] = [:]
+        if let exp = ImzaPlugin.expiration() { r["bitis"] = exp.timeIntervalSince1970 * 1000 }
+        // Kestirmeler'deki "SideStore yenilendi" eyleminin (App/Yenileme.swift) yazdığı son yenileme zamanı.
+        let yen = UserDefaults.standard.double(forKey: "imzaYenilendi")
+        if yen > 0 { r["yenilendi"] = yen * 1000 }
+        call.resolve(r)
+    }
+
+    /// Başka bir uygulamayı açar (ör. shortcuts:// ile Kestirmeler).
+    @objc func ac(_ call: CAPPluginCall) {
+        guard let s = call.getString("url"), let url = URL(string: s) else { call.reject("adres yok"); return }
+        DispatchQueue.main.async {
+            UIApplication.shared.open(url) { ok in ok ? call.resolve() : call.reject("açılamadı") }
         }
-        call.resolve(["bitis": exp.timeIntervalSince1970 * 1000])
     }
 
     static func expiration() -> Date? {
