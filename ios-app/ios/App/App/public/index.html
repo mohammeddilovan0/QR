@@ -333,6 +333,36 @@ dialog.sheet{overflow-x:hidden;touch-action:pan-y}
 .imzabar span{flex:1}
 .kban.on{display:flex;animation:kbIn .3s ease-out}
 .kban b{display:block;font-size:16px}
+/* Hatırlatıcılar */
+.rtiles{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-bottom:12px}
+.rtile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:11px 12px;text-align:left;display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center;cursor:pointer;font:inherit;color:var(--ink);box-shadow:var(--shadow)}
+.rtile .ri{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#fff}
+.rtile .ri svg{width:17px;height:17px}
+.rtile .rc{justify-self:end;font-size:24px;font-weight:700;line-height:1}
+.rtile .rnm{grid-column:1/-1;font-weight:600;color:var(--muted);font-size:14px}
+.rtile.sel{outline:2px solid var(--accent);outline-offset:-1px}
+.rtile:active{transform:scale(.97)}
+.rsearch{display:flex;gap:8px;margin-bottom:4px}
+.rsearch input{flex:1}
+.rlists{margin:8px 0 2px}
+.rlists .dot,.rl .dot{display:inline-block;width:8px;height:8px;margin-right:5px;vertical-align:middle}
+.list-row.rem{align-items:flex-start;gap:12px}
+.rchk{width:24px;height:24px;border-radius:50%;border:2px solid color-mix(in srgb,var(--muted) 55%,transparent);background:none;flex:none;padding:0;margin-top:1px;cursor:pointer;display:grid;place-items:center;transition:background .15s,transform .12s}
+.rchk:active{transform:scale(.85)}
+.rchk.p1{border-color:#3b82c4}.rchk.p2{border-color:#e8a33d}.rchk.p3{border-color:#e5484d}
+.rem.done .rchk{background:var(--accent);border-color:var(--accent)}
+.rem.done .rchk::after{content:'';width:6px;height:11px;border:solid var(--accent-ink);border-width:0 2px 2px 0;transform:translateY(-1px) rotate(45deg)}
+.rem .m.tap{cursor:pointer;border-radius:8px}
+.rem .rt{font-weight:600;overflow-wrap:anywhere}
+.rem.done .rt{color:var(--muted);text-decoration:line-through;font-weight:500}
+.rem .rn{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rem .rs{font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;align-items:center;gap:2px 6px;margin-top:2px}
+.rem .rs .sep{opacity:.5}
+.rem .rl{margin-left:auto;white-space:nowrap}
+.rpri{font-weight:800}.rpri.p1{color:#3b82c4}.rpri.p2{color:#e8a33d}.rpri.p3{color:#e5484d}
+.rbadge{background:#e5484d;color:#fff;border-radius:999px;font-size:12px;font-weight:700;padding:1px 8px}
+.lnk{color:var(--accent);cursor:pointer;font-weight:600;font-size:14px;text-decoration:none}
+.rtitle{font-size:17px!important;font-weight:600;padding:11px 12px}
 @keyframes kbIn{from{opacity:0;transform:translate(-50%,-16px)}to{opacity:1;transform:translate(-50%,0)}}
 </style>
 </head>
@@ -423,7 +453,7 @@ dialog.sheet{overflow-x:hidden;touch-action:pan-y}
 <dialog id="askDlg" class="sheet"></dialog>
 
 <div class="toast" id="toast" popover="manual"></div>
-<div class="kban" id="kalkBan" popover="manual" data-kalk="ban-close"><span style="font-size:30px">🧍</span><div style="flex:1"><b id="kalkBanT"></b><span class="muted" id="kalkBanB"></span></div><button class="btn primary sm">Tamam</button></div>
+<div class="kban" id="kalkBan" popover="manual" data-kalk="ban-close"><span style="font-size:30px" id="kalkBanI">🧍</span><div style="flex:1"><b id="kalkBanT"></b><span class="muted" id="kalkBanB"></span></div><button class="btn primary sm">Tamam</button></div>
 <div id="report"></div>
 
 <script>
@@ -464,6 +494,7 @@ function seed() {
     })(),
     tx: [],
     debts: [],
+    reminders: [],
     trash: [],
     settings: { display: 'IQD', weekStart: 1, lastBackup: '', rateCity: 'erbil', bridge: DEF_BRIDGE, goldCity: 'erbil' },
   };
@@ -472,6 +503,8 @@ function seed() {
 function norm(d) {
   if (!Array.isArray(d.debts)) d.debts = [];
   if (!Array.isArray(d.trash)) d.trash = [];
+  if (!Array.isArray(d.reminders)) d.reminders = [];
+  d.reminders = d.reminders.filter(r => r && r.id && typeof r.title === 'string' && (!r.date || /^\d{4}-\d\d-\d\d$/.test(r.date)));
   d.trash = d.trash.filter(x => x && x.id && x.kind && x.data && typeof x.data === 'object');
   d.debts.forEach(x => {
     if (!Array.isArray(x.payments)) x.payments = [];
@@ -493,7 +526,7 @@ function norm(d) {
 }
 /* Güvenlik: kimlik, tarih, renk gibi alanlar ekrana kaçışsız yazılır. Dışarıdan gelen (ör. birinin gönderdiği)
    bir yedek dosyası bu alanlara kod gizleyemesin diye, serbest yazı alanları dışındaki metinlerden HTML karakterleri atılır. */
-const TEXT_KEYS = new Set(['name', 'note', 'person', 'bridge', 'reason', 'label', 'sub']);
+const TEXT_KEYS = new Set(['name', 'note', 'person', 'bridge', 'reason', 'label', 'sub', 'title']);
 function clean(v, k) {
   if (typeof v === 'string') return TEXT_KEYS.has(k) ? v : v.replace(/[<>"'`&\\]/g, '');
   if (Array.isArray(v)) return v.map(x => clean(x, k));
@@ -796,7 +829,7 @@ function vOzet() {
     <button class="btn sm" data-action="tab" data-tab="ayarlar">Ayarlar</button>
   </div>` : '';
 
-  return warn + `
+  return warn + remOzet() + `
   <div class="card">
     <div class="muted" style="font-size:13px">Net servet (${D})</div>
     <div class="big num ${total < 0 ? 'exp' : ''}">${fmt(total, D)}</div>
@@ -1715,16 +1748,17 @@ const ICON = {
   silinenler: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/>',
   ayarlar: '<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  hatirlat: '<path d="M6 9a6 6 0 0 1 12 0c0 6.5 2.5 8 2.5 8h-17S6 15.5 6 9"/><path d="M10.2 20.5a2 2 0 0 0 3.6 0"/>',
   kalk: '<circle cx="12" cy="4.5" r="2"/><path d="M12 8v6.5M12 14.5l-3 6M12 14.5l3 6M6.5 11l5.5-2.5 5.5 2.5"/>',
 };
 const svg = k => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICON[k]}</svg>`;
 const TABS = [['ozet', 'Özet'], ['islemler', 'İşlemler'], ['borclar', 'Borçlar'], ['piyasa', 'Piyasa'], ['daha', 'Daha fazla']];
 /* Her ekranın alt menüde hangi sekmeye ait olduğu. */
-const TAB_OF = { kalk: 'daha', kur: 'piyasa', altin: 'piyasa', hesaplar: 'daha', kategoriler: 'daha', ayarlar: 'daha', silinenler: 'daha' };
+const TAB_OF = { hatirlat: 'daha', kalk: 'daha', kur: 'piyasa', altin: 'piyasa', hesaplar: 'daha', kategoriler: 'daha', ayarlar: 'daha', silinenler: 'daha' };
 const TITLES = { ozet: 'Özet', islemler: 'İşlemler', borclar: 'Borç / Alacak', kur: 'Piyasa', altin: 'Piyasa', daha: 'Daha fazla',
-  hesaplar: 'Hesaplar', kategoriler: 'Kategoriler', ayarlar: 'Ayarlar', silinenler: 'Silinenler', kalk: 'Ayağa kalk' };
+  hesaplar: 'Hesaplar', kategoriler: 'Kategoriler', ayarlar: 'Ayarlar', silinenler: 'Silinenler', kalk: 'Ayağa kalk', hatirlat: 'Hatırlatıcılar' };
 const MORE = [
-  [['kalk', 'Ayağa kalk', '#30a46c']],
+  [['hatirlat', 'Hatırlatıcılar', '#ff9500'], ['kalk', 'Ayağa kalk', '#30a46c']],
   [['hesaplar', 'Hesaplar', '#3b82c4'], ['kategoriler', 'Kategoriler', '#e8a33d']],
   [['silinenler', 'Silinenler', '#e5484d'], ['ayarlar', 'Ayarlar', '#8e8e93']],
 ];
@@ -1734,7 +1768,7 @@ function drawNav() {
   const t = ui.tab, sub = TAB_OF[t] === 'daha';
   $('#navT').textContent = TITLES[t];
   $('#navL').innerHTML = sub ? '<button class="nav-txt" data-action="tab" data-tab="daha"><span class="chev">‹</span>Daha fazla</button>' : '';
-  const add = { hesaplar: 'new-acc', kategoriler: 'new-cat', borclar: 'new-debt', kur: 'new-rate' }[t];
+  const add = { hesaplar: 'new-acc', kategoriler: 'new-cat', borclar: 'new-debt', kur: 'new-rate', hatirlat: 'rem-new' }[t];
   $('#navR').innerHTML = add ? `<button class="nav-txt" data-action="${add}" aria-label="Ekle">${svg('plus')}</button>`
     : t === 'silinenler' && db.trash.length ? '<button class="nav-txt" data-action="trash-empty">Boşalt</button>' : '';
 }
@@ -1745,7 +1779,8 @@ function vDaha() {
   return imzaCard(false) + vDahaList();
 }
 function vDahaList() {
-  const val = { kalk: kalkOn() ? 'Açık' : 'Kapalı', hesaplar: db.accounts.length, kategoriler: db.categories.length, silinenler: db.trash.length || '', ayarlar: '' };
+  const due = remToday().length, over = remToday().filter(r => remOverdue(r)).length;
+  const val = { hatirlat: over ? `<span class="rbadge">${over}</span>` : due || remActive().length || '', kalk: kalkOn() ? 'Açık' : 'Kapalı', hesaplar: db.accounts.length, kategoriler: db.categories.length, silinenler: db.trash.length || '', ayarlar: '' };
   return MORE.map(g => `<div class="group">${g.map(([k, l, c]) => `<button class="gitem" data-action="tab" data-tab="${k}">
     <span class="gi" style="background:${c}">${svg(k)}</span>
     <span class="gt"><span>${l}</span><span class="gv">${val[k]}<span class="chev-r">›</span></span></span></button>`).join('')}</div>`).join('');
@@ -1800,7 +1835,8 @@ const tell = (msg, title = '') => ask({ title, msg, ok: 'Tamam', danger: false, 
 $('#askDlg').addEventListener('click', e => {
   const b = e.target.closest('[data-ask]'); if (!b) return;
   const d = $('#askDlg'), res = d._res; d._res = null;
-  closeSheet(d); if (res) res(b.dataset.ask === '1');
+  const a = b.dataset.ask;
+  closeSheet(d); if (res) res(a.startsWith('v:') ? a.slice(2) : a === '1');
 });
 $('#askDlg').addEventListener('close', () => { const d = $('#askDlg'); if (d._res) { const r = d._res; d._res = null; r(false); } });
 
@@ -1862,6 +1898,7 @@ const TRASH_MAX = 500;
 const TRASH_KIND = {
   tx: ['İşlem', 'islemler', '#64748b'], acc: ['Hesap', 'hesaplar', '#3b82c4'], cat: ['Kategori', 'kategoriler', '#e8a33d'],
   debt: ['Borç / alacak', 'borclar', '#9b59b6'], pay: ['Ödeme / tahsilat', 'borclar', '#9b59b6'], rate: ['Kur', 'piyasa', '#14b8a6'],
+  rem: ['Hatırlatıcı', 'hatirlat', '#ff9500'],
 };
 const copy = o => JSON.parse(JSON.stringify(o));
 function trashPut(kind, label, sub, data) {
@@ -1902,6 +1939,8 @@ function trashRestore(id) {
     if (!debt) return "Bu ödemenin borç/alacak kaydı silinmiş. Önce onu Silinenler'den geri alın.";
     const err = needAcc([d.tx && d.tx.accountId]); if (err) return err;
     if (!has(debt.payments, d.pay.id)) { debt.payments.push(d.pay); if (d.tx && !has(db.tx, d.tx.id)) db.tx.push(d.tx); }
+  } else if (x.kind === 'rem') {
+    if (!has(db.reminders, d.id)) { db.reminders.push(d); remPlanSoon(); }
   } else if (x.kind === 'rate') {
     db.rates = db.rates.filter(r => r.date !== d.date); db.rates.push(d);
   }
@@ -1937,7 +1976,7 @@ function render() {
   $('#ltitle').textContent = TITLES[ui.tab];
   document.body.classList.toggle('has-fab', ['ozet', 'islemler'].includes(ui.tab));
   drawNav();
-  const views = { ozet: vOzet, islemler: vTx, hesaplar: vAcc, borclar: vDebt, kategoriler: vCat, kur: vRate, altin: vGold, ayarlar: vSet, daha: vDaha, silinenler: vTrash, kalk: vKalk };
+  const views = { ozet: vOzet, islemler: vTx, hesaplar: vAcc, borclar: vDebt, kategoriler: vCat, kur: vRate, altin: vGold, ayarlar: vSet, daha: vDaha, silinenler: vTrash, kalk: vKalk, hatirlat: vHat };
   const v = $('#view');
   v.innerHTML = views[ui.tab]();
   openSw = null;
@@ -2381,6 +2420,8 @@ document.addEventListener('submit', e => {
       if (t.id === x.txId) Object.assign(t, { amount, date: v.date, note });
     }
     toast('Kaydedildi');
+  } else if (form.dataset.form === 'rem') {
+    if (!remSubmit(form, v)) return;
   } else if (form.dataset.form === 'debt') {
     const person = (v.person || '').trim(), amount = num(v.amount), opening = v.entryMode === 'opening';
     const a = opening ? null : acc(v.accountId);
@@ -2628,7 +2669,7 @@ function playSound(k) {
 /* Uygulama açıkken: zamanı gelince üstte uyarı + seçilen ses. */
 let kalkLast = 0, kalkBanT;
 function kalkFire(title, body) {
-  $('#kalkBanT').textContent = title; $('#kalkBanB').textContent = body;
+  $('#kalkBanI').textContent = '🧍'; $('#kalkBanT').textContent = title; $('#kalkBanB').textContent = body;
   const b = $('#kalkBan');
   if (b.showPopover) { try { b.hidePopover(); } catch (_) {} try { b.showPopover(); } catch (_) {} }
   b.classList.add('on');
@@ -2772,6 +2813,7 @@ function kalkSlots() {
 }
 const natBase = () => ({ title: 'Kalk biraz 🧍', body: `${K.every} dakikadır oturuyorsun. Kalk, birkaç adım yürü.`, sound: `kalk-${K.sound}.wav` });
 async function nativeSchedule() {
+  const NAT = NAT_MAX - remSlots(); // hatırlatıcıların uyarıları (en çok REM_MAX) aynı 64'lük sınırdan pay alır
   try {
     const pend = ((await LN('getPending')).notifications || []).filter(n => +n.id < 2000); // 2000+: imza hatırlatmaları
     if (pend.length) await LN('cancel', { notifications: pend.map(n => ({ id: +n.id })) });
@@ -2780,12 +2822,12 @@ async function nativeSchedule() {
     const now = Date.now(), slots = kalkSlots(), per = slots.length / K.days.length;
     let list = [];
     if (K.pause <= now) {
-      if (K.days.length === 7 && per <= NAT_MAX) list = slots.slice(0, per).map(({ hour, minute }) => ({ schedule: { on: { hour, minute } } }));
-      else if (slots.length <= NAT_MAX) list = slots.map(on => ({ schedule: { on } }));
+      if (K.days.length === 7 && per <= NAT) list = slots.slice(0, per).map(({ hour, minute }) => ({ schedule: { on: { hour, minute } } }));
+      else if (slots.length <= NAT) list = slots.map(on => ({ schedule: { on } }));
     }
     if (!list.length) {
       natRolling = true;
-      for (let t = now, i = 0; i < NAT_MAX; i++) { t = kalkNext(t); if (!t) break; list.push({ schedule: { at: new Date(t) } }); }
+      for (let t = now, i = 0; i < NAT; i++) { t = kalkNext(t); if (!t) break; list.push({ schedule: { at: new Date(t) } }); }
     }
     const base = natBase();
     if (list.length) await LN('schedule', { notifications: list.map((x, i) => ({ id: 1000 + i, ...base, ...x })) });
@@ -2796,10 +2838,11 @@ if (NATIVE) {
   // Uygulama açıkken gelen bildirimi telefon sesiyle gösterir; üstteki uyarı da görünsün (ses ikinci kez çalmadan).
   Capacitor.addListener('LocalNotifications', 'localNotificationReceived', n => {
     if (+n.id === 999) return;
+    $('#kalkBanI').textContent = +n.id >= REM_ID ? '⏰' : +n.id >= 2000 ? '📲' : '🧍';
     $('#kalkBanT').textContent = n.title || 'Kalk biraz 🧍'; $('#kalkBanB').textContent = n.body || '';
     const b = $('#kalkBan'); if (b.showPopover) try { b.showPopover(); } catch (_) {}
     b.classList.add('on'); clearTimeout(kalkBanT); kalkBanT = setTimeout(kalkBanClose, 60e3);
-    if (ui.tab === 'kalk') render();
+    if (ui.tab === 'kalk' || (+n.id >= REM_ID && ['hatirlat', 'ozet'].includes(ui.tab))) render();
   });
   nativeScheduleSoon();
 }
@@ -2891,6 +2934,508 @@ if (NATIVE) {
   imzaYukle();
   document.addEventListener('visibilitychange', () => { if (!document.hidden) imzaYukle(); });
 }
+
+/* ---------- hatırlatıcılar ----------
+   db.reminders yedeğe dahildir. Her hatırlatıcı: başlık, not, tarih ve isteğe bağlı saat (saatsizler ayardaki saatte uyarır),
+   tekrar kuralı, önceden hatırlatma, öncelik, liste ve isteğe bağlı ödeme tutarı (tamamlanınca gider olarak kaydedilebilir).
+   Tekrarlayan hatırlatıcı tamamlanınca bir sonraki tarihe geçer; aylık/yıllıkta ilk günü (dom) korunur (31 → 30/28 → 31).
+   iPhone uygulamasında en yakın REM_MAX uyarı yerel bildirim olarak kurulur (kimlik 3000+, Tamamlandı / Ertele düğmeli);
+   web'de uygulama açıkken uyarır. */
+const REM_LISTS = [['genel', 'Genel', '#8e8e93'], ['odeme', 'Ödemeler', '#30a46c'], ['is', 'İş', '#3b82c4'], ['ev', 'Ev', '#e8a33d'],
+  ['saglik', 'Sağlık', '#e5484d'], ['alisveris', 'Alışveriş', '#9b59b6'], ['kisisel', 'Kişisel', '#14b8a6']];
+const REM_PRI = [[0, 'Yok'], [1, 'Düşük'], [2, 'Orta'], [3, 'Yüksek']];
+const REM_ALERT = [[0, 'Tam zamanında'], [5, '5 dk önce'], [15, '15 dk önce'], [30, '30 dk önce'], [60, '1 saat önce'],
+  [120, '2 saat önce'], [1440, '1 gün önce'], [2880, '2 gün önce'], [10080, '1 hafta önce']];
+const REM_REP = [['', 'Tekrar yok'], ['day', 'Her gün'], ['weekday', 'Hafta içi her gün'], ['week', 'Her hafta'], ['2week', '2 haftada bir'],
+  ['month', 'Her ay'], ['year', 'Her yıl'], ['custom', 'Özel…']];
+const REM_UNITS = [['day', 'gün'], ['week', 'hafta'], ['month', 'ay'], ['year', 'yıl']];
+const REM_MAX = 12, REM_ID = 3000;
+const REM_FILTERS = [['bugun', 'Bugün', '#3b82c4', 'cal'], ['planli', 'Planlı', '#e5484d', 'cal2'], ['tumu', 'Tümü', '#64748b', 'tray'], ['onemli', 'Önemli', '#e8a33d', 'flag']];
+const REM_TILE_ICON = {
+  cal: '<rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M4 10h16M9 3v4M15 3v4"/>',
+  cal2: '<rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M4 10h16M9 3v4M15 3v4M8 14h2M12 14h2M8 17h2"/>',
+  tray: '<path d="M4 13l2.5-7h11l2.5 7v5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18z"/><path d="M4 13h4.5l1 2h5l1-2H20"/>',
+  flag: '<path d="M6 21V4M6 4h11l-2 4 2 4H6"/>',
+};
+const REMDAY = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short' });
+const REMWD = new Intl.DateTimeFormat('tr-TR', { weekday: 'long' });
+const remGet = id => db.reminders.find(r => r.id === id);
+const remList = k => REM_LISTS.find(l => l[0] === k) || REM_LISTS[0];
+const remHour = () => hm(db.settings.remHour) !== null ? db.settings.remHour : '09:00';
+const remSound = () => SOUNDS.some(s => s[0] === db.settings.remSound) ? db.settings.remSound : 'zil';
+/* Tarih + saat (saatsizse ayardaki saat) → zaman damgası. */
+function remAt(date, time) {
+  const d = parse(date), m = hm(time) ?? hm(remHour());
+  d.setHours(Math.floor(m / 60), m % 60, 0, 0);
+  return d.getTime();
+}
+const remDue = r => r.date ? remAt(r.date, r.time) : 0;
+/* Tekrarlayan hatırlatıcı ertelenince yalnız bu seferki tekrar kayar (snz); serinin tarihi/saati değişmez. */
+const remEff = r => r.snz || remDue(r);
+const remEffDate = r => r.snz ? ymd(new Date(r.snz)) : r.date;
+const remOverdue = (r, now = Date.now()) => !r.done && !!r.date && (r.snz ? r.snz < now : r.time ? remDue(r) < now : r.date < today());
+function remAddMonths(d, n, dom) {
+  const x = new Date(d.getFullYear(), d.getMonth() + n, 1), last = new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate();
+  x.setDate(Math.min(dom || d.getDate(), last));
+  return ymd(x);
+}
+/* Kurala göre verilen tarihten sonraki tekrar; bitiş tarihini aşarsa ''. */
+function remNextFrom(r, date) {
+  const d = parse(date), n = Math.max(1, Math.round(+r.every || 1));
+  let x = '';
+  switch (r.rep) {
+    case 'day': x = ymd(addDays(d, 1)); break;
+    case 'weekday': { let y = addDays(d, 1); while (y.getDay() === 0 || y.getDay() === 6) y = addDays(y, 1); x = ymd(y); break; }
+    case 'week': {
+      const days = r.days && r.days.length ? r.days : [d.getDay()];
+      let y = addDays(d, 1); for (let i = 0; i < 7 && !days.includes(y.getDay()); i++) y = addDays(y, 1);
+      x = ymd(y); break;
+    }
+    case '2week': x = ymd(addDays(d, 14)); break;
+    case 'month': x = remAddMonths(d, 1, r.dom); break;
+    case 'year': x = remAddMonths(d, 12, r.dom); break;
+    case 'custom':
+      x = r.unit === 'week' ? ymd(addDays(d, 7 * n)) : r.unit === 'month' ? remAddMonths(d, n, r.dom)
+        : r.unit === 'year' ? remAddMonths(d, 12 * n, r.dom) : ymd(addDays(d, n));
+      break;
+  }
+  return x && (!r.until || x <= r.until) ? x : '';
+}
+function remRepLabel(r) {
+  if (!r.rep) return '';
+  if (r.rep === 'week' && r.days && r.days.length && r.days.length < 7)
+    return 'Her hafta ' + KALK_DAYS.filter(([d]) => r.days.includes(d)).map(x => x[1]).join(', ');
+  if (r.rep === 'custom') { const n = Math.max(1, +r.every || 1); return `Her ${n > 1 ? n + ' ' : ''}${(REM_UNITS.find(u => u[0] === r.unit) || REM_UNITS[0])[1]}`; }
+  return (REM_REP.find(x => x[0] === r.rep) || REM_REP[0])[1];
+}
+function remDayLabel(date) {
+  const dd = daysBetween(today(), date), d = parse(date);
+  if (dd === 0) return 'Bugün';
+  if (dd === 1) return 'Yarın';
+  if (dd === -1) return 'Dün';
+  if (dd > 1 && dd < 7) return REMWD.format(d).replace(/^./, c => c.toLocaleUpperCase('tr'));
+  return d.getFullYear() === new Date().getFullYear() ? REMDAY.format(d) : SHORTDATE.format(d);
+}
+const remWhen = r => r.snz ? `💤 ${remDayLabel(remEffDate(r))} ${hhmm(r.snz)}` : r.date ? remDayLabel(r.date) + (r.time ? ' ' + r.time : '') : 'Tarihsiz';
+const remActive = () => db.reminders.filter(r => !r.done);
+const remToday = () => remActive().filter(r => r.date && remEffDate(r) <= today());
+const remSort = (a, b) => (remEffDate(a) || '9999').localeCompare(remEffDate(b) || '9999') || remEff(a) - remEff(b) || (b.pri || 0) - (a.pri || 0) || a.ts - b.ts;
+function remMatches(r) {
+  const f = ui.remF || 'bugun', q = (ui.remQ || '').trim().toLocaleLowerCase('tr');
+  if (ui.remL && r.list !== ui.remL) return false;
+  if (q && !`${r.title} ${r.note || ''} ${remList(r.list)[1]}`.toLocaleLowerCase('tr').includes(q)) return false;
+  if (f === 'tamam') return r.done;
+  if (r.done) return false;
+  if (f === 'bugun') return !!r.date && remEffDate(r) <= today();
+  if (f === 'planli') return !!r.date;
+  if (f === 'onemli') return r.pri === 3;
+  return true;
+}
+function remCount(f) { const o = ui.remF; ui.remF = f; const n = db.reminders.filter(remMatches).length; ui.remF = o; return n; }
+
+function remRow(r) {
+  const L = remList(r.list), over = remOverdue(r);
+  const meta = [
+    r.done ? `Tamamlandı ${esc(fmtTs(r.doneAt || r.ts))}` : `<span class="${over ? 'exp' : ''}">${esc(remWhen(r))}</span>`,
+    r.rep && !r.done ? '↻ ' + esc(remRepLabel(r)) : '',
+    r.alert && r.date && !r.done ? '🔔 ' + esc((REM_ALERT.find(a => a[0] === r.alert) || ['', ''])[1]) : '',
+    r.amount ? `<b class="num">${fmt(r.amount, r.currency)}</b>` : '',
+  ].filter(Boolean);
+  const acts = (r.done ? '' : swBtn('Ertele', 'rem-snooze', r.id, 'edit') + (r.rep ? swBtn('Atla', 'rem-skip', r.id, 'ok') : '')) + swBtn('Sil', 'rem-del', r.id);
+  return swRow(`<div class="list-row rem ${r.done ? 'done' : ''}">
+    <button class="rchk p${r.pri || 0}" data-action="rem-done" data-id="${r.id}" aria-label="${r.done ? 'Geri al' : 'Tamamla'}"></button>
+    <div class="m tap" data-action="rem-edit" data-id="${r.id}">
+      <div class="rt">${r.pri ? `<span class="rpri p${r.pri}">${'!'.repeat(r.pri)}</span> ` : ''}${esc(r.title)}</div>
+      ${r.note ? `<div class="rn">${esc(r.note)}</div>` : ''}
+      <div class="rs">${meta.join('<span class="sep">·</span>')}<span class="rl"><span class="dot" style="background:${L[2]}"></span>${esc(L[1])}</span></div>
+    </div></div>`, acts);
+}
+function remGroups(list) {
+  const t = today(), t1 = ymd(addDays(new Date(), 1)), t7 = ymd(addDays(new Date(), 7));
+  const g = [['Gecikmiş', []], ['Bugün', []], ['Yarın', []], ['Önümüzdeki 7 gün', []], ['Daha sonra', []], ['Tarihsiz', []]];
+  for (const r of list) {
+    const d = remEffDate(r), i = !r.date ? 5 : remOverdue(r) ? 0 : d === t ? 1 : d === t1 ? 2 : d <= t7 ? 3 : 4;
+    g[i][1].push(r);
+  }
+  return g.filter(x => x[1].length);
+}
+function vHat() {
+  const f = ui.remF || 'bugun', used = REM_LISTS.filter(l => db.reminders.some(r => r.list === l[0]));
+  const list = db.reminders.filter(remMatches).sort(f === 'tamam' ? (a, b) => (b.doneAt || 0) - (a.doneAt || 0) : remSort);
+  const doneN = db.reminders.filter(r => r.done).length;
+  const tiles = REM_FILTERS.map(([k, l, c, ic]) => `<button class="rtile ${f === k ? 'sel' : ''}" data-action="rem-f" data-v="${k}">
+    <span class="ri" style="background:${c}"><svg class="i" viewBox="0 0 24 24">${REM_TILE_ICON[ic]}</svg></span>
+    <span class="rc num">${remCount(k)}</span><span class="rnm">${l}</span></button>`).join('');
+  let body;
+  if (!list.length) {
+    const msg = { bugun: 'Bugün için hatırlatıcı yok. 🎉', planli: 'Tarihli hatırlatıcı yok.', tumu: 'Hiç hatırlatıcı yok.', onemli: 'Yüksek öncelikli hatırlatıcı yok.', tamam: 'Tamamlanan hatırlatıcı yok.' }[f];
+    body = `<div class="card"><div class="empty">${ui.remQ ? 'Aramaya uyan hatırlatıcı yok.' : msg}${!db.reminders.length ? '<br><small>Faturalar, ödemeler, randevular, ilaçlar… Sağ üstteki <b>+</b> ile ekleyin.</small>' : ''}</div></div>`;
+  } else if (f === 'tamam') {
+    body = `<div class="card" style="padding:4px 12px">${list.map(remRow).join('')}</div>
+      <button class="btn danger block" data-action="rem-clear-done" style="margin-bottom:14px">Tamamlananları temizle</button>`;
+  } else {
+    body = remGroups(list).map(([title, rs]) => `<div class="day"><span class="${title === 'Gecikmiş' ? 'exp' : ''}">${title}</span><span>${rs.length}</span></div>
+      <div class="card" style="padding:4px 12px">${rs.map(remRow).join('')}</div>`).join('');
+  }
+  return `<div class="rtiles">${tiles}</div>
+  <div class="rsearch"><input data-rem-q placeholder="Hatırlatıcılarda ara…" value="${esc(ui.remQ || '')}" autocomplete="off">
+    <button class="btn primary" data-action="rem-new">+ Yeni</button></div>
+  ${used.length > 1 ? `<div class="chips rlists"><button class="chip pick ${!ui.remL ? 'sel' : ''}" data-action="rem-l" data-v="">Tüm listeler</button>${used.map(([k, l, c]) =>
+    `<button class="chip pick ${ui.remL === k ? 'sel' : ''}" data-action="rem-l" data-v="${k}"><span class="dot" style="background:${c}"></span>${l}</button>`).join('')}</div>` : ''}
+  <div id="remBody">${body}</div>
+  <p class="muted" style="font-size:12px;margin:4px 4px 14px">Tamamlamak için daireye dokunun; ertelemek, atlamak veya silmek için sola kaydırın.
+    ${f !== 'tamam' && doneN ? `<a class="lnk" data-action="rem-f" data-v="tamam">Tamamlananlar (${doneN})</a>` : ''}</p>
+  <div class="card">
+    <h2>Hatırlatıcı ayarları</h2>
+    <div class="ktimes"><label>Saatsiz hatırlatıcılar<input type="time" data-rem-set="remHour" value="${remHour()}"></label>
+      <label>Bildirim sesi<select data-rem-set="remSound">${SOUNDS.map(([k, l]) => `<option value="${k}" ${remSound() === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
+    <p class="muted" style="font-size:12px;margin:10px 0 0">${NATIVE
+      ? `En yakın ${REM_MAX} uyarı telefona kurulur; bildirimdeki <b>Tamamlandı</b> ve <b>10 dk ertele</b> düğmeleri de çalışır.`
+      : 'Web sürümünde uyarılar uygulama açıkken gelir. Kapalıyken bildirim için iPhone uygulamasını kullanın.'}</p>
+    ${NATIVE ? '<button class="btn" data-action="rem-test" style="margin-top:10px">Deneme bildirimi gönder</button>' : ''}
+  </div>`;
+}
+/* Özet ekranındaki "Bugün" kartı: gecikmiş ve bugünkü hatırlatıcılar. */
+function remOzet() {
+  const list = remToday().sort(remSort);
+  if (!list.length) return '';
+  const over = list.filter(r => remOverdue(r)).length;
+  return `<div class="card">
+    <div class="krow" style="margin-bottom:4px"><b style="flex:1;font-size:16px">Hatırlatıcılar</b>
+      ${over ? `<span class="rbadge">${over} gecikmiş</span>` : ''}<a class="lnk" data-action="tab" data-tab="hatirlat">Tümü ›</a></div>
+    ${list.slice(0, 4).map(remRow).join('')}
+    ${list.length > 4 ? `<a class="lnk" data-action="tab" data-tab="hatirlat" style="display:block;margin-top:8px">+${list.length - 4} hatırlatıcı daha</a>` : ''}
+  </div>`;
+}
+
+/* ----- düzenleme paneli ----- */
+function remSheet(r, preset) {
+  const e = r || null, v = Object.assign({ title: '', note: '', date: today(), time: '', rep: '', every: 1, unit: 'day', days: [], until: '', alert: 0, pri: 0,
+    list: ui.remL || 'genel', amount: 0, currency: 'IQD', accountId: '', categoryId: '' }, e || preset || {});
+  if (!e && !preset && ui.remF === 'tumu') v.date = '';
+  const sel = (a, b) => String(a) === String(b) ? 'selected' : '';
+  const hist = e && e.log && e.log.length ? `<div class="fxbox"><b style="font-size:13px">Son tamamlananlar</b>${e.log.slice(0, 6).map(x =>
+    `<div class="subline"><span>${esc(remDayLabel(x.d))}</span><span class="muted">${esc(fmtTs(x.ts))}</span></div>`).join('')}</div>` : '';
+  const accs = accOrdered();
+  openSheet(`<form data-form="rem" class="dlg"${e ? ` data-id="${e.id}"` : ''}>${sheetNav(e ? 'Hatırlatıcıyı düzenle' : 'Yeni hatırlatıcı', e ? 'Kaydet' : 'Ekle')}
+    <div class="sheet-body">
+      <input name="title" required maxlength="80" autocomplete="off" placeholder="Başlık (ör. Elektrik faturası)" value="${esc(v.title)}" class="rtitle">
+      <textarea name="note" rows="2" maxlength="500" placeholder="Not (isteğe bağlı)">${esc(v.note)}</textarea>
+      <div>
+        <div class="chips" style="margin-top:0">${[['today', 'Bugün'], ['tomorrow', 'Yarın'], ['weekend', 'Hafta sonu'], ['nextweek', 'Gelecek hafta'], ['none', 'Tarih yok']]
+          .map(([k, l]) => `<button type="button" class="chip pick" data-action="rem-qd" data-v="${k}">${l}</button>`).join('')}</div>
+        <div class="ktimes" style="margin-top:10px"><label>Tarih<input type="date" name="date" value="${v.date}"></label>
+          <label>Saat <span class="muted">(boşsa ${remHour()})</span><input type="time" name="time" value="${v.time}"></label></div>
+      </div>
+      <label>Tekrar<select name="rep">${REM_REP.map(([k, l]) => `<option value="${k}" ${sel(k, v.rep)}>${l}</option>`).join('')}</select></label>
+      <div class="ktimes" data-rem-custom><label>Her<input name="every" type="number" min="1" max="365" inputmode="numeric" value="${Math.max(1, +v.every || 1)}"></label>
+        <label>Birim<select name="unit">${REM_UNITS.map(([k, l]) => `<option value="${k}" ${sel(k, v.unit)}>${l}</option>`).join('')}</select></label></div>
+      <div data-rem-week><label>Günler</label><input type="hidden" name="days" value="${(v.days || []).join(',')}">
+        <div class="chips kdays">${KALK_DAYS.map(([d, l]) => `<button type="button" class="chip pick ${(v.days || []).includes(d) ? 'sel' : ''}" data-action="rem-day" data-v="${d}">${l}</button>`).join('')}</div></div>
+      <label data-rem-until>Tekrar bitişi <span class="muted">(boşsa hep tekrarlar)</span><input type="date" name="until" value="${v.until || ''}"></label>
+      <label>Uyarı<select name="alert">${REM_ALERT.map(([k, l]) => `<option value="${k}" ${sel(k, v.alert)}>${l}</option>`).join('')}</select></label>
+      <div><label>Öncelik</label><input type="hidden" name="pri" value="${v.pri || 0}">
+        <div class="seg mseg" style="margin:4px 0 0">${REM_PRI.map(([k, l]) => `<button type="button" class="${(v.pri || 0) === k ? 'on' : ''}" data-action="rem-pri" data-v="${k}">${l}</button>`).join('')}</div></div>
+      <div><label>Liste</label><input type="hidden" name="list" value="${v.list}">
+        <div class="chips rlists">${REM_LISTS.map(([k, l, c]) => `<button type="button" class="chip pick ${v.list === k ? 'sel' : ''}" data-action="rem-list" data-v="${k}"><span class="dot" style="background:${c}"></span>${l}</button>`).join('')}</div></div>
+      <details ${v.amount ? 'open' : ''}><summary>Ödeme bilgisi <span class="muted" style="font-weight:400">(isteğe bağlı)</span></summary>
+        <div style="display:grid;gap:12px;grid-template-columns:minmax(0,1fr) minmax(0,1fr);padding-bottom:6px">
+          <label>Tutar<input name="amount" inputmode="decimal" autocomplete="off" placeholder="0" value="${v.amount ? esc(fmtIn(v.amount, 'any')) : ''}"></label>
+          <label>Para birimi<select name="currency"><option value="IQD" ${sel('IQD', v.currency)}>Dinar (IQD)</option><option value="USD" ${sel('USD', v.currency)}>Dolar (USD)</option></select></label>
+          <label style="grid-column:1/-1">Hesap<select name="accountId"><option value="">— Öderken seçerim —</option>${accs.map(a => `<option value="${a.id}" ${sel(a.id, v.accountId)}>${esc(accLabel(a))} (${a.currency})</option>`).join('')}</select></label>
+          <label style="grid-column:1/-1">Kategori<select name="categoryId"><option value="">— Öderken seçerim —</option>${catOptions('expense', v.categoryId)}</select></label>
+          <p class="muted" style="grid-column:1/-1;font-size:12px;margin:0">Tamamlandığında bu tutarı tek dokunuşla gider olarak kaydedebilirsiniz.</p>
+        </div></details>
+      ${e && e.snz ? `<p class="muted" style="margin:0;font-size:13px">💤 Bu seferki tekrar ${esc(remDayLabel(remEffDate(e)))} ${hhmm(e.snz)}'e ertelendi. Tarih veya saati değiştirirseniz erteleme kalkar.</p>` : ''}
+      ${hist}
+      ${e && !e.done ? `<button type="button" class="btn block" data-action="rem-done" data-id="${e.id}">✓ Şimdi tamamla</button>` : ''}
+      ${e ? `<button type="button" class="btn danger block" data-action="rem-del" data-id="${e.id}">Hatırlatıcıyı sil</button>` : ''}
+    </div></form>`);
+  remSync(document.querySelector('[data-form="rem"]'));
+  if (!e) setTimeout(() => { const t = document.querySelector('[data-form="rem"] [name=title]'); if (t) t.focus(); }, 60);
+}
+/* Tekrar seçimine göre özel/gün/bitiş alanlarını göster. */
+function remSync(f) {
+  if (!f) return;
+  const rep = f.elements.rep.value;
+  f.querySelector('[data-rem-custom]').classList.toggle('hide', rep !== 'custom');
+  f.querySelector('[data-rem-week]').classList.toggle('hide', rep !== 'week');
+  f.querySelector('[data-rem-until]').classList.toggle('hide', !rep);
+}
+/* Form → kayıt. Hata varsa false. */
+function remSubmit(form, v) {
+  const title = (v.title || '').trim();
+  if (!title) { toast('Başlık yazın.'); form.elements.title.focus(); return false; }
+  const amount = v.amount && v.amount.trim() ? num(v.amount) : 0;
+  if (!(amount >= 0)) { toast('Tutar geçersiz.'); form.elements.amount.focus(); return false; }
+  if (v.rep && !v.date) { toast('Tekrarlayan hatırlatıcı için başlangıç tarihi seçin.'); return false; }
+  if (v.until && v.date && v.until < v.date) { toast('Tekrar bitişi başlangıçtan önce olamaz.'); return false; }
+  const days = (v.days || '').split(',').filter(x => x !== '').map(Number);
+  const old = form.dataset.id ? remGet(form.dataset.id) : null;
+  const was = old ? { date: old.date, time: old.time, rep: old.rep } : null;
+  const r = Object.assign(old || { id: uid(), ts: Date.now(), done: false, log: [] }, {
+    title, note: (v.note || '').trim(), date: v.date || '', time: v.date ? (v.time || '') : '',
+    rep: v.date ? v.rep : '', every: Math.min(365, Math.max(1, Math.round(+v.every || 1))), unit: v.unit || 'day',
+    days: v.rep === 'week' ? (days.length ? days : [parse(v.date).getDay()]) : [], until: v.rep ? (v.until || '') : '',
+    alert: +v.alert || 0, pri: +v.pri || 0, list: v.list || 'genel',
+    amount, currency: v.currency || 'IQD', accountId: amount ? v.accountId || '' : '', categoryId: amount ? v.categoryId || '' : '',
+  });
+  // Aylık/yıllık tekrarda ayın günü değiştiyse yeni gün esas alınır.
+  if (v.date && (!old || old.date !== v.date)) r.dom = parse(v.date).getDate();
+  // Haftalık (seçili günler) / hafta içi tekrarda ilk tarih uymuyorsa ilk uygun güne kayar.
+  const wd = r.date ? parse(r.date).getDay() : -1;
+  if ((r.rep === 'week' && !r.days.includes(wd)) || (r.rep === 'weekday' && (wd === 0 || wd === 6)))
+    r.date = remNextFrom(Object.assign({}, r, { until: '' }), ymd(addDays(parse(r.date), -1))) || r.date;
+  if (was && (was.date !== r.date || was.time !== r.time || was.rep !== r.rep || !r.date)) r.snz = 0;
+  if (!old) db.reminders.push(r);
+  toast(old ? 'Hatırlatıcı güncellendi' : r.date ? `Eklendi · ${remWhen(r)}` : 'Eklendi');
+  remPlanSoon();
+  return true;
+}
+
+/* ----- tamamla / ertele / atla / sil ----- */
+let remUndoSnap = null;
+function remToastUndo(m) {
+  const t = $('#toast');
+  t.innerHTML = `<span>${esc(m)}</span><button class="btn sm" data-action="rem-undo">Geri al</button>`;
+  t.classList.add('undo'); toastShow(4500);
+}
+function remComplete(id, quiet) {
+  const r = remGet(id); if (!r) return;
+  closeSw();
+  if (r.done) { r.done = false; r.doneAt = 0; save(); render(); remPlanSoon(); toast('Yeniden açıldı'); return; }
+  remUndoSnap = copy(r);
+  r.log = [{ d: r.date || today(), ts: Date.now() }, ...(r.log || [])].slice(0, 30);
+  r.snz = 0;
+  const next = r.rep && r.date ? remNextFrom(r, r.date) : '';
+  let msg = 'Tamamlandı';
+  if (next) { r.date = next; msg = `Tamamlandı · sonraki: ${remWhen(r)}`; }
+  else { r.done = true; r.doneAt = Date.now(); }
+  save(); closeSheet($('#sheet')); render(); remPlanSoon();
+  remToastUndo(msg);
+  if (r.amount > 0 && !quiet) remPayAsk(r);
+}
+/* Ödeme hatırlatıcısı tamamlanınca: tutar gider olarak eklensin mi? */
+function remPayAsk(r) {
+  ask({ title: 'Ödeme yapıldı mı?', msg: `${fmt(r.amount, r.currency)} "${r.title}" gider olarak kaydedilsin mi?`, ok: 'Gider olarak kaydet', danger: false, cancel: 'Hayır' })
+    .then(ok => {
+      if (!ok) return;
+      const a = acc(r.accountId) && acc(r.accountId).currency === r.currency ? r.accountId
+        : (accOrdered().find(x => x.currency === r.currency) || {}).id;
+      openTx('expense', null, { from: a, amount: r.amount });
+      const f = F();
+      if (r.categoryId && cat(r.categoryId)) { f.categoryId.value = r.categoryId; drawCatPick(); }
+      f.note.value = r.title.slice(0, 140);
+    });
+}
+function remUndo() {
+  if (!remUndoSnap) return;
+  const i = db.reminders.findIndex(r => r.id === remUndoSnap.id);
+  if (i >= 0) db.reminders[i] = remUndoSnap; else db.reminders.push(remUndoSnap);
+  remUndoSnap = null; $('#toast').classList.remove('on');
+  save(); render(); remPlanSoon(); toast('Geri alındı');
+}
+/* Erteleme: tekrarlamayan hatırlatıcının tarihi/saati kayar; tekrarlayanda yalnız bu seferki tekrar (snz). */
+function remMove(r, ts) {
+  if (r.rep) { r.snz = ts; return; }
+  const d = new Date(ts);
+  r.date = ymd(d); r.time = `${pad(d.getHours())}:${pad(d.getMinutes())}`; r.snz = 0;
+}
+function remSnooze(id, minutes) {
+  const r = remGet(id); if (!r) return;
+  closeSw();
+  const go = ts => { remUndoSnap = copy(r); remMove(r, ts); save(); render(); remPlanSoon(); remToastUndo(`Ertelendi · ${remWhen(r)}`); };
+  if (minutes) return go(Date.now() + minutes * 60e3);
+  const now = new Date(), ev = new Date(now); ev.setHours(20, 0, 0, 0);
+  const tm = new Date(remAt(ymd(addDays(now, 1)), '')), wk = new Date(remAt(ymd(addDays(now, 7)), ''));
+  const opts = [['15', '15 dakika'], ['60', '1 saat'], ['180', '3 saat'], ...(ev - now > 30 * 60e3 ? [['ev', 'Bu akşam 20:00']] : []),
+    ['tm', `Yarın ${remHour()}`], ['wk', `Gelecek hafta ${REMWD.format(wk)}`]];
+  choose('Ne kadar ertelensin?', opts).then(v => {
+    if (!v) return;
+    go(v === 'ev' ? ev.getTime() : v === 'tm' ? tm.getTime() : v === 'wk' ? wk.getTime() : Date.now() + v * 60e3);
+  });
+}
+function remSkip(id) {
+  const r = remGet(id); if (!r || !r.rep || !r.date) return;
+  closeSw();
+  remUndoSnap = copy(r);
+  const next = remNextFrom(r, r.date);
+  r.snz = 0;
+  if (next) r.date = next; else { r.done = true; r.doneAt = Date.now(); }
+  save(); render(); remPlanSoon();
+  remToastUndo(next ? `Atlandı · sonraki: ${remWhen(r)}` : 'Atlandı · tekrar bitti');
+}
+function remDelete(id) {
+  const r = remGet(id); if (!r) return;
+  ask({ msg: `"${r.title}" silinsin mi?`, ok: 'Hatırlatıcıyı sil' }).then(ok => {
+    if (!ok) return closeSw();
+    const tid = trashPut('rem', r.title, remWhen(r), r);
+    db.reminders = db.reminders.filter(x => x.id !== id);
+    save(); closeSheet($('#sheet')); render(); remPlanSoon();
+    toastUndo('Hatırlatıcı silindi', tid);
+  });
+}
+/* Çok seçenekli menü (onay menüsünün kardeşi). Seçilen değeri, vazgeçilirse '' döner. */
+function choose(title, opts) {
+  return new Promise(res => {
+    const d = $('#askDlg');
+    if (d._res) d._res(false);
+    d.innerHTML = `<div class="ask-box"><div class="ah"><b>${esc(title)}</b></div>` +
+      opts.map(([v, l]) => `<button class="ask-btn" data-ask="v:${esc(v)}">${esc(l)}</button>`).join('') + '</div>' +
+      '<button class="ask-btn cancel" data-ask="0">Vazgeç</button>';
+    d._res = x => res(typeof x === 'string' ? x : ''); showSheet(d);
+  });
+}
+
+/* ----- bildirimler ----- */
+/* Önümüzdeki uyarılar (her hatırlatıcı için en çok 3 tekrar), en yakından. */
+function remAlerts(limit = REM_MAX) {
+  const now = Date.now(), out = [];
+  for (const r of db.reminders) {
+    if (r.done || !r.date) continue;
+    let date = r.date;
+    for (let k = 0; k < 3 && date; k++) {
+      const due = k === 0 && r.snz ? r.snz : remAt(date, r.time), at = k === 0 && r.snz ? r.snz : due - (r.alert || 0) * 60e3;
+      if (at > now + 5e3) out.push({ r, date, at, due });
+      if (!r.rep) break;
+      date = remNextFrom(r, date);
+    }
+  }
+  return out.sort((a, b) => a.at - b.at).slice(0, limit);
+}
+function remBody(x) {
+  const r = x.r, parts = [];
+  if (x.at !== x.due) parts.push(`${remDayLabel(x.date)} ${hhmm(x.due)}`);
+  if (r.amount) parts.push(fmt(r.amount, r.currency));
+  if (r.note) parts.push(r.note);
+  return parts.join(' · ') || (r.rep ? remRepLabel(r) : 'Hatırlatıcı');
+}
+const remSlots = () => NATIVE ? remAlerts().length : 0;
+let remT, remActOk = false;
+function remPlanSoon() { if (!NATIVE) return; clearTimeout(remT); remT = setTimeout(remPlan, 400); nativeScheduleSoon(); }
+async function remPlan() {
+  try {
+    await LN('cancel', { notifications: Array.from({ length: REM_MAX }, (_, i) => ({ id: REM_ID + i })) });
+    const list = remAlerts();
+    if (!list.length) return;
+    if (!remActOk) {
+      await LN('registerActionTypes', { types: [{ id: 'REM', actions: [
+        { id: 'tamam', title: '✓ Tamamlandı', foreground: true }, { id: 'ertele', title: '10 dk ertele', foreground: true }] }] });
+      remActOk = true;
+    }
+    await LN('requestPermissions').catch(() => {});
+    await LN('schedule', { notifications: list.map((x, i) => ({
+      id: REM_ID + i, title: (x.r.pri === 3 ? '‼️ ' : '⏰ ') + x.r.title, body: remBody(x),
+      sound: `kalk-${remSound()}.wav`, actionTypeId: 'REM', extra: { rid: x.r.id, date: x.date },
+      schedule: { at: new Date(x.at) },
+    })) });
+  } catch (e) {}
+}
+/* Bildirime ya da düğmesine basınca. */
+function remFromNotif(ex, actionId) {
+  const r = remGet(ex.rid);
+  if (!r) return;
+  const same = r.date === ex.date && !r.done;
+  if (actionId === 'tamam' && same) { ui.tab = 'hatirlat'; remComplete(r.id); return; }
+  if (actionId === 'ertele' && same) { remUndoSnap = copy(r); remMove(r, Date.now() + 10 * 60e3); save(); remPlanSoon(); ui.tab = 'hatirlat'; render(); toast(`10 dk ertelendi · ${hhmm(remEff(r))}`); return; }
+  ui.tab = 'hatirlat'; render(); scrollTo(0, 0); onScroll();
+  remSheet(r);
+}
+/* Web'de (uygulama açıkken) zamanı gelen uyarıyı göster. iPhone uygulamasında bunu bildirim yapar. */
+let remLastCheck = Date.now();
+function remTick() {
+  if (NATIVE) return;
+  const now = Date.now(), from = remLastCheck; remLastCheck = now;
+  for (const r of db.reminders) {
+    if (r.done || !r.date) continue;
+    const due = remEff(r), at = r.snz ? r.snz : due - (r.alert || 0) * 60e3;
+    if (at > from && at <= now) {
+      $('#kalkBanI').textContent = '⏰'; $('#kalkBanT').textContent = r.title; $('#kalkBanB').textContent = remBody({ r, date: r.date, at, due });
+      const b = $('#kalkBan'); if (b.showPopover) try { b.showPopover(); } catch (_) {}
+      b.classList.add('on'); clearTimeout(kalkBanT); kalkBanT = setTimeout(kalkBanClose, 60e3);
+      playSound(remSound());
+      if (ui.tab === 'hatirlat' || ui.tab === 'ozet') render();
+    }
+  }
+}
+setInterval(remTick, 20e3);
+if (NATIVE) {
+  Capacitor.addListener('LocalNotifications', 'localNotificationActionPerformed', a => {
+    const n = a && a.notification, ex = n && n.extra;
+    if (ex && ex.rid) remFromNotif(ex, a.actionId);
+  });
+  remPlanSoon();
+  // Gün değişince ya da uygulamaya dönünce sıralama ve gecikmişler güncel kalsın.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { remPlanSoon(); if (ui.tab === 'hatirlat' || ui.tab === 'ozet') render(); } });
+}
+
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-action^="rem-"]'); if (!el) return;
+  const d = el.dataset, f = el.closest('[data-form="rem"]');
+  switch (d.action) {
+    case 'rem-new': closeSw(); remSheet(null); break;
+    case 'rem-edit': { const r = remGet(d.id); if (r) remSheet(r); break; }
+    case 'rem-done': remComplete(d.id); break;
+    case 'rem-undo': remUndo(); break;
+    case 'rem-snooze': remSnooze(d.id); break;
+    case 'rem-skip': remSkip(d.id); break;
+    case 'rem-del': remDelete(d.id); break;
+    case 'rem-f': ui.remF = d.v; render(); scrollTo(0, 0); onScroll(); break;
+    case 'rem-l': ui.remL = d.v; render(); break;
+    case 'rem-clear-done':
+      ask({ msg: 'Tamamlanan tüm hatırlatıcılar silinsin mi? Silinenler\'den geri alabilirsiniz.', ok: 'Temizle' }).then(ok => {
+        if (!ok) return;
+        db.reminders.filter(r => r.done).forEach(r => trashPut('rem', r.title, 'Tamamlanmış', r));
+        db.reminders = db.reminders.filter(r => !r.done); save(); render(); toast('Temizlendi');
+      });
+      break;
+    case 'rem-test':
+      LN('requestPermissions').then(() => LN('schedule', { notifications: [{ id: REM_ID + REM_MAX, title: '⏰ Deneme hatırlatıcısı',
+        body: 'Hatırlatıcı bildirimleri çalışıyor.', sound: `kalk-${remSound()}.wav`, schedule: { at: new Date(Date.now() + 5e3) } }] }))
+        .then(() => toast('5 saniye sonra gelir, istersen uygulamayı kapat')).catch(err => toast('Kurulamadı: ' + err.message));
+      break;
+    case 'rem-qd': {
+      if (!f) break;
+      const now = new Date(), x = { today: now, tomorrow: addDays(now, 1), weekend: addDays(now, (6 - now.getDay() + 7) % 7 || 7),
+        nextweek: addDays(now, ((8 - now.getDay()) % 7) || 7) }[d.v];
+      f.elements.date.value = x ? ymd(x) : '';
+      if (!x) { f.elements.time.value = ''; f.elements.rep.value = ''; }
+      remSync(f); break;
+    }
+    case 'rem-day': {
+      if (!f) break;
+      el.classList.toggle('sel');
+      f.elements.days.value = [...f.querySelectorAll('[data-action="rem-day"].sel')].map(b => b.dataset.v).join(',');
+      break;
+    }
+    case 'rem-pri':
+      if (!f) break;
+      f.elements.pri.value = d.v;
+      f.querySelectorAll('[data-action="rem-pri"]').forEach(b => b.classList.toggle('on', b === el)); break;
+    case 'rem-list':
+      if (!f) break;
+      f.elements.list.value = d.v;
+      f.querySelectorAll('[data-action="rem-list"]').forEach(b => b.classList.toggle('sel', b === el)); break;
+  }
+});
+document.addEventListener('input', e => {
+  if (e.target.dataset && 'remQ' in e.target.dataset) {
+    ui.remQ = e.target.value;
+    // Arama kutusu odakta kalsın: yalnız listeyi yeniden çiz.
+    const b = $('#remBody'), tmp = document.createElement('div'); tmp.innerHTML = vHat();
+    if (b) b.innerHTML = tmp.querySelector('#remBody').innerHTML;
+  }
+});
+document.addEventListener('change', e => {
+  const el = e.target;
+  if (el.closest && el.closest('[data-form="rem"]') && (el.name === 'rep' || el.name === 'date')) { remSync(el.form); return; }
+  const k = el.dataset && el.dataset.remSet;
+  if (!k) return;
+  if (k === 'remHour' && hm(el.value) === null) return;
+  db.settings[k] = el.value; save(); remPlanSoon();
+  if (k === 'remSound') playSound(el.value);
+  toast('Kaydedildi');
+});
 
 function vKalk() {
   const now = Date.now(), paused = K.on && K.pause > now, next = K.on ? kalkNext(Math.max(now, K.pause - 60e3)) : 0;
