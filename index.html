@@ -2832,10 +2832,9 @@ async function canliKontrol() {
   if (!ok) return;
   try { await Capacitor.nativePromise('Imza', 'canliBaslat', { bitis: imzaBitis }); toast('Sayaç kilit ekranında'); }
   catch (e) {
-    const m = String(e.message || e);
-    toast(/denied/i.test(m)
-      ? 'iPhone kilit ekranı sayacına izin vermedi. Ayarlar → Kisisel Hesap → Live Activities’i kapatıp aç, sonra telefonu yeniden başlat.'
-      : 'Sayaç başlatılamadı: ' + m);
+    let t = {};
+    try { t = await Capacitor.nativePromise('Imza', 'teshis'); } catch (_) {}
+    tell(`${String(e.message || e)}\n\nUygulama: ${t.app || '?'}\nWidget: ${t.uzanti || '?'}\niOS ${t.ios || '?'} · plist: ${t.plist}\n\nBu ekranın görüntüsünü at, sebebini buradan bulacağım.`, 'Sayaç başlatılamadı');
   }
 }
 /* Son 2 günde her ekranın en üstünde kırmızı şerit; dokununca süre kartı açılır. */
