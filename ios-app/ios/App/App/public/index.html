@@ -2794,12 +2794,11 @@ async function imzaYukle() {
   const changed = t !== imzaBitis;
   imzaBitis = t;
   imzaBarDraw();
-  canliKontrol();
   if (!changed) return;
   imzaPlanla();
   if (['daha', 'ozet'].includes(ui.tab) && !document.querySelector('dialog[open]')) render();
 }
-/* 2 gün kala bir bildirim; son 24 saatte her saat başı. Her birine basınca uygulama açılır ve kilit ekranı sayacı önerilir. */
+/* 2 gün kala bir bildirim; son 24 saatte her saat başı. Her birine basınca süre kartı açılır. */
 async function imzaPlanla() {
   try {
     await LN('cancel', { notifications: IMZA_IDS.map(id => ({ id })) });
@@ -2811,34 +2810,10 @@ async function imzaPlanla() {
     for (let t = ilk.getTime(), i = 0; t < b && i < 24; t += 36e5, i++) {
       if (t <= now + 60e3) continue;
       const h = Math.max(1, Math.ceil((b - t) / 36e5));
-      list.push({ id: 2010 + i, at: t, body: `${h === 1 ? 'Son 1 saat!' : h + ' saat kaldı.'} SideStore → My Apps → Refresh All. Dokun: kilit ekranına sayaç koy.` });
+      list.push({ id: 2010 + i, at: t, body: `${h === 1 ? 'Son 1 saat!' : h + ' saat kaldı.'} SideStore → My Apps → Refresh All.` });
     }
     if (list.length) await LN('schedule', { notifications: list.map(({ id, at, body }) => ({ id, body, ...base, schedule: { at: new Date(at) } })) });
   } catch (e) {}
-}
-/* Son 24 saatte kilit ekranı / Dynamic Island canlı sayacı. iOS bunu en fazla birkaç saat açık tutar;
-   uygulama her öne geldiğinde sayaç yoksa yeniden başlatmayı sorar. */
-let canliSoruyor = false;
-async function canliKontrol() {
-  const left = imzaBitis - Date.now();
-  if (!NATIVE || !imzaBitis || left <= 0 || left > 864e5 || canliSoruyor) return;
-  try { if (localStorage.getItem('imzaCanliYok')) return; } catch (e) {}
-  let d = {};
-  try { d = await Capacitor.nativePromise('Imza', 'canliDurum'); } catch (e) { return; }
-  if (!d.destek || d.aktif) return;
-  if (!d.izin) { toast('Canlı sayaç için Ayarlar → Kisisel Hesap → Canlı Etkinlikler açık olmalı'); return; }
-  canliSoruyor = true;
-  const ok = await ask({ title: 'Kilit ekranı sayacı', msg: 'Uygulamanın süresi 24 saatten az. Kilit ekranına ve Dynamic Island’a canlı geri sayım konsun mu?', ok: 'Başlat', danger: false, cancel: 'Şimdi değil' });
-  canliSoruyor = false;
-  if (!ok) return;
-  try { await Capacitor.nativePromise('Imza', 'canliBaslat', { bitis: imzaBitis }); toast('Sayaç kilit ekranında'); }
-  catch (e) {
-    // SideStore'un ücretsiz imzasıyla iOS canlı sayaca izin vermiyor; her açılışta tekrar sorup hata göstermesin.
-    if (/denied/i.test(String(e.message || e))) {
-      try { localStorage.setItem('imzaCanliYok', '1'); } catch (_) {}
-      tell("iPhone, SideStore ile kurulan uygulamalarda kilit ekranı canlı sayacına izin vermiyor. Yerine kilit ekranına Kisisel Hesap widget'ını ekle: kilit ekranına uzun bas → Özelleştir → Kilit Ekranı → widget alanı → Kisisel Hesap. Son 24 saatte her saat başı bildirim de gelmeye devam eder.", 'Canlı sayaç kullanılamıyor');
-    } else toast('Sayaç başlatılamadı: ' + String(e.message || e));
-  }
 }
 /* Son 2 günde her ekranın en üstünde kırmızı şerit; dokununca süre kartı açılır. */
 function imzaBarDraw() {

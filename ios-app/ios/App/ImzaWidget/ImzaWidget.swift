@@ -1,16 +1,8 @@
 import WidgetKit
 import SwiftUI
-import ActivityKit
 
-// SideStore imzasının bitişine kalan süre: ana ekran / kilit ekranı widget'ı ve son 24 saatteki canlı sayaç (Live Activity).
+// SideStore imzasının bitişine kalan süre: ana ekran / kilit ekranı widget'ı.
 // Widget, uygulamayla birlikte imzalandığı için kendi embedded.mobileprovision dosyasından aynı bitiş tarihini okur.
-
-/// Uygulamadaki ImzaPlugin ile aynı tanım (ActivityKit türü adından eşleştirir).
-struct ImzaAttributes: ActivityAttributes {
-    public struct ContentState: Codable, Hashable {
-        var bitis: Date
-    }
-}
 
 func profilBitis() -> Date? {
     guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
@@ -118,59 +110,9 @@ struct ImzaWidget: Widget {
     }
 }
 
-/// Geri sayım: geçmiş bir tarih verilirse çökmemesi için aralık en az 1 sn.
-func sayac(_ bitis: Date) -> ClosedRange<Date> {
-    let now = Date()
-    return now...max(bitis, now.addingTimeInterval(1))
-}
-
-struct ImzaCanli: Widget {
-    var body: some WidgetConfiguration {
-        ActivityConfiguration(for: ImzaAttributes.self) { context in
-            HStack(spacing: 12) {
-                Image(systemName: "exclamationmark.arrow.circlepath").font(.title)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Kisisel Hesap süresi doluyor").font(.headline)
-                    Text("SideStore → My Apps → Refresh All").font(.caption)
-                }
-                Spacer()
-                Text(timerInterval: sayac(context.state.bitis), countsDown: true)
-                    .font(.system(size: 22, weight: .bold).monospacedDigit())
-                    .multilineTextAlignment(.trailing)
-                    .frame(width: 96)
-            }
-            .padding()
-            .foregroundColor(.white)
-            .activityBackgroundTint(kirmizi)
-            .activitySystemActionForegroundColor(.white)
-        } dynamicIsland: { context in
-            DynamicIsland {
-                DynamicIslandExpandedRegion(.leading) {
-                    Image(systemName: "exclamationmark.arrow.circlepath").font(.title2).foregroundColor(kirmizi)
-                }
-                DynamicIslandExpandedRegion(.trailing) {
-                    Text(timerInterval: sayac(context.state.bitis), countsDown: true)
-                        .font(.title3.monospacedDigit()).frame(width: 90)
-                }
-                DynamicIslandExpandedRegion(.bottom) {
-                    Text("Kisisel Hesap · SideStore → Refresh All").font(.caption)
-                }
-            } compactLeading: {
-                Image(systemName: "exclamationmark.arrow.circlepath").foregroundColor(kirmizi)
-            } compactTrailing: {
-                Text(timerInterval: sayac(context.state.bitis), countsDown: true)
-                    .monospacedDigit().frame(width: 56)
-            } minimal: {
-                Image(systemName: "exclamationmark.arrow.circlepath").foregroundColor(kirmizi)
-            }
-        }
-    }
-}
-
 @main
 struct ImzaWidgets: WidgetBundle {
     var body: some Widget {
         ImzaWidget()
-        ImzaCanli()
     }
 }
