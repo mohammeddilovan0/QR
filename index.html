@@ -2111,6 +2111,13 @@ document.addEventListener('click', e => {
   switch (d.action) {
     case 'tab': ui.tab = d.tab; render(); scrollTo(0, 0); onScroll(); break;
     case 'imza-ac': imzaAc(); onScroll(); break;
+    case 'imza-yeniledim':
+      ask({ title: 'Uygulama süresi', msg: "SideStore'da Refresh All bitti mi? Süre şu andan itibaren 7 gün olarak ayarlanacak.", ok: 'Evet, yeniledim', danger: false, cancel: 'Vazgeç' }).then(ok => {
+        if (!ok) return;
+        try { localStorage.setItem(IMZA_YEN, Date.now()); } catch (e) {}
+        imzaYukle().then(() => { render(); toast('Süre 7 gün olarak güncellendi'); });
+      });
+      break;
     case 'nav': {
       // Alt menü: Piyasa en son bakılan ekrana (Kur/Altın) döner; açık sekmeye tekrar basınca en başa döner.
       const t = d.tab === 'piyasa' ? (ui.lastMkt || 'kur') : d.tab;
@@ -2799,9 +2806,11 @@ if (NATIVE) {
 
 /* ---------- SideStore imza süresi (yalnız iPhone uygulamasında) ----------
    Ücretsiz Apple ID ile imza 7 gün geçerli; dolarsa uygulama açılmaz, SideStore'dan yenilemek gerekir.
-   Gerçek bitiş tarihi paketteki imzadan okunur (ImzaPlugin); okunamazsa ilk açılıştan 7 gün sayılır. */
-const IMZA = KEY + '-imza', IMZA_IDS = [2001, 2002, 2003, ...Array.from({ length: 30 }, (_, i) => 2010 + i)];
-let imzaBitis = 0, imzaTahmin = false;
+   Gerçek bitiş tarihi paketteki imzadan okunur (ImzaPlugin); okunamazsa ilk açılıştan 7 gün sayılır.
+   SideStore'un Refresh All'ı uygulamayı yeniden kurmaz, telefona yeni imza profili yükler; paketteki imza eski kalır.
+   Bu yüzden kullanıcı "Yeniledim"e basınca o andan 7 gün sayılır (hangisi daha geçse o geçerli). */
+const IMZA = KEY + '-imza', IMZA_YEN = KEY + '-imza-yenilendi', IMZA_IDS = [2001, 2002, 2003, ...Array.from({ length: 30 }, (_, i) => 2010 + i)];
+let imzaBitis = 0, imzaTahmin = false, imzaElle = false;
 async function imzaYukle() {
   if (!NATIVE) return;
   let t = 0;
@@ -2812,6 +2821,10 @@ async function imzaYukle() {
     try { first = +localStorage.getItem(IMZA) || 0; if (!first) localStorage.setItem(IMZA, first = Date.now()); } catch (e) { first = Date.now(); }
     t = first + 7 * 864e5;
   }
+  let yen = 0;
+  try { yen = +localStorage.getItem(IMZA_YEN) || 0; } catch (e) {}
+  imzaElle = yen + 7 * 864e5 > t;
+  if (imzaElle) t = yen + 7 * 864e5;
   const changed = t !== imzaBitis;
   imzaBitis = t;
   imzaBarDraw();
@@ -2856,11 +2869,12 @@ function imzaCard(urgentOnly) {
   const tarih = new Date(imzaBitis).toLocaleString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
   return `<div class="card" id="imzaCard" style="${urgent ? 'border-color:var(--exp)' : ''}">
     <div class="krow"><div style="flex:1"><b style="font-size:16px">Uygulama süresi</b>
-      <div class="muted" style="font-size:13px">Son gün: ${esc(tarih)}${imzaTahmin ? ' (tahmini)' : ''}</div></div>
+      <div class="muted" style="font-size:13px">Son gün: ${esc(tarih)}${imzaElle ? ' (son yenilemeye göre)' : imzaTahmin ? ' (tahmini)' : ''}</div></div>
       <b class="num ${urgent ? 'exp' : ''}" style="font-size:16px;white-space:nowrap">${kalan}</b></div>
     ${urgent || !urgentOnly ? `<ol class="muted" style="font-size:13px;margin:10px 0 0;padding-left:20px;line-height:1.6">
       <li><b>LocalDevVPN</b>'i aç ve bağlan.</li><li><b>SideStore</b> → <b>My Apps</b> → <b>Refresh All</b>.</li>
-      <li>Bitince buraya dön; süre yeniden 7 gün olur.</li></ol>
+      <li>Bitince buraya dön ve <b>SideStore'da yeniledim</b>'e bas; süre yeniden 7 gün olur.</li></ol>
+      <button type="button" class="btn primary" data-action="imza-yeniledim" style="margin-top:10px">SideStore'da yeniledim</button>
       <p class="muted" style="font-size:12px;margin:8px 0 0">2 gün kala ve son 24 saatte her saat başı bildirim gelir; son 2 günde her ekranın üstünde kırmızı uyarı çıkar. Ana ekrana ya da kilit ekranına <b>Kisisel Hesap</b> widget'ını ekleyerek kalan süreyi hep görebilirsin.</p>` : ''}
   </div>`;
 }
