@@ -785,7 +785,7 @@ function vOzet() {
     <button class="btn sm" data-action="tab" data-tab="ayarlar">Ayarlar</button>
   </div>` : '';
 
-  return warn + `
+  return imzaCard(true) + warn + `
   <div class="card">
     <div class="muted" style="font-size:13px">Net servet (${D})</div>
     <div class="big num ${total < 0 ? 'exp' : ''}">${fmt(total, D)}</div>
@@ -1717,6 +1717,9 @@ const onScroll = () => document.body.classList.toggle('scrolled', scrollY > 34);
 addEventListener('scroll', onScroll, { passive: true });
 
 function vDaha() {
+  return imzaCard(false) + vDahaList();
+}
+function vDahaList() {
   const val = { kalk: kalkOn() ? 'Açık' : 'Kapalı', hesaplar: db.accounts.length, kategoriler: db.categories.length, silinenler: db.trash.length || '', ayarlar: '' };
   return MORE.map(g => `<div class="group">${g.map(([k, l, c]) => `<button class="gitem" data-action="tab" data-tab="${k}">
     <span class="gi" style="background:${c}">${svg(k)}</span>
@@ -2737,7 +2740,7 @@ function kalkSlots() {
 const natBase = () => ({ title: 'Kalk biraz 🧍', body: `${K.every} dakikadır oturuyorsun. Kalk, birkaç adım yürü.`, sound: `kalk-${K.sound}.wav` });
 async function nativeSchedule() {
   try {
-    const pend = (await LN('getPending')).notifications || [];
+    const pend = ((await LN('getPending')).notifications || []).filter(n => +n.id < 2000); // 2000+: imza hatırlatmaları
     if (pend.length) await LN('cancel', { notifications: pend.map(n => ({ id: +n.id })) });
     natRolling = false;
     if (!K.on || !K.days.length) return;
@@ -2766,6 +2769,72 @@ if (NATIVE) {
     if (ui.tab === 'kalk') render();
   });
   nativeScheduleSoon();
+}
+
+/* ---------- SideStore imza süresi (yalnız iPhone uygulamasında) ----------
+   Ücretsiz Apple ID ile imza 7 gün geçerli; dolarsa uygulama açılmaz, SideStore'dan yenilemek gerekir.
+   Gerçek bitiş tarihi paketteki imzadan okunur (ImzaPlugin); okunamazsa ilk açılıştan 7 gün sayılır. */
+const IMZA = KEY + '-imza', IMZA_IDS = [2001, 2002, 2003];
+let imzaBitis = 0, imzaTahmin = false;
+async function imzaYukle() {
+  if (!NATIVE) return;
+  let t = 0;
+  try { t = +(await Capacitor.nativePromise('Imza', 'bitis')).bitis || 0; } catch (e) {}
+  imzaTahmin = !t;
+  if (!t) {
+    let first = 0;
+    try { first = +localStorage.getItem(IMZA) || 0; if (!first) localStorage.setItem(IMZA, first = Date.now()); } catch (e) { first = Date.now(); }
+    t = first + 7 * 864e5;
+  }
+  const changed = t !== imzaBitis;
+  imzaBitis = t;
+  if (!changed) return;
+  imzaPlanla();
+  if (['daha', 'ozet'].includes(ui.tab) && !document.querySelector('dialog[open]')) render();
+}
+async function imzaPlanla() {
+  try {
+    await LN('cancel', { notifications: IMZA_IDS.map(id => ({ id })) });
+    // Son hatırlatma bitişten 3 saat önce; gece yarısıyla sabah 8 arasına düşerse önceki akşam 20:00.
+    const b = imzaBitis, now = Date.now(), sekiz = new Date(b);
+    sekiz.setHours(8, 0, 0, 0);
+    let son = b - 3 * 36e5;
+    if (son < sekiz.getTime()) { const a = new Date(b); a.setDate(a.getDate() - 1); a.setHours(20, 0, 0, 0); son = a.getTime(); }
+    const sonNe = `${ymd(new Date(son)) === ymd(new Date(b)) ? 'bugün' : 'yarın'} saat ${hhmm(b)} olunca`;
+    const list = [[2001, b - 2 * 864e5, '2 gün sonra'], [2002, b - 864e5, 'yarın bu saatte'], [2003, son, sonNe]]
+      .filter(([, at]) => at > now + 60e3)
+      .map(([id, at, ne]) => ({ id, title: 'SideStore yenilemesi 📲', sound: 'kalk-zil.wav', schedule: { at: new Date(at) },
+        body: `Uygulamanın süresi ${ne} doluyor. SideStore'u aç → My Apps → Refresh All.` }));
+    if (list.length) await LN('schedule', { notifications: list });
+  } catch (e) {}
+}
+function imzaCard(urgentOnly) {
+  if (!NATIVE || !imzaBitis) return '';
+  const left = imzaBitis - Date.now(), urgent = left < 2 * 864e5;
+  if (urgentOnly && !urgent) return '';
+  const d = Math.floor(left / 864e5), h = Math.floor(left % 864e5 / 36e5);
+  const kalan = left <= 0 ? 'Süre doldu' : d ? `${d} gün ${h ? h + ' saat ' : ''}kaldı` : `${Math.max(1, h)} saat kaldı`;
+  const tarih = new Date(imzaBitis).toLocaleString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+  return `<div class="card" id="imzaCard" style="${urgent ? 'border-color:var(--exp)' : ''}">
+    <div class="krow"><div style="flex:1"><b style="font-size:16px">Uygulama süresi</b>
+      <div class="muted" style="font-size:13px">Son gün: ${esc(tarih)}${imzaTahmin ? ' (tahmini)' : ''}</div></div>
+      <b class="num ${urgent ? 'exp' : ''}" style="font-size:16px;white-space:nowrap">${kalan}</b></div>
+    ${urgent || !urgentOnly ? `<ol class="muted" style="font-size:13px;margin:10px 0 0;padding-left:20px;line-height:1.6">
+      <li><b>LocalDevVPN</b>'i aç ve bağlan.</li><li><b>SideStore</b> → <b>My Apps</b> → <b>Refresh All</b>.</li>
+      <li>Bitince buraya dön; süre yeniden 7 gün olur.</li></ol>
+      <p class="muted" style="font-size:12px;margin:8px 0 0">Bitmeden 2 gün, 1 gün önce ve son gün bildirim gelir.</p>` : ''}
+  </div>`;
+}
+if (NATIVE) {
+  // İmza hatırlatmasına basınca süre kartının olduğu ekran açılır.
+  Capacitor.addListener('LocalNotifications', 'localNotificationActionPerformed', a => {
+    const id = +(a && a.notification && a.notification.id);
+    if (!IMZA_IDS.includes(id)) return;
+    ui.tab = 'daha'; render();
+    const c = $('#imzaCard'); if (c) c.scrollIntoView({ block: 'center' });
+  });
+  imzaYukle();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) imzaYukle(); });
 }
 
 function vKalk() {

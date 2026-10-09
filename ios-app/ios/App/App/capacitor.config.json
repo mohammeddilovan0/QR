@@ -7,6 +7,7 @@
 		"scrollEnabled": true
 	},
 	"packageClassList": [
-		"LocalNotificationsPlugin"
+		"LocalNotificationsPlugin",
+		"ImzaPlugin"
 	]
 }
