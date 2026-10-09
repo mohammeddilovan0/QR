@@ -25,7 +25,9 @@ jobs:
           xcodebuild -project App.xcodeproj -scheme App -configuration Release -sdk iphoneos \
             -destination 'generic/platform=iOS' -derivedDataPath build \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build | tail -30
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build > build.log 2>&1 \
+            || { grep -E "(error|warning: .*unavailable):" build.log | sort -u | head -40; tail -30 build.log; exit 1; }
+          tail -5 build.log
       - name: .ipa oluştur
         run: |
           mkdir Payload

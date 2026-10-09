@@ -78,7 +78,7 @@ struct ImzaWidgetView: View {
                 AccessoryWidgetBackground()
                 VStack(spacing: 0) {
                     Image(systemName: acil ? "exclamationmark.arrow.circlepath" : "arrow.triangle.2.circlepath")
-                    Text(b.map { left >= 86400 ? "\(Int(left / 86400))g" : "\(max(0, Int(left / 3600)))s" } ?? "?")
+                    Text(b == nil ? "?" : left >= 86400 ? "\(Int(left / 86400))g" : "\(max(0, Int(left / 3600)))s")
                         .font(.system(size: 14, weight: .bold))
                 }
             }
@@ -102,7 +102,6 @@ struct ImzaWidgetView: View {
             }
             .foregroundColor(.white)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            .padding(acil ? 0 : 0)
             .arkaPlan(acil ? kirmizi : yesil)
         }
     }
