@@ -2831,7 +2831,12 @@ async function canliKontrol() {
   canliSoruyor = false;
   if (!ok) return;
   try { await Capacitor.nativePromise('Imza', 'canliBaslat', { bitis: imzaBitis }); toast('Sayaç kilit ekranında'); }
-  catch (e) { toast('Sayaç başlatılamadı: ' + (e.message || e)); }
+  catch (e) {
+    const m = String(e.message || e);
+    toast(/denied/i.test(m)
+      ? 'iPhone kilit ekranı sayacına izin vermedi. Ayarlar → Kisisel Hesap → Live Activities’i kapatıp aç, sonra telefonu yeniden başlat.'
+      : 'Sayaç başlatılamadı: ' + m);
+  }
 }
 /* Son 2 günde her ekranın en üstünde kırmızı şerit; dokununca süre kartı açılır. */
 function imzaBarDraw() {
