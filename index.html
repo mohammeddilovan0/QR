@@ -328,6 +328,9 @@ dialog.sheet{overflow-x:hidden;touch-action:pan-y}
 .snd.sel .ck{visibility:visible}
 .snd:active{background:var(--soft)}
 .kban{position:fixed;inset:auto;top:calc(10px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);margin:0;width:min(420px,calc(100vw - 24px));background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:16px;padding:14px 16px;box-shadow:0 10px 30px rgba(0,0,0,.25);display:none;align-items:center;gap:12px;z-index:30}
+.imzabar{position:sticky;top:calc(48px + env(safe-area-inset-top));z-index:9;display:flex;align-items:center;gap:8px;width:100%;margin:4px 0 6px;padding:11px 14px;border:0;border-radius:12px;background:#d93025;color:#fff;font:inherit;font-size:14px;font-weight:600;text-align:left;box-shadow:0 4px 14px rgba(217,48,37,.35)}
+.imzabar[hidden]{display:none}
+.imzabar span{flex:1}
 .kban.on{display:flex;animation:kbIn .3s ease-out}
 .kban b{display:block;font-size:16px}
 @keyframes kbIn{from{opacity:0;transform:translate(-50%,-16px)}to{opacity:1;transform:translate(-50%,0)}}
@@ -340,6 +343,7 @@ dialog.sheet{overflow-x:hidden;touch-action:pan-y}
   <div class="nr" id="navR"></div>
 </div>
 <div class="wrap">
+  <button type="button" class="imzabar" id="imzaBar" data-action="imza-ac" hidden></button>
   <div class="lt">
     <h1 id="ltitle">Özet</h1>
     <div class="seg" id="disp" title="Toplamlar hangi para biriminde gösterilsin">
@@ -785,7 +789,7 @@ function vOzet() {
     <button class="btn sm" data-action="tab" data-tab="ayarlar">Ayarlar</button>
   </div>` : '';
 
-  return imzaCard(true) + warn + `
+  return warn + `
   <div class="card">
     <div class="muted" style="font-size:13px">Net servet (${D})</div>
     <div class="big num ${total < 0 ? 'exp' : ''}">${fmt(total, D)}</div>
@@ -2085,6 +2089,7 @@ document.addEventListener('click', e => {
   const d = el.dataset;
   switch (d.action) {
     case 'tab': ui.tab = d.tab; render(); scrollTo(0, 0); onScroll(); break;
+    case 'imza-ac': imzaAc(); onScroll(); break;
     case 'nav': {
       // Alt menü: Piyasa en son bakılan ekrana (Kur/Altın) döner; açık sekmeye tekrar basınca en başa döner.
       const t = d.tab === 'piyasa' ? (ui.lastMkt || 'kur') : d.tab;
@@ -2788,6 +2793,7 @@ async function imzaYukle() {
   }
   const changed = t !== imzaBitis;
   imzaBitis = t;
+  imzaBarDraw();
   if (!changed) return;
   imzaPlanla();
   if (['daha', 'ozet'].includes(ui.tab) && !document.querySelector('dialog[open]')) render();
@@ -2808,6 +2814,17 @@ async function imzaPlanla() {
     if (list.length) await LN('schedule', { notifications: list });
   } catch (e) {}
 }
+/* Son 2 günde her ekranın en üstünde kırmızı şerit; dokununca süre kartı açılır. */
+function imzaBarDraw() {
+  const el = $('#imzaBar'); if (!el) return;
+  const left = imzaBitis - Date.now(), show = NATIVE && imzaBitis && left < 2 * 864e5;
+  el.hidden = !show;
+  if (!show) return;
+  const d = Math.floor(left / 864e5), h = Math.floor(left % 864e5 / 36e5);
+  const ne = left <= 0 ? 'Uygulamanın süresi doldu' : `Uygulamanın süresi ${d ? `${d} gün ${h} saat` : `${Math.max(1, h)} saat`} sonra doluyor`;
+  el.innerHTML = `<span>⚠️ ${ne}. SideStore'dan yenile.</span><b>›</b>`;
+}
+setInterval(imzaBarDraw, 60e3);
 function imzaCard(urgentOnly) {
   if (!NATIVE || !imzaBitis) return '';
   const left = imzaBitis - Date.now(), urgent = left < 2 * 864e5;
@@ -2822,16 +2839,18 @@ function imzaCard(urgentOnly) {
     ${urgent || !urgentOnly ? `<ol class="muted" style="font-size:13px;margin:10px 0 0;padding-left:20px;line-height:1.6">
       <li><b>LocalDevVPN</b>'i aç ve bağlan.</li><li><b>SideStore</b> → <b>My Apps</b> → <b>Refresh All</b>.</li>
       <li>Bitince buraya dön; süre yeniden 7 gün olur.</li></ol>
-      <p class="muted" style="font-size:12px;margin:8px 0 0">Bitmeden 2 gün, 1 gün önce ve son gün bildirim gelir.</p>` : ''}
+      <p class="muted" style="font-size:12px;margin:8px 0 0">Bitmeden 2 gün, 1 gün önce ve son gün bildirim gelir; son 2 günde her ekranın üstünde kırmızı uyarı çıkar.</p>` : ''}
   </div>`;
+}
+function imzaAc() {
+  ui.tab = 'daha'; render(); scrollTo(0, 0);
+  const c = $('#imzaCard'); if (c) c.scrollIntoView({ block: 'center' });
 }
 if (NATIVE) {
   // İmza hatırlatmasına basınca süre kartının olduğu ekran açılır.
   Capacitor.addListener('LocalNotifications', 'localNotificationActionPerformed', a => {
     const id = +(a && a.notification && a.notification.id);
-    if (!IMZA_IDS.includes(id)) return;
-    ui.tab = 'daha'; render();
-    const c = $('#imzaCard'); if (c) c.scrollIntoView({ block: 'center' });
+    if (IMZA_IDS.includes(id)) imzaAc();
   });
   imzaYukle();
   document.addEventListener('visibilitychange', () => { if (!document.hidden) imzaYukle(); });
