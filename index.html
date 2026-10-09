@@ -362,6 +362,10 @@ dialog.sheet{overflow-x:hidden;touch-action:pan-y}
 .rpri{font-weight:800}.rpri.p1{color:#3b82c4}.rpri.p2{color:#e8a33d}.rpri.p3{color:#e5484d}
 .rbadge{background:#e5484d;color:#fff;border-radius:999px;font-size:12px;font-weight:700;padding:1px 8px}
 .lnk{color:var(--accent);cursor:pointer;font-weight:600;font-size:14px;text-decoration:none}
+.rnewlist{display:flex;gap:8px;margin-top:10px;align-items:center}
+.rnewlist input[type=color],.rlrow input[type=color]{width:42px;height:38px;flex:none;padding:2px}
+.rnewlist [data-rem-newname]{flex:1}
+.rlrow{gap:8px;padding:8px 0}.rlrow [data-rem-ln]{flex:1}.rlrow .rldel{min-width:44px}
 .rtitle{font-size:17px!important;font-weight:600;padding:11px 12px}
 @keyframes kbIn{from{opacity:0;transform:translate(-50%,-16px)}to{opacity:1;transform:translate(-50%,0)}}
 </style>
@@ -473,6 +477,9 @@ const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); r
 const daysBetween = (a, b) => Math.round((parse(b) - parse(a)) / 864e5);
 
 /* ---------- veri ---------- */
+/* Hatırlatıcı listelerinin başlangıç hâli; kullanıcı ekler, yeniden adlandırır, siler (Genel silinmez). */
+const REM_LIST_DEF = [['genel', 'Genel', '#8e8e93'], ['odeme', 'Ödemeler', '#30a46c'], ['is', 'İş', '#3b82c4'], ['ev', 'Ev', '#e8a33d'],
+  ['saglik', 'Sağlık', '#e5484d'], ['alisveris', 'Alışveriş', '#9b59b6'], ['kisisel', 'Kişisel', '#14b8a6']].map(([id, name, color]) => ({ id, name, color }));
 function seed() {
   const c = (name, type, i) => ({ id: uid(), name, type, color: PALETTE[i % PALETTE.length] });
   return {
@@ -495,6 +502,7 @@ function seed() {
     tx: [],
     debts: [],
     reminders: [],
+    remLists: JSON.parse(JSON.stringify(REM_LIST_DEF)),
     trash: [],
     settings: { display: 'IQD', weekStart: 1, lastBackup: '', rateCity: 'erbil', bridge: DEF_BRIDGE, goldCity: 'erbil' },
   };
@@ -504,6 +512,10 @@ function norm(d) {
   if (!Array.isArray(d.debts)) d.debts = [];
   if (!Array.isArray(d.trash)) d.trash = [];
   if (!Array.isArray(d.reminders)) d.reminders = [];
+  if (!Array.isArray(d.remLists) || !d.remLists.length) d.remLists = JSON.parse(JSON.stringify(REM_LIST_DEF));
+  d.remLists = d.remLists.filter(l => l && l.id && typeof l.name === 'string' && l.name.trim())
+    .map(l => ({ id: String(l.id), name: l.name.trim().slice(0, 30), color: /^#[0-9a-f]{6}$/i.test(l.color) ? l.color : '#8e8e93' }));
+  if (!d.remLists.some(l => l.id === 'genel')) d.remLists.unshift(Object.assign({}, REM_LIST_DEF[0]));
   d.reminders = d.reminders.filter(r => r && r.id && typeof r.title === 'string' && (!r.date || /^\d{4}-\d\d-\d\d$/.test(r.date)));
   d.trash = d.trash.filter(x => x && x.id && x.kind && x.data && typeof x.data === 'object');
   d.debts.forEach(x => {
@@ -2941,8 +2953,6 @@ if (NATIVE) {
    Tekrarlayan hatırlatıcı tamamlanınca bir sonraki tarihe geçer; aylık/yıllıkta ilk günü (dom) korunur (31 → 30/28 → 31).
    iPhone uygulamasında en yakın REM_MAX uyarı yerel bildirim olarak kurulur (kimlik 3000+, Tamamlandı / Ertele düğmeli);
    web'de uygulama açıkken uyarır. */
-const REM_LISTS = [['genel', 'Genel', '#8e8e93'], ['odeme', 'Ödemeler', '#30a46c'], ['is', 'İş', '#3b82c4'], ['ev', 'Ev', '#e8a33d'],
-  ['saglik', 'Sağlık', '#e5484d'], ['alisveris', 'Alışveriş', '#9b59b6'], ['kisisel', 'Kişisel', '#14b8a6']];
 const REM_PRI = [[0, 'Yok'], [1, 'Düşük'], [2, 'Orta'], [3, 'Yüksek']];
 const REM_ALERT = [[0, 'Tam zamanında'], [5, '5 dk önce'], [15, '15 dk önce'], [30, '30 dk önce'], [60, '1 saat önce'],
   [120, '2 saat önce'], [1440, '1 gün önce'], [2880, '2 gün önce'], [10080, '1 hafta önce']];
@@ -2960,7 +2970,9 @@ const REM_TILE_ICON = {
 const REMDAY = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short' });
 const REMWD = new Intl.DateTimeFormat('tr-TR', { weekday: 'long' });
 const remGet = id => db.reminders.find(r => r.id === id);
-const remList = k => REM_LISTS.find(l => l[0] === k) || REM_LISTS[0];
+/* [kimlik, ad, renk]; silinmiş listedeki hatırlatıcı Genel'de görünür. */
+const remLists = () => db.remLists.map(l => [l.id, l.name, l.color]);
+const remList = k => { const l = db.remLists.find(x => x.id === k) || db.remLists.find(x => x.id === 'genel') || REM_LIST_DEF[0]; return [l.id, l.name, l.color]; };
 const remHour = () => hm(db.settings.remHour) !== null ? db.settings.remHour : '09:00';
 const remSound = () => SOUNDS.some(s => s[0] === db.settings.remSound) ? db.settings.remSound : 'zil';
 /* Tarih + saat (saatsizse ayardaki saat) → zaman damgası. */
@@ -3022,7 +3034,7 @@ const remToday = () => remActive().filter(r => r.date && remEffDate(r) <= today(
 const remSort = (a, b) => (remEffDate(a) || '9999').localeCompare(remEffDate(b) || '9999') || remEff(a) - remEff(b) || (b.pri || 0) - (a.pri || 0) || a.ts - b.ts;
 function remMatches(r) {
   const f = ui.remF || 'bugun', q = (ui.remQ || '').trim().toLocaleLowerCase('tr');
-  if (ui.remL && r.list !== ui.remL) return false;
+  if (ui.remL && remList(r.list)[0] !== ui.remL) return false;
   if (q && !`${r.title} ${r.note || ''} ${remList(r.list)[1]}`.toLocaleLowerCase('tr').includes(q)) return false;
   if (f === 'tamam') return r.done;
   if (r.done) return false;
@@ -3060,7 +3072,7 @@ function remGroups(list) {
   return g.filter(x => x[1].length);
 }
 function vHat() {
-  const f = ui.remF || 'bugun', used = REM_LISTS.filter(l => db.reminders.some(r => r.list === l[0]));
+  const f = ui.remF || 'bugun', used = remLists().filter(l => db.reminders.some(r => remList(r.list)[0] === l[0]));
   const list = db.reminders.filter(remMatches).sort(f === 'tamam' ? (a, b) => (b.doneAt || 0) - (a.doneAt || 0) : remSort);
   const doneN = db.reminders.filter(r => r.done).length;
   const tiles = REM_FILTERS.map(([k, l, c, ic]) => `<button class="rtile ${f === k ? 'sel' : ''}" data-action="rem-f" data-v="${k}">
@@ -3081,7 +3093,7 @@ function vHat() {
   <div class="rsearch"><input data-rem-q placeholder="Hatırlatıcılarda ara…" value="${esc(ui.remQ || '')}" autocomplete="off">
     <button class="btn primary" data-action="rem-new">+ Yeni</button></div>
   ${used.length > 1 ? `<div class="chips rlists"><button class="chip pick ${!ui.remL ? 'sel' : ''}" data-action="rem-l" data-v="">Tüm listeler</button>${used.map(([k, l, c]) =>
-    `<button class="chip pick ${ui.remL === k ? 'sel' : ''}" data-action="rem-l" data-v="${k}"><span class="dot" style="background:${c}"></span>${l}</button>`).join('')}</div>` : ''}
+    `<button class="chip pick ${ui.remL === k ? 'sel' : ''}" data-action="rem-l" data-v="${k}"><span class="dot" style="background:${c}"></span>${esc(l)}</button>`).join('')}</div>` : ''}
   <div id="remBody">${body}</div>
   <p class="muted" style="font-size:12px;margin:4px 4px 14px">Tamamlamak için daireye dokunun; ertelemek, atlamak veya silmek için sola kaydırın.
     ${f !== 'tamam' && doneN ? `<a class="lnk" data-action="rem-f" data-v="tamam">Tamamlananlar (${doneN})</a>` : ''}</p>
@@ -3093,7 +3105,22 @@ function vHat() {
       ? `En yakın ${REM_MAX} uyarı telefona kurulur; bildirimdeki <b>Tamamlandı</b> ve <b>10 dk ertele</b> düğmeleri de çalışır.`
       : 'Web sürümünde uyarılar uygulama açıkken gelir. Kapalıyken bildirim için iPhone uygulamasını kullanın.'}</p>
     ${NATIVE ? '<button class="btn" data-action="rem-test" style="margin-top:10px">Deneme bildirimi gönder</button>' : ''}
+  </div>
+  <div class="card">
+    <h2>Listeler</h2>
+    ${db.remLists.map(l => { const n = db.reminders.filter(r => !r.done && remList(r.list)[0] === l.id).length; return `<div class="list-row rlrow">
+      <input type="color" data-rem-lc="${l.id}" value="${l.color}" aria-label="Renk">
+      <input data-rem-ln="${l.id}" value="${esc(l.name)}" maxlength="30" autocomplete="off" aria-label="Liste adı">
+      <span class="muted num" style="min-width:18px;text-align:right">${n || ''}</span>
+      ${l.id === 'genel' ? '<span class="rldel"></span>' : `<button class="btn sm danger rldel" data-action="rem-list-del" data-id="${l.id}">Sil</button>`}</div>`; }).join('')}
+    <button class="btn" data-action="rem-list-create" style="margin-top:10px">+ Liste ekle</button>
+    <p class="muted" style="font-size:12px;margin:8px 0 0">Adına dokunup değiştirebilir, renge dokunup rengini seçebilirsiniz. Silinen listedeki hatırlatıcılar Genel'e geçer.</p>
   </div>`;
+}
+function remListAdd(name, color) {
+  const l = { id: uid(), name: name.trim().slice(0, 30), color: /^#[0-9a-f]{6}$/i.test(color) ? color : PALETTE[db.remLists.length % PALETTE.length] };
+  db.remLists.push(l); save();
+  return l;
 }
 /* Özet ekranındaki "Bugün" kartı: gecikmiş ve bugünkü hatırlatıcılar. */
 function remOzet() {
@@ -3137,7 +3164,9 @@ function remSheet(r, preset) {
       <div><label>Öncelik</label><input type="hidden" name="pri" value="${v.pri || 0}">
         <div class="seg mseg" style="margin:4px 0 0">${REM_PRI.map(([k, l]) => `<button type="button" class="${(v.pri || 0) === k ? 'on' : ''}" data-action="rem-pri" data-v="${k}">${l}</button>`).join('')}</div></div>
       <div><label>Liste</label><input type="hidden" name="list" value="${v.list}">
-        <div class="chips rlists">${REM_LISTS.map(([k, l, c]) => `<button type="button" class="chip pick ${v.list === k ? 'sel' : ''}" data-action="rem-list" data-v="${k}"><span class="dot" style="background:${c}"></span>${l}</button>`).join('')}</div></div>
+        <div class="chips rlists">${remLists().map(([k, l, c]) => `<button type="button" class="chip pick ${remList(v.list)[0] === k ? 'sel' : ''}" data-action="rem-list" data-v="${k}"><span class="dot" style="background:${c}"></span>${esc(l)}</button>`).join('')}<button type="button" class="chip pick" data-action="rem-list-new">+ Yeni liste</button></div>
+        <div class="rnewlist hide" data-rem-newlist><input type="color" data-rem-newcolor value="${PALETTE[db.remLists.length % PALETTE.length]}" aria-label="Renk">
+          <input data-rem-newname maxlength="30" placeholder="Liste adı (ör. Okul)" autocomplete="off"><button type="button" class="btn primary" data-action="rem-list-add">Ekle</button></div></div>
       <details ${v.amount ? 'open' : ''}><summary>Ödeme bilgisi <span class="muted" style="font-weight:400">(isteğe bağlı)</span></summary>
         <div style="display:grid;gap:12px;grid-template-columns:minmax(0,1fr) minmax(0,1fr);padding-bottom:6px">
           <label>Tutar<input name="amount" inputmode="decimal" autocomplete="off" placeholder="0" value="${v.amount ? esc(fmtIn(v.amount, 'any')) : ''}"></label>
@@ -3412,11 +3441,56 @@ document.addEventListener('click', e => {
       if (!f) break;
       f.elements.pri.value = d.v;
       f.querySelectorAll('[data-action="rem-pri"]').forEach(b => b.classList.toggle('on', b === el)); break;
+    case 'rem-list-new': {
+      const box = f && f.querySelector('[data-rem-newlist]'); if (!box) break;
+      box.classList.toggle('hide'); if (!box.classList.contains('hide')) box.querySelector('[data-rem-newname]').focus();
+      break;
+    }
+    case 'rem-list-add': {
+      const box = f && f.querySelector('[data-rem-newlist]'), inp = box && box.querySelector('[data-rem-newname]');
+      if (!inp) break;
+      const name = inp.value.trim();
+      if (!name) { toast('Liste adı yazın.'); inp.focus(); break; }
+      if (db.remLists.some(l => l.name.toLocaleLowerCase('tr') === name.toLocaleLowerCase('tr'))) { toast('Bu adda bir liste var.'); inp.focus(); break; }
+      const l = remListAdd(name, box.querySelector('[data-rem-newcolor]').value);
+      const chip = document.createElement('button');
+      chip.type = 'button'; chip.className = 'chip pick'; chip.dataset.action = 'rem-list'; chip.dataset.v = l.id;
+      chip.innerHTML = `<span class="dot" style="background:${l.color}"></span>${esc(l.name)}`;
+      f.querySelector('[data-action="rem-list-new"]').before(chip);
+      chip.click();
+      inp.value = ''; box.classList.add('hide');
+      toast(`"${l.name}" listesi eklendi`);
+      break;
+    }
+    case 'rem-list-create': {
+      let n = 1; while (db.remLists.some(l => l.name === `Yeni liste${n > 1 ? ' ' + n : ''}`)) n++;
+      const l = remListAdd(`Yeni liste${n > 1 ? ' ' + n : ''}`);
+      render();
+      const inp = document.querySelector(`[data-rem-ln="${l.id}"]`); if (inp) { inp.focus(); inp.select(); }
+      break;
+    }
+    case 'rem-list-del': {
+      const l = db.remLists.find(x => x.id === d.id); if (!l || l.id === 'genel') break;
+      const n = db.reminders.filter(r => r.list === l.id).length;
+      ask({ msg: `"${l.name}" listesi silinsin mi?${n ? ` İçindeki ${n} hatırlatıcı Genel listesine geçer.` : ''}`, ok: 'Listeyi sil' }).then(ok => {
+        if (!ok) return;
+        db.reminders.forEach(r => { if (r.list === l.id) r.list = 'genel'; });
+        db.remLists = db.remLists.filter(x => x.id !== l.id);
+        if (ui.remL === l.id) ui.remL = '';
+        save(); render(); toast('Liste silindi');
+      });
+      break;
+    }
     case 'rem-list':
       if (!f) break;
       f.elements.list.value = d.v;
       f.querySelectorAll('[data-action="rem-list"]').forEach(b => b.classList.toggle('sel', b === el)); break;
   }
+});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || !e.target.dataset) return;
+  if ('remNewname' in e.target.dataset) { e.preventDefault(); e.target.closest('[data-rem-newlist]').querySelector('[data-action="rem-list-add"]').click(); }
+  else if ('remLn' in e.target.dataset) { e.preventDefault(); e.target.blur(); }
 });
 document.addEventListener('input', e => {
   if (e.target.dataset && 'remQ' in e.target.dataset) {
@@ -3429,6 +3503,15 @@ document.addEventListener('input', e => {
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.closest && el.closest('[data-form="rem"]') && (el.name === 'rep' || el.name === 'date')) { remSync(el.form); return; }
+  if (el.dataset && (el.dataset.remLn || el.dataset.remLc)) {
+    const l = db.remLists.find(x => x.id === (el.dataset.remLn || el.dataset.remLc)); if (!l) return;
+    if (el.dataset.remLn) {
+      const name = el.value.trim().slice(0, 30);
+      if (!name) { el.value = l.name; return; }
+      l.name = name;
+    } else if (/^#[0-9a-f]{6}$/i.test(el.value)) l.color = el.value;
+    save(); render(); toast('Liste güncellendi'); return;
+  }
   const k = el.dataset && el.dataset.remSet;
   if (!k) return;
   if (k === 'remHour' && hm(el.value) === null) return;
