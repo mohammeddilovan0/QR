@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import Capacitor
 import WidgetKit
 #if canImport(ActivityKit)
@@ -15,7 +16,8 @@ public class ImzaPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "bitis", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "canliDurum", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "canliBaslat", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "canliBitir", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "canliBitir", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "teshis", returnType: CAPPluginReturnPromise)
     ]
 
     @objc func bitis(_ call: CAPPluginCall) {
@@ -29,15 +31,18 @@ public class ImzaPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     static func expiration() -> Date? {
-        guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
-              let data = try? Data(contentsOf: url),
+        profil(Bundle.main.bundleURL)?["ExpirationDate"] as? Date
+    }
+
+    static func profil(_ bundleURL: URL) -> [String: Any]? {
+        let url = bundleURL.appendingPathComponent("embedded.mobileprovision")
+        guard let data = try? Data(contentsOf: url),
               let text = String(data: data, encoding: .isoLatin1),
               let start = text.range(of: "<?xml"),
               let end = text.range(of: "</plist>"),
               let xml = String(text[start.lowerBound..<end.upperBound]).data(using: .isoLatin1)
         else { return nil }
-        let plist = (try? PropertyListSerialization.propertyList(from: xml, options: [], format: nil)) as? [String: Any]
-        return plist?["ExpirationDate"] as? Date
+        return (try? PropertyListSerialization.propertyList(from: xml, options: [], format: nil)) as? [String: Any]
     }
 
     // MARK: Canlı sayaç (Live Activity, son 24 saat)
@@ -59,7 +64,7 @@ public class ImzaPlugin: CAPPlugin, CAPBridgedPlugin {
             guard let ms = call.getDouble("bitis") else { call.reject("bitis yok"); return }
             guard ActivityAuthorizationInfo().areActivitiesEnabled else { call.reject("kapali"); return }
             let bitis = Date(timeIntervalSince1970: ms / 1000)
-            Task {
+            Task { @MainActor in
                 for a in Activity<ImzaAttributes>.activities { await a.end(nil, dismissalPolicy: .immediate) }
                 do {
                     let content = ActivityContent(state: ImzaAttributes.ContentState(bitis: bitis), staleDate: bitis)
@@ -73,6 +78,27 @@ public class ImzaPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         #endif
         call.reject("desteklenmiyor")
+    }
+
+    /// Sayaç başlamazsa sebebi görmek için: kurulu paket kimlikleri ve widget uzantısı.
+    @objc func teshis(_ call: CAPPluginCall) {
+        let main = Bundle.main
+        var uzanti: [String] = []
+        if let url = main.builtInPlugInsURL,
+           let items = try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil) {
+            for u in items {
+                let b = Bundle(url: u)
+                let nokta = (b?.infoDictionary?["NSExtension"] as? [String: Any])?["NSExtensionPointIdentifier"] as? String ?? "?"
+                let profil = (ImzaPlugin.profil(u)?["Entitlements"] as? [String: Any])?["application-identifier"] as? String ?? "profil yok"
+                uzanti.append("\(b?.bundleIdentifier ?? "?") (\(nokta)) imza: \(profil)")
+            }
+        }
+        call.resolve([
+            "app": "\(main.bundleIdentifier ?? "?") imza: \((ImzaPlugin.profil(main.bundleURL)?["Entitlements"] as? [String: Any])?["application-identifier"] as? String ?? "profil yok")",
+            "ios": UIDevice.current.systemVersion,
+            "plist": main.object(forInfoDictionaryKey: "NSSupportsLiveActivities") as? Bool ?? false,
+            "uzanti": uzanti.isEmpty ? "yok" : uzanti.joined(separator: ", ")
+        ])
     }
 
     @objc func canliBitir(_ call: CAPPluginCall) {

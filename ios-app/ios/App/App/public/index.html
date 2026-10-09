@@ -2831,7 +2831,11 @@ async function canliKontrol() {
   canliSoruyor = false;
   if (!ok) return;
   try { await Capacitor.nativePromise('Imza', 'canliBaslat', { bitis: imzaBitis }); toast('Sayaç kilit ekranında'); }
-  catch (e) { toast('Sayaç başlatılamadı: ' + (e.message || e)); }
+  catch (e) {
+    let t = {};
+    try { t = await Capacitor.nativePromise('Imza', 'teshis'); } catch (_) {}
+    tell(`${String(e.message || e)}\n\nUygulama: ${t.app || '?'}\nWidget: ${t.uzanti || '?'}\niOS ${t.ios || '?'} · plist: ${t.plist}\n\nBu ekranın görüntüsünü at, sebebini buradan bulacağım.`, 'Sayaç başlatılamadı');
+  }
 }
 /* Son 2 günde her ekranın en üstünde kırmızı şerit; dokununca süre kartı açılır. */
 function imzaBarDraw() {
