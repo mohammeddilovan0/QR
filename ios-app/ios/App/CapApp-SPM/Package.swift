@@ -12,7 +12,8 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "7.6.9"),
-        .package(name: "CapacitorLocalNotifications", path: "../../plugins/CapacitorLocalNotifications")
+        .package(name: "CapacitorLocalNotifications", path: "../../plugins/CapacitorLocalNotifications"),
+        .package(name: "KisiselImza", path: "../../plugins/KisiselImza")
     ],
     targets: [
         .target(
@@ -20,7 +21,8 @@ let package = Package(
             dependencies: [
                 .product(name: "Capacitor", package: "capacitor-swift-pm"),
                 .product(name: "Cordova", package: "capacitor-swift-pm"),
-                .product(name: "CapacitorLocalNotifications", package: "CapacitorLocalNotifications")
+                .product(name: "CapacitorLocalNotifications", package: "CapacitorLocalNotifications"),
+                .product(name: "KisiselImza", package: "KisiselImza")
             ]
         )
     ]
