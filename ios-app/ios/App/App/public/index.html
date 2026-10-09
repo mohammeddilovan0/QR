@@ -484,6 +484,11 @@ function norm(d) {
   if (!/^https:\/\/[^\s/]+\.[^\s]+$/.test(d.settings.bridge || '')) d.settings.bridge = '';
   if (!d.settings.bridge && !d.settings.bridgeOff) d.settings.bridge = DEF_BRIDGE;
   if (!['erbil', 'baghdad', 'basra'].includes(d.settings.goldCity)) d.settings.goldCity = 'erbil';
+  // Transfer ücretleri ayrı bir kalem yerine bir gider kategorisine sayılabilir; ilk seferde "commission/komisyon" varsa o seçilir.
+  if (d.settings.feeCat === undefined) {
+    const k = (d.categories || []).find(c => c.type === 'expense' && !c.parentId && /^(commission|komisyon)/i.test(c.name || ''));
+    d.settings.feeCat = k ? k.id : '';
+  }
   return clean(d);
 }
 /* Güvenlik: kimlik, tarih, renk gibi alanlar ekrana kaçışsız yazılır. Dışarıdan gelen (ör. birinin gönderdiği)
@@ -678,6 +683,8 @@ function balance(id, upto) {
 /* Harcama sayılan kısım (çıkan hesabın para biriminde): gider tutarı veya transfer ücreti. */
 const txCost = t => t.type === 'expense' ? t.amount : t.type === 'transfer' ? (t.fee || 0) : 0;
 const FEE = '__fee';
+/* Transfer ücretlerinin sayıldığı gider kategorisi (Ayarlar); seçilmemişse ayrı "Transfer ücretleri" kalemi. */
+const feeCat = () => { const c = cat(db.settings.feeCat); return c && c.type === 'expense' ? c.id : ''; };
 
 /* ---------- dönemler ---------- */
 const MONTH = new Intl.DateTimeFormat('tr-TR', { month: 'long', year: 'numeric' });
@@ -723,7 +730,7 @@ function stats(start, end) {
     const v = conv(cost, a.currency, D, rateAt(t.date));
     if (t.type !== 'income') {
       exp += v; native[a.currency] += cost;
-      const k = t.type === 'transfer' ? FEE : t.categoryId && cat(t.categoryId) ? t.categoryId : '';
+      const k = t.type === 'transfer' ? feeCat() || FEE : t.categoryId && cat(t.categoryId) ? t.categoryId : '';
       const top = k && k !== FEE ? topOf(k) : k;
       byCat[k] = (byCat[k] || 0) + v;
       byTop[top] = (byTop[top] || 0) + v;
@@ -961,7 +968,9 @@ function renderTxList() {
     if (f.cat === '__debt' && t.type !== 'debt-in' && t.type !== 'debt-out') return false;
     if (f.cat === '__opening' && t.type !== 'opening') return false;
     // Ana kategori seçiliyse alt kategorilerinin işlemleri de gelir.
-    if (f.cat && !['__transfer','__debt','__opening'].includes(f.cat) && t.categoryId !== f.cat && cat(t.categoryId)?.parentId !== f.cat) return false;
+    const fc = t.type === 'transfer' && t.fee > 0 ? feeCat() : '';
+    if (f.cat && !['__transfer','__debt','__opening'].includes(f.cat) && t.categoryId !== f.cat && cat(t.categoryId)?.parentId !== f.cat
+      && !(fc && (fc === f.cat || cat(fc)?.parentId === f.cat))) return false;
     if (f.from && t.date < f.from) return false;
     if (f.to && t.date > f.to) return false;
     if (q) {
@@ -1619,6 +1628,8 @@ function vSet() {
         <option value="1" ${db.settings.weekStart === 1 ? 'selected' : ''}>Pazartesi</option>
         <option value="6" ${db.settings.weekStart === 6 ? 'selected' : ''}>Cumartesi</option>
         <option value="0" ${db.settings.weekStart === 0 ? 'selected' : ''}>Pazar</option></select></label>
+      <label>Transfer ücretleri<select data-setting="feeCat">
+        <option value="">Ayrı göster (Transfer ücretleri)</option>${catOptions('expense', feeCat())}</select></label>
     </div>
   </div>
   <div class="card">
