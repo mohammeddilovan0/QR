@@ -11,8 +11,7 @@ public class ImzaPlugin: CAPPlugin, CAPBridgedPlugin {
     public let jsName = "Imza"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "bitis", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "pdf", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "ac", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "pdf", returnType: CAPPluginReturnPromise)
     ]
 
     @objc func bitis(_ call: CAPPluginCall) {
@@ -24,14 +23,6 @@ public class ImzaPlugin: CAPPlugin, CAPBridgedPlugin {
         let yen = UserDefaults.standard.double(forKey: "imzaYenilendi")
         if yen > 0 { r["yenilendi"] = yen * 1000 }
         call.resolve(r)
-    }
-
-    /// Başka bir uygulamayı açar (ör. shortcuts:// ile Kestirmeler).
-    @objc func ac(_ call: CAPPluginCall) {
-        guard let s = call.getString("url"), let url = URL(string: s) else { call.reject("adres yok"); return }
-        DispatchQueue.main.async {
-            UIApplication.shared.open(url) { ok in ok ? call.resolve() : call.reject("açılamadı") }
-        }
     }
 
     static func expiration() -> Date? {

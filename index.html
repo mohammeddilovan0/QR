@@ -2111,16 +2111,6 @@ document.addEventListener('click', e => {
   switch (d.action) {
     case 'tab': ui.tab = d.tab; render(); scrollTo(0, 0); onScroll(); break;
     case 'imza-ac': imzaAc(); onScroll(); break;
-    case 'imza-otomatik':
-      // iOS uygulamaların otomasyon eklemesine izin vermiyor; adımlar gösterilir, Kestirmeler açılır.
-      ask({ title: 'Otomatik yenileme', ok: "Kestirmeler'i aç", danger: false, cancel: 'Kapat', msg:
-        "Kestirmeler → Otomasyon → + → Günün Saati: her gün bir saat seç (ör. 10:00) ve Hemen Çalıştır'ı seç.\n" +
-        "Eylem ekle: SideStore → Refresh All (adı biraz farklı olabilir).\n" +
-        "Sonra eylem ekle: Kisisel Hesap → SideStore yenilendi.\n" +
-        "Yenileme olmazsa (ör. LocalDevVPN bağlı değilse) otomasyon durur, süre değişmez.\n" +
-        "SideStore'da yenileme eylemi yoksa: Otomasyon → Uygulama → SideStore → Kapatıldığında → Kisisel Hesap → SideStore yenilendi." })
-        .then(ok => { if (ok) Capacitor.nativePromise('Imza', 'ac', { url: 'shortcuts://' }).catch(() => toast("Kestirmeler açılamadı")); });
-      break;
     case 'imza-yeniledim':
       ask({ title: 'Uygulama süresi', msg: "SideStore'da Refresh All bitti mi? Süre şu andan itibaren 7 gün olarak ayarlanacak.", ok: 'Evet, yeniledim', danger: false, cancel: 'Vazgeç' }).then(ok => {
         if (!ok) return;
@@ -2884,9 +2874,7 @@ function imzaCard(urgentOnly) {
     ${urgent || !urgentOnly ? `<ol class="muted" style="font-size:13px;margin:10px 0 0;padding-left:20px;line-height:1.6">
       <li><b>LocalDevVPN</b>'i aç ve bağlan.</li><li><b>SideStore</b> → <b>My Apps</b> → <b>Refresh All</b>.</li>
       <li>Bitince buraya dön ve <b>SideStore'da yeniledim</b>'e bas; süre yeniden 7 gün olur.</li></ol>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-        <button type="button" class="btn primary" data-action="imza-yeniledim">SideStore'da yeniledim</button>
-        <button type="button" class="btn" data-action="imza-otomatik">Otomatik yenilemeyi kur</button></div>
+      <button type="button" class="btn primary" data-action="imza-yeniledim" style="margin-top:10px">SideStore'da yeniledim</button>
       <p class="muted" style="font-size:12px;margin:8px 0 0">2 gün kala ve son 24 saatte her saat başı bildirim gelir; son 2 günde her ekranın üstünde kırmızı uyarı çıkar. Ana ekrana ya da kilit ekranına <b>Kisisel Hesap</b> widget'ını ekleyerek kalan süreyi hep görebilirsin.</p>` : ''}
   </div>`;
 }
