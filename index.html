@@ -928,9 +928,18 @@ function reportHtml(kind, anchor) {
   ${kind === 'year' ? '' : `<h3>Tüm işlemler (${txs.length})</h3>
   ${txs.length ? txTable(txs) : '<p class="muted">Bu dönemde işlem yok.</p>'}`}`;
 }
-function printReport() {
-  if (typeof window.print !== 'function') { toast('Bu cihazda yazdırma/PDF desteklenmiyor.'); return; }
+async function printReport() {
   const rg = range(ui.period, ui.anchor), title = document.title;
+  if (NATIVE) {
+    // iPhone uygulamasında window.print() hiçbir şey yapmıyor; PDF'i yerel eklenti oluşturup paylaşım menüsünü açar.
+    $('#report').innerHTML = reportHtml(ui.period, ui.anchor);
+    document.body.classList.add('printing');
+    try { await Capacitor.nativePromise('Imza', 'pdf', { ad: `Hesap raporu - ${rg.label}` }); }
+    catch (e) { toast('PDF oluşturulamadı: ' + String(e.message || e)); }
+    document.body.classList.remove('printing');
+    return;
+  }
+  if (typeof window.print !== 'function') { toast('Bu cihazda yazdırma/PDF desteklenmiyor.'); return; }
   $('#report').innerHTML = reportHtml(ui.period, ui.anchor);
   document.body.classList.add('printing');
   // Bilgisayarda PDF dosyasının adı sayfa başlığından gelir.

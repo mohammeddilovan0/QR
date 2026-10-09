@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import Capacitor
 import WidgetKit
 
@@ -9,7 +10,8 @@ public class ImzaPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "ImzaPlugin"
     public let jsName = "Imza"
     public let pluginMethods: [CAPPluginMethod] = [
-        CAPPluginMethod(name: "bitis", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "bitis", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "pdf", returnType: CAPPluginReturnPromise)
     ]
 
     @objc func bitis(_ call: CAPPluginCall) {
@@ -35,5 +37,37 @@ public class ImzaPlugin: CAPPlugin, CAPBridgedPlugin {
               let xml = String(text[start.lowerBound..<end.upperBound]).data(using: .isoLatin1)
         else { return nil }
         return (try? PropertyListSerialization.propertyList(from: xml, options: [], format: nil)) as? [String: Any]
+    }
+
+    /// iOS'taki web görünümü window.print() desteklemiyor. Sayfa yazdırma stiliyle (yalnız #report) A4 PDF'e
+    /// çevrilir ve paylaşım menüsü açılır: Dosyalar'a kaydet, WhatsApp, yazdır…
+    @objc func pdf(_ call: CAPPluginCall) {
+        let ad = (call.getString("ad") ?? "Hesap raporu").replacingOccurrences(of: "/", with: "-")
+        DispatchQueue.main.async {
+            guard let web = self.bridge?.webView, let vc = self.bridge?.viewController else {
+                call.reject("görünüm yok")
+                return
+            }
+            let a4 = CGRect(x: 0, y: 0, width: 595.2, height: 841.8)
+            let r = UIPrintPageRenderer()
+            r.addPrintFormatter(web.viewPrintFormatter(), startingAtPageAt: 0)
+            r.setValue(a4, forKey: "paperRect")
+            r.setValue(a4.insetBy(dx: 28, dy: 36), forKey: "printableRect")
+            let data = NSMutableData()
+            UIGraphicsBeginPDFContextToData(data, a4, nil)
+            r.prepare(forDrawingPages: NSRange(location: 0, length: r.numberOfPages))
+            for i in 0..<r.numberOfPages {
+                UIGraphicsBeginPDFPage()
+                r.drawPage(at: i, in: UIGraphicsGetPDFContextBounds())
+            }
+            UIGraphicsEndPDFContext()
+            guard r.numberOfPages > 0 else { call.reject("rapor boş"); return }
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent(ad + ".pdf")
+            do { try data.write(to: url, options: .atomic) } catch { call.reject(error.localizedDescription); return }
+            let share = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+            share.popoverPresentationController?.sourceView = web
+            share.popoverPresentationController?.sourceRect = CGRect(x: web.bounds.midX, y: web.bounds.midY, width: 1, height: 1)
+            vc.present(share, animated: true) { call.resolve() }
+        }
     }
 }
