@@ -1688,7 +1688,8 @@ async function doBackup() {
   // canShare/share, tıklama anında çağrılmalı — bu yüzden await'ten önce kontrol edilir.
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
-      await navigator.share({ files: [file], title: 'Kişisel Hesap yedeği' });
+      // Başlık verilmez: iOS onu ayrıca "text" dosyası olarak kaydediyor.
+      await navigator.share({ files: [file] });
       markBackup(); toast('Yedek kaydedildi');
     } catch (err) {
       // Kullanıcı paylaşım menüsünü kapattıysa sessizce vazgeç; başka hatada indirmeyi dene.
