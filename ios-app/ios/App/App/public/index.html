@@ -624,16 +624,18 @@ function accOptions(list, selected) {
 /* Açılır/kapanır kategori listesi (işlem formu ve İşlemler filtresi ortak kullanır).
    o: { types, value, open:Set, set: seçme eylemi, tog: aç/kapa eylemi, extras: [[değer, etiket]] } */
 function catTree(o) {
+  const at = o.attr || '';
   const row = (id, label, extra = '') => `<div class="cpick-row ${id === o.value ? 'sel' : ''}"><span class="caret-sp"></span>` +
-    `<button type="button" class="nm" data-action="${o.set}" data-id="${id}">${label}</button>${extra}</div>`;
+    `<button type="button" class="nm" data-action="${o.set}" data-id="${id}" ${at}>${label}</button>${extra}</div>`;
   const item = (x, depth) => {
-    const kids = children(x.id), open = o.open.has(x.id);
+    if (o.skip && o.skip.has(x.id)) return '';
+    const kids = children(x.id).filter(k => !o.skip || !o.skip.has(k.id)), open = o.open.has(x.id);
     const caret = kids.length
-      ? `<button type="button" class="caret ${open ? 'open' : ''}" data-action="${o.tog}" data-id="${x.id}" aria-label="Alt kategoriler" aria-expanded="${open}">›</button>`
+      ? `<button type="button" class="caret ${open ? 'open' : ''}" data-action="${o.tog}" data-id="${x.id}" ${at} aria-label="Alt kategoriler" aria-expanded="${open}">›</button>`
       : '<span class="caret-sp"></span>';
     return `<div class="cpick-row ${x.id === o.value ? 'sel' : ''}" style="padding-left:${8 + depth * 24}px">${caret}` +
       `<span class="dot" style="background:${x.color}"></span>` +
-      `<button type="button" class="nm" data-action="${o.set}" data-id="${x.id}">${esc(x.name)}</button>` +
+      `<button type="button" class="nm" data-action="${o.set}" data-id="${x.id}" ${at}>${esc(x.name)}</button>` +
       `${kids.length && !open ? `<span class="n">${kids.length} alt</span>` : ''}</div>` +
       (open ? kids.map(k => item(k, depth + 1)).join('') : '');
   };
@@ -641,6 +643,22 @@ function catTree(o) {
   return (o.extras || []).map(([id, label]) => row(id, esc(label))).join('') +
     o.types.map(tp => (many ? `<div class="cpick-hd">${tp === 'expense' ? 'Gider' : 'Gelir'}</div>` : '') +
       (parents(tp).map(p => item(p, 0)).join('') || '<div class="empty">Kategori yok.</div>')).join('');
+}
+/* Formlarda kademeli kategori seçici (ok ile alt seviyeler açılır). Değer gizli input'ta tutulur.
+   key: sayfadaki seçicinin adı; o: { name, value, types, extras, skip, onSet } */
+const cpState = {};
+function cpHTML(key, o) {
+  cpState[key] = Object.assign({ extras: [], open: openFor(o.value), show: false }, o);
+  return `<input type="hidden" name="${o.name}" value="${esc(o.value || '')}" data-cp-val="${key}">` +
+    `<button type="button" class="cpick-btn" data-action="cp-show" data-cp="${key}"></button><div class="cpick hide" data-cp-box="${key}"></div>`;
+}
+function cpDraw(key) {
+  const st = cpState[key], inp = document.querySelector(`[data-cp-val="${key}"]`); if (!st || !inp) return;
+  const btn = document.querySelector(`[data-action="cp-show"][data-cp="${key}"]`), box = document.querySelector(`[data-cp-box="${key}"]`);
+  const v = inp.value, c = cat(v), ex = st.extras.find(e => e[0] === v);
+  btn.textContent = c ? catLabel(c) : ex ? ex[1] : '—';
+  btn.classList.toggle('open', st.show); box.classList.toggle('hide', !st.show);
+  box.innerHTML = st.show ? catTree({ types: st.types, value: v, open: st.open, set: 'cp-set', tog: 'cp-tog', extras: st.extras, skip: st.skip, attr: `data-cp="${key}"` }) : '';
 }
 /* Seçili alt kategorinin üstündeki bütün kategoriler açık gelsin. */
 const openFor = id => new Set(catPath(id).slice(0, -1).map(c => c.id));
@@ -670,8 +688,8 @@ function drawFilterPick() {
     set: 'fpick-set', tog: 'fpick-tog', extras: FILTER_EXTRAS }) : '';
 }
 /* Ana kategoriler ve altlarında girintili alt kategoriler; seçilen değer işaretlenir. */
-function catOptions(tp, selected, skip) {
-  const opt = (c, depth) => skip && skip.has(c.id) ? '' : `<option value="${c.id}" ${selected === c.id ? 'selected' : ''}>${depth ? '\u00a0\u00a0\u00a0'.repeat(depth) + '↳ ' : ''}${esc(c.name)}</option>` +
+function catOptions(tp, selected) {
+  const opt = (c, depth) => `<option value="${c.id}" ${selected === c.id ? 'selected' : ''}>${depth ? '\u00a0\u00a0\u00a0'.repeat(depth) + '↳ ' : ''}${esc(c.name)}</option>` +
     children(c.id).map(k => opt(k, depth + 1)).join('');
   return parents(tp).map(p => opt(p, 0)).join('');
 }
@@ -1291,16 +1309,21 @@ function catSheet() {
   const e = ui.editCat ? cat(ui.editCat) : null;
   const parentId = e ? (e.parentId || '') : (ui.newCatParent || '');
   const par = cat(parentId);
-  // Üst kategori her seviyeden seçilebilir; kategori kendi altına taşınamaz.
-  const skip = e ? catDesc(e.id) : null;
-  const parentOpts = ['expense', 'income'].map(tp => `<optgroup label="${tp === 'expense' ? 'Gider' : 'Gelir'}">${catOptions(tp, parentId, skip)}</optgroup>`).join('');
+  // Üst kategori her seviyeden seçilebilir (oklarla kademeli açılır); kategori kendi altına taşınamaz.
+  const parentPick = cpHTML('catParent', { name: 'parentId', value: parentId, types: ['expense', 'income'], skip: e ? catDesc(e.id) : null,
+    extras: [['', '— Yok (ana kategori) —']],
+    onSet: id => {
+      // Üst kategori seçilince tür ondan gelir; yeni kategoride renk de üst kategoriden alınır.
+      const p = cat(id), f = document.querySelector('[data-form="cat"]').elements;
+      f.type.disabled = !!p;
+      if (p) { f.type.value = p.type; if (!ui.editCat) f.color.value = p.color; }
+    } });
   const type = par ? par.type : (e ? e.type : 'expense');
   const color = e ? e.color : par ? par.color : PALETTE[db.categories.length % PALETTE.length];
   openSheet(`<form data-form="cat" class="dlg">${sheetNav(e ? 'Kategoriyi düzenle' : par ? 'Yeni alt kategori' : 'Yeni kategori', e ? 'Kaydet' : 'Ekle')}
     <div class="sheet-body">
       <label>Ad<input name="name" required maxlength="30" autocomplete="off" placeholder="${par ? 'ör. Benzin, Lastik, Sigorta…' : 'ör. Araba, Ev, Kahve…'}" value="${esc(e?.name)}"></label>
-      <label>Üst kategori<select name="parentId">
-        <option value="">— Yok (ana kategori) —</option>${parentOpts}</select></label>
+      <div><label>Üst kategori</label>${parentPick}</div>
       <label>Tür<select name="type" ${par ? 'disabled title="Alt kategorinin türü üst kategoriyle aynıdır"' : ''}>
         <option value="expense" ${type !== 'income' ? 'selected' : ''}>Gider</option>
         <option value="income" ${type === 'income' ? 'selected' : ''}>Gelir</option></select></label>
@@ -1308,6 +1331,7 @@ function catSheet() {
       ${e ? `<button type="button" class="btn block" data-action="add-sub" data-id="${e.id}">+ Alt kategori ekle</button>` : ''}
       ${e ? `<button type="button" class="btn danger block" data-action="del-cat" data-id="${e.id}">Kategoriyi sil</button>` : ''}
     </div></form>`);
+  cpDraw('catParent');
 }
 
 function vRate() {
@@ -1793,8 +1817,8 @@ function vSet() {
         <option value="1" ${db.settings.weekStart === 1 ? 'selected' : ''}>Pazartesi</option>
         <option value="6" ${db.settings.weekStart === 6 ? 'selected' : ''}>Cumartesi</option>
         <option value="0" ${db.settings.weekStart === 0 ? 'selected' : ''}>Pazar</option></select></label>
-      <label>Transfer ücretleri<select data-setting="feeCat">
-        <option value="">Ayrı göster (Transfer ücretleri)</option>${catOptions('expense', feeCat())}</select></label>
+      <div><label>Transfer ücretleri</label>${cpHTML('feeCat', { name: 'feeCat', value: feeCat(), types: ['expense'],
+        extras: [['', 'Ayrı göster (Transfer ücretleri)']], onSet: id => { db.settings.feeCat = id; save(); toast('Kaydedildi'); } })}</div>
     </div>
   </div>
   <div class="card">
@@ -2108,6 +2132,7 @@ function render() {
   const views = { ozet: vOzet, islemler: vTx, hesaplar: vAcc, borclar: vDebt, kategoriler: vCat, kur: vRate, altin: vGold, ayarlar: vSet, daha: vDaha, silinenler: vTrash, kalk: vKalk, hatirlat: vHat, hesap: vHesap };
   const v = $('#view');
   v.innerHTML = views[ui.tab]();
+  v.querySelectorAll('[data-cp-val]').forEach(i => cpDraw(i.dataset.cpVal));
   openSw = null;
   // Ekran değişince içerik hafifçe kayarak gelir.
   if (ui.shown !== ui.tab) { ui.shown = ui.tab; v.classList.remove('enter'); void v.offsetWidth; v.classList.add('enter'); }
@@ -2401,6 +2426,15 @@ document.addEventListener('click', e => {
       ui.fcOpen.has(d.id) ? ui.fcOpen.delete(d.id) : ui.fcOpen.add(d.id); drawFilterPick(); break;
     case 'fpick-set':
       ui.f.cat = d.id; ui.fcShow = false; drawFilterPick(); renderTxList(); break;
+    case 'cp-show': {
+      const st = cpState[d.cp]; if (!st) break;
+      st.show = !st.show; if (st.show) st.open = openFor(document.querySelector(`[data-cp-val="${d.cp}"]`).value); cpDraw(d.cp); break;
+    }
+    case 'cp-tog': { const st = cpState[d.cp]; if (!st) break; st.open.has(d.id) ? st.open.delete(d.id) : st.open.add(d.id); cpDraw(d.cp); break; }
+    case 'cp-set': {
+      const st = cpState[d.cp], inp = document.querySelector(`[data-cp-val="${d.cp}"]`); if (!st || !inp) break;
+      inp.value = d.id; st.show = false; cpDraw(d.cp); if (st.onSet) st.onSet(d.id); break;
+    }
     case 'cpick':
       $('#cpick').classList.toggle('hide'); drawCatPick(); break;
     case 'cpick-tog':
@@ -2635,13 +2669,6 @@ document.addEventListener('change', e => {
   if (el.closest('#txForm') && (el.name === 'accountId' || el.name === 'toAccountId' || el.name === 'date')) {
     if (el.name !== 'date') resetFx();
     syncTx(); return;
-  }
-  if (el.name === 'parentId' && el.form?.dataset.form === 'cat') {
-    // Üst kategori seçilince tür ondan gelir; yeni kategoride renk de üst kategoriden alınır.
-    const p = cat(el.value), f = el.form.elements;
-    f.type.disabled = !!p;
-    if (p) { f.type.value = p.type; if (!ui.editCat) f.color.value = p.color; }
-    return;
   }
   if (el.id === 'mktCity') { db.settings.rateCity = el.value; save(); renderMkt(); return; }
   if (el.dataset.setting) {
@@ -3320,7 +3347,7 @@ function remSheet(r, preset) {
           <label>Tutar<input name="amount" inputmode="decimal" autocomplete="off" placeholder="0" value="${v.amount ? esc(fmtIn(v.amount, 'any')) : ''}"></label>
           <label>Para birimi<select name="currency"><option value="IQD" ${sel('IQD', v.currency)}>Dinar (IQD)</option><option value="USD" ${sel('USD', v.currency)}>Dolar (USD)</option></select></label>
           <label style="grid-column:1/-1">Hesap<select name="accountId"><option value="">— Öderken seçerim —</option>${accs.map(a => `<option value="${a.id}" ${sel(a.id, v.accountId)}>${esc(accLabel(a))} (${a.currency})</option>`).join('')}</select></label>
-          <label style="grid-column:1/-1">Kategori<select name="categoryId"><option value="">— Öderken seçerim —</option>${catOptions('expense', v.categoryId)}</select></label>
+          <div style="grid-column:1/-1"><label>Kategori</label>${cpHTML('remCat', { name: 'categoryId', value: v.categoryId || '', types: ['expense'], extras: [['', '— Öderken seçerim —']] })}</div>
           <p class="muted" style="grid-column:1/-1;font-size:12px;margin:0">Tamamlandığında bu tutarı tek dokunuşla gider olarak kaydedebilirsiniz.</p>
         </div></details>
       ${e && e.snz ? `<p class="muted" style="margin:0;font-size:13px">💤 Bu seferki tekrar ${esc(remDayLabel(remEffDate(e)))} ${hhmm(e.snz)}'e ertelendi. Tarih veya saati değiştirirseniz erteleme kalkar.</p>` : ''}
@@ -3329,6 +3356,7 @@ function remSheet(r, preset) {
       ${e ? `<button type="button" class="btn danger block" data-action="rem-del" data-id="${e.id}">Hatırlatıcıyı sil</button>` : ''}
     </div></form>`);
   remSync(document.querySelector('[data-form="rem"]'));
+  cpDraw('remCat');
   if (!e) setTimeout(() => { const t = document.querySelector('[data-form="rem"] [name=title]'); if (t) t.focus(); }, 60);
 }
 /* Tekrar seçimine göre özel/gün/bitiş alanlarını göster. */
