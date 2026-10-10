@@ -518,6 +518,14 @@ function seed() {
 function norm(d) {
   if (!Array.isArray(d.debts)) d.debts = [];
   if (!Array.isArray(d.trash)) d.trash = [];
+  // Kategori zincirinde döngü varsa kır; alt kategorinin türü kökünkiyle aynı olsun.
+  const byId = new Map((d.categories || []).map(c => [c.id, c]));
+  for (const c of d.categories || []) {
+    const seen = new Set([c.id]);
+    let p = byId.get(c.parentId), root = c;
+    while (p) { if (seen.has(p.id)) { c.parentId = ''; root = c; break; } seen.add(p.id); root = p; p = byId.get(p.parentId); }
+    if (root !== c && root.type) c.type = root.type;
+  }
   if (!Array.isArray(d.reminders)) d.reminders = [];
   if (!Array.isArray(d.remLists) || !d.remLists.length) d.remLists = JSON.parse(JSON.stringify(REM_LIST_DEF));
   d.remLists = d.remLists.filter(l => l && l.id && typeof l.name === 'string' && l.name.trim())
@@ -586,8 +594,19 @@ const disp = () => db.settings.display;
 /* Kategoriler iki seviyeli: ana kategori ve (parentId ile) alt kategori. */
 const parents = tp => db.categories.filter(c => c.type === tp && (!c.parentId || !cat(c.parentId)));
 const children = id => db.categories.filter(c => c.parentId === id);
-const topOf = id => { const c = cat(id); return c && c.parentId && cat(c.parentId) ? c.parentId : id; };
-const catLabel = c => { const p = c && c.parentId ? cat(c.parentId) : null; return c ? (p ? `${p.name} › ${c.name}` : c.name) : ''; };
+/* Kategoriler istenen derinlikte iç içe olabilir (Doctor › Physiotherapy › Seans). Kökten bu kategoriye kadar zincir. */
+const catPath = id => { const out = []; let c = cat(id); while (c && !out.includes(c) && out.length < 20) { out.unshift(c); c = c.parentId ? cat(c.parentId) : null; } return out; };
+const topOf = id => { const p = catPath(id); return p.length ? p[0].id : id; };
+/* Kategori ve altındaki bütün kategoriler. */
+function catDesc(id) {
+  const out = new Set([id]);
+  for (let added = true; added;) { added = false; for (const c of db.categories) if (c.parentId && out.has(c.parentId) && !out.has(c.id)) { out.add(c.id); added = true; } }
+  return out;
+}
+const catUnder = (cid, anc) => !!cid && catPath(cid).some(c => c.id === anc);
+const catLabel = c => c ? catPath(c.id).map(x => x.name).join(' › ') || c.name : '';
+/* Bir dönemde kategorinin kendisi + altındakilerin toplamı (stats().byCat'tan). */
+const catSum = (byCat, id) => [...catDesc(id)].reduce((s, k) => s + (byCat[k] || 0), 0);
 /* Hesaplar da iki seviyeli: ana hesap (ör. ZainCash) ve altındaki kartlar. Her biri kendi para birimi ve bakiyesiyle gerçek bir hesaptır. */
 const accParents = () => db.accounts.filter(a => !a.parentId || !acc(a.parentId));
 const accChildren = id => db.accounts.filter(a => a.parentId === id);
@@ -607,24 +626,24 @@ function accOptions(list, selected) {
 function catTree(o) {
   const row = (id, label, extra = '') => `<div class="cpick-row ${id === o.value ? 'sel' : ''}"><span class="caret-sp"></span>` +
     `<button type="button" class="nm" data-action="${o.set}" data-id="${id}">${label}</button>${extra}</div>`;
-  const item = (x, isChild) => {
-    const kids = isChild ? [] : children(x.id), open = o.open.has(x.id);
-    const caret = isChild ? '' : kids.length
+  const item = (x, depth) => {
+    const kids = children(x.id), open = o.open.has(x.id);
+    const caret = kids.length
       ? `<button type="button" class="caret ${open ? 'open' : ''}" data-action="${o.tog}" data-id="${x.id}" aria-label="Alt kategoriler" aria-expanded="${open}">›</button>`
       : '<span class="caret-sp"></span>';
-    return `<div class="cpick-row ${isChild ? 'child' : ''} ${x.id === o.value ? 'sel' : ''}">${caret}` +
+    return `<div class="cpick-row ${x.id === o.value ? 'sel' : ''}" style="padding-left:${8 + depth * 24}px">${caret}` +
       `<span class="dot" style="background:${x.color}"></span>` +
       `<button type="button" class="nm" data-action="${o.set}" data-id="${x.id}">${esc(x.name)}</button>` +
       `${kids.length && !open ? `<span class="n">${kids.length} alt</span>` : ''}</div>` +
-      (open ? kids.map(k => item(k, true)).join('') : '');
+      (open ? kids.map(k => item(k, depth + 1)).join('') : '');
   };
   const many = o.types.length > 1;
   return (o.extras || []).map(([id, label]) => row(id, esc(label))).join('') +
     o.types.map(tp => (many ? `<div class="cpick-hd">${tp === 'expense' ? 'Gider' : 'Gelir'}</div>` : '') +
-      (parents(tp).map(p => item(p, false)).join('') || '<div class="empty">Kategori yok.</div>')).join('');
+      (parents(tp).map(p => item(p, 0)).join('') || '<div class="empty">Kategori yok.</div>')).join('');
 }
-/* Seçili alt kategorinin ana kategorisi açık gelsin. */
-const openFor = id => { const c = cat(id); return new Set(c && c.parentId ? [c.parentId] : []); };
+/* Seçili alt kategorinin üstündeki bütün kategoriler açık gelsin. */
+const openFor = id => new Set(catPath(id).slice(0, -1).map(c => c.id));
 
 /* İşlem formundaki kategori seçici. Değer gizli <select name="categoryId"> içinde tutulur. */
 function drawCatPick() {
@@ -651,9 +670,10 @@ function drawFilterPick() {
     set: 'fpick-set', tog: 'fpick-tog', extras: FILTER_EXTRAS }) : '';
 }
 /* Ana kategoriler ve altlarında girintili alt kategoriler; seçilen değer işaretlenir. */
-function catOptions(tp, selected) {
-  return parents(tp).map(p => `<option value="${p.id}" ${selected === p.id ? 'selected' : ''}>${esc(p.name)}</option>` +
-    children(p.id).map(c => `<option value="${c.id}" ${selected === c.id ? 'selected' : ''}>   ↳ ${esc(c.name)}</option>`).join('')).join('');
+function catOptions(tp, selected, skip) {
+  const opt = (c, depth) => skip && skip.has(c.id) ? '' : `<option value="${c.id}" ${selected === c.id ? 'selected' : ''}>${depth ? '\u00a0\u00a0\u00a0'.repeat(depth) + '↳ ' : ''}${esc(c.name)}</option>` +
+    children(c.id).map(k => opt(k, depth + 1)).join('');
+  return parents(tp).map(p => opt(p, 0)).join('');
 }
 
 /* ---------- kur & para ---------- */
@@ -813,7 +833,7 @@ function vOzet() {
   const bars = cats.map(([id, v]) => {
     const c = cat(id), col = c ? c.color : id === FEE ? '#64748b' : '#999';
     let html = barRow(id, c ? c.name : id === FEE ? 'Transfer ücretleri' : 'Kategorisiz', v, col, false);
-    const subs = id && id !== FEE ? children(id).filter(s => st.byCat[s.id]).map(s => [s.id, s.name, st.byCat[s.id], s.color]) : [];
+    const subs = id && id !== FEE ? children(id).map(s => [s.id, s.name, catSum(st.byCat, s.id), s.color]).filter(s => s[2]) : [];
     if (subs.length) {
       if (st.byCat[id]) subs.push([id, `${c.name} (genel)`, st.byCat[id], col]);
       html += subs.sort((a, b) => b[2] - a[2]).map(([sid, n, sv, sc]) => barRow(sid, n, sv, sc, true)).join('');
@@ -923,7 +943,7 @@ function reportHtml(kind, anchor) {
       <td class="num r">${fmt(v, D)}</td><td class="num r">${Math.round(v / st.exp * 100)}%</td>
       <td class="num r">${fmt(ps.byTop[id] || 0, D)}</td><td class="num r">${chg(v, ps.byTop[id], false)}</td></tr>`;
     if (id && id !== FEE) {
-      const subs = children(id).filter(x => st.byCat[x.id]).map(x => [x.name, st.byCat[x.id]]);
+      const subs = children(id).map(x => [x.name, catSum(st.byCat, x.id)]).filter(x => x[1]);
       if (subs.length && st.byCat[id]) subs.push([`${c.name} (genel)`, st.byCat[id]]);
       html += subs.sort((a, b) => b[1] - a[1]).map(([n, sv]) => `<tr class="sub"><td>↳ ${esc(n)}</td>
         <td class="num r">${fmt(sv, D)}</td><td class="num r">${Math.round(sv / st.exp * 100)}%</td><td></td><td></td></tr>`).join('');
@@ -1032,8 +1052,7 @@ function renderTxList() {
     if (f.cat === '__opening' && t.type !== 'opening') return false;
     // Ana kategori seçiliyse alt kategorilerinin işlemleri de gelir.
     const fc = t.type === 'transfer' && t.fee > 0 ? feeCat() : '';
-    if (f.cat && !['__transfer','__debt','__opening'].includes(f.cat) && t.categoryId !== f.cat && cat(t.categoryId)?.parentId !== f.cat
-      && !(fc && (fc === f.cat || cat(fc)?.parentId === f.cat))) return false;
+    if (f.cat && !['__transfer','__debt','__opening'].includes(f.cat) && !catUnder(t.categoryId, f.cat) && !(fc && catUnder(fc, f.cat))) return false;
     if (f.from && t.date < f.from) return false;
     if (f.to && t.date > f.to) return false;
     if (q) {
@@ -1051,10 +1070,11 @@ function renderTxList() {
     else exp += conv(txCost(t), txCur(t), D, rateAt(t.date));
   }
   const active = f.q || f.acc || f.cat || f.from || f.to;
-  // Ana kategori (veya alt kategorisi) seçiliyse: "Tümü" + her alt kategori için seçim çipleri.
-  const fc = cat(f.cat), top = fc ? cat(topOf(fc.id)) : null, subs = top ? children(top.id) : [];
+  // Kategori seçiliyse: "Tümü" + alt kategorileri (alt kategorisi yoksa kardeşleri) için çipler, varsa bir üste dönüş.
+  const fc = cat(f.cat), top = fc ? (children(fc.id).length ? fc : cat(fc.parentId)) : null, subs = top ? children(top.id) : [];
   const subChip = (id, label) => `<button type="button" class="chip pick ${f.cat === id ? 'sel' : ''}" data-action="fpick-set" data-id="${id}">${esc(label)}</button>`;
-  const subBar = subs.length ? `<div class="chips subchips">${subChip(top.id, `Tümü · ${top.name}`)}${subs.map(k => subChip(k.id, k.name)).join('')}</div>` : '';
+  const up = top && cat(top.parentId);
+  const subBar = subs.length ? `<div class="chips subchips">${up ? subChip(up.id, `‹ ${up.name}`) : ''}${subChip(top.id, `Tümü · ${top.name}`)}${subs.map(k => subChip(k.id, k.name)).join('')}</div>` : '';
   const summary = subBar + `<div class="chips"><span class="chip">${rows.length} işlem</span>
     <span class="chip">Harcama: <b class="exp num">${fmt(exp, D)}</b></span>
     <span class="chip">Gelir: <b class="inc num">${fmt(inc, D)}</b></span>
@@ -1240,24 +1260,24 @@ function accSheet() {
 
 function vCat() {
   const rg = range('month', today()), st = stats(rg.start, rg.end), D = disp();
-  const row = (c, isChild) => {
-    const n = db.tx.filter(t => t.categoryId === c.id).length;
-    const kids = isChild ? [] : children(c.id);
-    const nAll = n + kids.reduce((s, k) => s + db.tx.filter(t => t.categoryId === k.id).length, 0);
-    const month = c.type === 'expense' ? (isChild ? st.byCat[c.id] : st.byTop[c.id]) : 0;
+  const row = (c, depth) => {
+    const kids = children(c.id), desc = catDesc(c.id);
+    const nAll = db.tx.filter(t => desc.has(t.categoryId)).length;
+    const month = c.type === 'expense' ? catSum(st.byCat, c.id) : 0;
     const open = ui.openCats.has(c.id);
-    const caret = isChild ? '' : kids.length
+    const caret = kids.length
       ? `<button class="caret ${open ? 'open' : ''}" data-action="toggle-cat" data-id="${c.id}" aria-label="${open ? 'Alt kategorileri gizle' : 'Alt kategorileri göster'}" aria-expanded="${open}">›</button>`
       : '<span class="caret-sp"></span>';
-    return swRow(`<div class="list-row ${isChild ? 'child' : ''}">
-      ${caret}<span class="dot" style="background:${c.color};width:${isChild ? 10 : 14}px;height:${isChild ? 10 : 14}px"></span>
-      <div class="m tog" data-action="cat-tx" data-id="${c.id}" title="İşlemlerini göster"><b>${isChild ? '↳ ' : ''}${esc(c.name)}</b><div class="muted" style="font-size:12px">${nAll} işlem${kids.length ? ` · ${kids.length} alt kategori` : ''}${month ? ` · bu ay ${fmt(month, D)}` : ''}</div></div>
+    return swRow(`<div class="list-row" style="${depth ? `padding-left:${4 + depth * 22}px` : ''}">
+      ${caret}<span class="dot" style="background:${c.color};width:${depth ? 10 : 14}px;height:${depth ? 10 : 14}px"></span>
+      <div class="m tog" data-action="cat-tx" data-id="${c.id}" title="İşlemlerini göster"><b style="${depth ? 'font-weight:500' : ''}">${depth ? '↳ ' : ''}${esc(c.name)}</b><div class="muted" style="font-size:12px">${nAll} işlem${kids.length ? ` · ${kids.length} alt kategori` : ''}${month ? ` · bu ay ${fmt(month, D)}` : ''}</div></div>
       <span class="chev-r">›</span>
-    </div>`, swBtn('Düzenle', 'edit-cat', c.id, 'edit') + swBtn('Sil', 'del-cat', c.id));
+    </div>`, swBtn('+ Alt', 'add-sub', c.id, 'ok') + swBtn('Düzenle', 'edit-cat', c.id, 'edit') + swBtn('Sil', 'del-cat', c.id));
   };
+  const tree = (c, depth) => row(c, depth) + (ui.openCats.has(c.id) ? children(c.id).map(k => tree(k, depth + 1)).join('') : '');
   const list = tp => {
     const ps = parents(tp);
-    return ps.length ? ps.map(p => row(p, false) + (ui.openCats.has(p.id) ? children(p.id).map(k => row(k, true)).join('') : '')).join('') : '<div class="empty">Kategori yok.</div>';
+    return ps.length ? ps.map(p => tree(p, 0)).join('') : '<div class="empty">Kategori yok.</div>';
   };
   return `
   <div class="grid two">
@@ -1271,21 +1291,21 @@ function catSheet() {
   const e = ui.editCat ? cat(ui.editCat) : null;
   const parentId = e ? (e.parentId || '') : (ui.newCatParent || '');
   const par = cat(parentId);
-  const hasKids = e && children(e.id).length > 0;
-  const parentOpts = ['expense', 'income'].map(tp => `<optgroup label="${tp === 'expense' ? 'Gider' : 'Gelir'}">${
-    parents(tp).filter(p => !e || p.id !== e.id).map(p => `<option value="${p.id}" ${parentId === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</optgroup>`).join('');
+  // Üst kategori her seviyeden seçilebilir; kategori kendi altına taşınamaz.
+  const skip = e ? catDesc(e.id) : null;
+  const parentOpts = ['expense', 'income'].map(tp => `<optgroup label="${tp === 'expense' ? 'Gider' : 'Gelir'}">${catOptions(tp, parentId, skip)}</optgroup>`).join('');
   const type = par ? par.type : (e ? e.type : 'expense');
   const color = e ? e.color : par ? par.color : PALETTE[db.categories.length % PALETTE.length];
   openSheet(`<form data-form="cat" class="dlg">${sheetNav(e ? 'Kategoriyi düzenle' : par ? 'Yeni alt kategori' : 'Yeni kategori', e ? 'Kaydet' : 'Ekle')}
     <div class="sheet-body">
       <label>Ad<input name="name" required maxlength="30" autocomplete="off" placeholder="${par ? 'ör. Benzin, Lastik, Sigorta…' : 'ör. Araba, Ev, Kahve…'}" value="${esc(e?.name)}"></label>
-      <label>Üst kategori<select name="parentId" ${hasKids ? 'disabled title="Alt kategorisi olan kategori başka birinin altına taşınamaz"' : ''}>
+      <label>Üst kategori<select name="parentId">
         <option value="">— Yok (ana kategori) —</option>${parentOpts}</select></label>
       <label>Tür<select name="type" ${par ? 'disabled title="Alt kategorinin türü üst kategoriyle aynıdır"' : ''}>
         <option value="expense" ${type !== 'income' ? 'selected' : ''}>Gider</option>
         <option value="income" ${type === 'income' ? 'selected' : ''}>Gelir</option></select></label>
       <label>Renk<input type="color" name="color" value="${color}"></label>
-      ${e && !e.parentId ? `<button type="button" class="btn block" data-action="add-sub" data-id="${e.id}">+ Alt kategori ekle</button>` : ''}
+      ${e ? `<button type="button" class="btn block" data-action="add-sub" data-id="${e.id}">+ Alt kategori ekle</button>` : ''}
       ${e ? `<button type="button" class="btn danger block" data-action="del-cat" data-id="${e.id}">Kategoriyi sil</button>` : ''}
     </div></form>`);
 }
@@ -2036,7 +2056,8 @@ function trashRestore(id) {
     if (!has(db.categories, d.cat.id)) {
       if (d.cat.parentId && !cat(d.cat.parentId)) d.cat.parentId = '';
       db.categories.push(d.cat);
-      if (!d.cat.parentId) (d.kids || []).forEach(k => { const c = cat(k); if (c && !c.parentId && !children(c.id).length) c.parentId = d.cat.id; });
+      // Silinirken bir üst seviyeye geçen alt kategoriler, hâlâ oradaysa yerine döner.
+      (d.kids || []).forEach(k => { const c = cat(k); if (c && (c.parentId || '') === (d.cat.parentId || '') && !catDesc(c.id).has(d.cat.id)) c.parentId = d.cat.id; });
       (d.txs || []).forEach(tid => { const t = db.tx.find(y => y.id === tid); if (t && !t.categoryId) t.categoryId = d.cat.id; });
     }
   } else if (x.kind === 'debt') {
@@ -2391,20 +2412,21 @@ document.addEventListener('click', e => {
       ui.tab = 'islemler'; ui.editCat = ui.newCatParent = null; render(); scrollTo(0, 0); break;
     case 'toggle-cat':
       ui.openCats.has(d.id) ? ui.openCats.delete(d.id) : ui.openCats.add(d.id); render(); break;
-    case 'add-sub': ui.openCats.add(d.id); ui.editCat = null; ui.newCatParent = d.id; catSheet(); break;
+    case 'add-sub': closeSw(); catPath(d.id).forEach(x => ui.openCats.add(x.id)); ui.editCat = null; ui.newCatParent = d.id; catSheet(); break;
     case 'del-cat': {
       const c = cat(d.id); if (!c) break;
       const txs = db.tx.filter(t => t.categoryId === d.id), kids = children(d.id);
       let msg = `"${c.name}" silinsin mi?`;
       if (txs.length) msg += `\n${txs.length} işlem "Kategorisiz" olacak.`;
-      if (kids.length) msg += `\n${kids.length} alt kategorisi (${kids.map(k => k.name).join(', ')}) silinmeyecek, ana kategori olacak.`;
+      const upTo = c.parentId && cat(c.parentId);
+      if (kids.length) msg += `\n${kids.length} alt kategorisi (${kids.map(k => k.name).join(', ')}) silinmeyecek, ${upTo ? `"${upTo.name}" altına geçecek` : 'ana kategori olacak'}.`;
       ask({ msg, ok: 'Kategoriyi sil' }).then(ok => {
         if (!ok) return closeSw();
         const p = c.parentId && cat(c.parentId);
         const tid = trashPut('cat', c.name, `${c.type === 'income' ? 'Gelir' : 'Gider'}${p ? ' · ' + p.name + ' altında' : ''}${txs.length ? ` · ${txs.length} işlem` : ''}`,
           { cat: c, kids: kids.map(k => k.id), txs: txs.map(t => t.id) });
         db.categories = db.categories.filter(x => x.id !== d.id);
-        kids.forEach(k => { k.parentId = ''; });
+        kids.forEach(k => { k.parentId = c.parentId && cat(c.parentId) ? c.parentId : ''; });
         txs.forEach(t => { t.categoryId = ''; });
         closeSheet($('#sheet')); save(); render(); toastUndo('Kategori silindi', tid);
       });
@@ -2521,17 +2543,18 @@ document.addEventListener('submit', e => {
     const par = v.parentId ? cat(v.parentId) : null;
     const type = par ? par.type : (v.type || 'expense');
     if (ui.editCat) {
-      const c = cat(ui.editCat), kids = children(c.id);
-      const parentId = kids.length ? '' : (par ? par.id : '');
-      if (c.type !== type && db.tx.some(t => t.categoryId === c.id || kids.some(k => k.id === t.categoryId))) {
+      const c = cat(ui.editCat), desc = catDesc(c.id);
+      const parentId = par && !desc.has(par.id) ? par.id : '';
+      if (c.type !== type && db.tx.some(t => desc.has(t.categoryId))) {
         toast('İşlemi olan kategorinin türü (gider/gelir) değiştirilemez.'); return;
       }
       Object.assign(c, { name, type, color: v.color, parentId });
-      kids.forEach(k => { k.type = type; });
+      desc.forEach(k => { const x = cat(k); if (x) x.type = type; });
+      if (parentId) catPath(parentId).forEach(x => ui.openCats.add(x.id));
       ui.editCat = null; toast('Kategori güncellendi');
     } else {
       db.categories.push({ id: uid(), name, type, color: v.color, parentId: par ? par.id : '' });
-      if (par) ui.openCats.add(par.id);
+      if (par) catPath(par.id).forEach(x => ui.openCats.add(x.id));
       toast(par ? `"${par.name}" altına eklendi` : 'Kategori eklendi');
       // Aynı ana kategoriye art arda alt kategori eklemeyi kolaylaştırmak için form açık kalır.
     }
