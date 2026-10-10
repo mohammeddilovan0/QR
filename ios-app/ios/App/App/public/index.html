@@ -1348,6 +1348,9 @@ function readRates(text) {
     .replace(/[۰-۹]/g, c => c.charCodeAt(0) - 0x6F0)
     .replace(/٬/g, ',').replace(/٫/g, '.');
   const found = [], seen = new Set();
+  const clean = x => x.replace(/[=:$|\-–—]+/g, ' ').replace(/\s+/g, ' ').trim();
+  // Bazı mesajlarda şehir adı bir satırda, rakam alt satırda ("بغداد" ↵ "162,700"): etiketsiz rakam üst satırın yazısını alır.
+  let ctx = '';
   for (const line of s.split(/\n+/)) {
     const usd = /\$|dolar|dollar|usd|دولار|دۆلار/i.test(line);
     let prevEnd = 0;
@@ -1366,13 +1369,17 @@ function readRates(text) {
         const rate = Math.round((per100 ? v / 100 : v) * 100) / 100;
         if (!seen.has(rate)) {
           seen.add(rate);
-          const clean = x => x.replace(/[=:$|\-–—]+/g, ' ').replace(/\s+/g, ' ').trim();
-          const label = (clean(before) || clean(after)).slice(0, 40);
+          // Emoji/işaretten ibaret yazı etiket sayılmaz (ör. "🔴 163,000 بغداد" → "بغداد").
+          const lbl = x => { const c = clean(x); return /\p{L}/u.test(c) ? c : ''; };
+          const label = (lbl(before) || lbl(after) || ctx).slice(0, 40);
           found.push({ rate, tok: tok.trim(), per100, label, usd });
         }
         break;
       }
     }
+    // Harf içeren satır, sonraki etiketsiz rakamların bağlamı olur.
+    const words = clean(line.replace(/\d[\d.,\s]*/g, ' '));
+    if (/\p{L}/u.test(words)) ctx = words;
   }
   return found.sort((a, b) => b.usd - a.usd);
 }
