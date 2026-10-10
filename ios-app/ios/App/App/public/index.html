@@ -236,6 +236,8 @@ body:not(.has-fab) .fab{display:none}
 .btn,.seg button,.chip.pick,.icon,.nav-txt,.tabbar button,.gitem,.caret{transition:transform .12s,opacity .12s,background .15s}
 .btn:active,.chip.pick:active,.icon:active{transform:scale(.96);opacity:.75}
 .nav-txt:active,.tabbar button:active{opacity:.45}
+.acc.tap{cursor:pointer}.acc.tap:active,.subline.tap:active{background:var(--soft)}
+.subline.tap{cursor:pointer;border-radius:6px;margin:0 -4px;padding:2px 4px}
 .tx:active,.list-row.tap:active,.gitem:active,.bar-row:active,.list-row .m.tog:active{background:var(--soft)}
 .list-row.tap{cursor:pointer}
 /* Kaydırarak sil */
@@ -849,16 +851,16 @@ function vOzet() {
     <div class="muted" style="font-size:12px;margin-bottom:12px">${esc(nowRateNote())}</div>
     ${db.accounts.length ? `<div class="accs">${accParents().map(a => {
       const b = balance(a.id), kids = accChildren(a.id);
-      if (!kids.length) return `<div class="acc"><div class="n"><span>${esc(a.name)}</span><span class="cur">${a.currency}</span></div>
+      if (!kids.length) return `<div class="acc tap" data-action="acc-open" data-id="${a.id}"><div class="n"><span>${esc(a.name)}</span><span class="cur">${a.currency}</span></div>
         <div class="v num ${b < 0 ? 'exp' : ''}">${fmt(b, a.currency)}</div></div>`;
       // Grup kartı: toplam + ana hesabın kendi bakiyesi (kullanılıyorsa) + alt hesaplar
       const members = (accUsed(a.id) || Number(a.opening) ? [a] : []).concat(kids);
       const tot = [a, ...kids].reduce((s, x) => s + conv(balance(x.id), x.currency, D, r), 0);
-      return `<div class="acc group"><div class="n"><span>${esc(a.name)}</span><span class="cur">≈ ${D}</span></div>
+      return `<div class="acc group tap" data-action="acc-open" data-id="${a.id}"><div class="n"><span>${esc(a.name)}</span><span class="cur">≈ ${D}</span></div>
         <div class="v num ${tot < 0 ? 'exp' : ''}">${fmt(tot, D)}</div>
         <div class="sublines">${members.map(x => {
           const xb = balance(x.id);
-          return `<div class="subline"><span>${x === a ? 'Ana hesap' : esc(x.name)}</span><span class="num ${xb < 0 ? 'exp' : ''}">${fmt(xb, x.currency)}</span></div>`;
+          return `<div class="subline tap" data-action="acc-open" data-id="${a.id}" data-sel="${x.id}"><span>${x === a ? 'Ana hesap' : esc(x.name)}</span><span class="num ${xb < 0 ? 'exp' : ''}">${fmt(xb, x.currency)}</span></div>`;
         }).join('')}</div></div>`;
     }).join('')}</div>` : `<div class="empty">Henüz hesap yok. <button class="btn sm" data-action="tab" data-tab="hesaplar">Hesap ekle</button></div>`}
   </div>
@@ -1069,6 +1071,80 @@ function renderTxList() {
     html += txRow(t);
   }
   el.innerHTML = html;
+}
+/* ---------- hesap ekranı: Özet'teki hesap kartına dokununca ----------
+   Bakiye, bu ayki giren/çıkan ve hesabın işlemleri (grup hesapta alt hesaplarla birlikte; çip ile tek alt hesap seçilebilir).
+   Tek hesapta her işlemin altında o işlemden sonraki bakiye yazar. */
+/* İşlemin bu hesabın bakiyesine etkisi (balance() ile aynı kural). */
+function accDelta(t, id) {
+  let d = 0;
+  if (t.accountId === id) {
+    if (t.type === 'income' || t.type === 'opening' || t.type === 'debt-in') d += t.amount;
+    else if (t.type === 'expense' || t.type === 'debt-out') d -= t.amount;
+    else if (t.type === 'transfer') d -= t.amount + (t.fee || 0);
+  }
+  if (t.type === 'transfer' && t.toAccountId === id) d += t.toAmount;
+  return d;
+}
+function vHesap() {
+  const a = acc(ui.accId);
+  if (!a) return '<div class="card"><div class="empty">Hesap bulunamadı.</div></div>';
+  const kids = accChildren(a.id), all = [a, ...kids];
+  const sel = all.find(x => x.id === ui.accSel) || null;
+  const ids = sel ? [sel.id] : all.map(x => x.id);
+  const curs = new Set(ids.map(id => acc(id).currency)), one = curs.size === 1, C = one ? [...curs][0] : disp(), r = nowRate();
+  const val = (t, id) => conv(accDelta(t, id), acc(id).currency, C, one ? 1 : rateAt(t.date));
+  const delta = t => ids.reduce((s, id) => s + val(t, id), 0);
+  const bal = ids.reduce((s, id) => s + conv(balance(id), acc(id).currency, C, one ? 1 : r), 0);
+  const txs = db.tx.filter(t => ids.includes(t.accountId) || (t.type === 'transfer' && ids.includes(t.toAccountId)))
+    .sort((x, y) => x.date.localeCompare(y.date) || (x.ts || 0) - (y.ts || 0));
+  // Sonraki bakiye: açılış bakiyesinden başlayıp eskiden yeniye toplanır.
+  const after = {};
+  let run = ids.reduce((s, id) => s + conv(Number(acc(id).opening) || 0, acc(id).currency, C, one ? 1 : r), 0);
+  for (const t of txs) { run += delta(t); after[t.id] = run; }
+  const m = range('month', today());
+  let inn = 0, out = 0;
+  for (const t of txs) if (t.date >= m.start && t.date <= m.end) { const d = delta(t); if (d > 0) inn += d; else out -= d; }
+  const list = txs.slice().reverse(), shown = list.slice(0, ui.accMore ? list.length : 60);
+  const chip = (x, label) => `<button class="chip pick ${(ui.accSel || '') === (x ? x.id : '') ? 'sel' : ''}" data-action="acc-sel" data-id="${x ? x.id : ''}">${esc(label)}</button>`;
+  let rows = '', last = '';
+  for (const t of shown) {
+    if (t.date !== last) { last = t.date; rows += `<div class="day"><span>${esc(DAYFMT.format(parse(t.date)))}</span></div>`; }
+    const { title, sub, col, ic, locked } = txInfo(t), d = delta(t);
+    const amt = Math.abs(d) < (C === 'USD' ? 0.005 : 0.5) ? `<span class="num muted">⇄ ${fmt(t.amount, acc(t.accountId)?.currency || C)}</span>`
+      : `<span class="num ${d < 0 ? 'exp' : 'inc'}">${d < 0 ? '−' : '+'}${fmt(Math.abs(d), C)}</span>`;
+    const row = `<div class="tx" ${locked ? '' : `data-action="edit-tx" data-id="${t.id}"`}>
+      <div class="ic" style="background:${col}">${ic}</div>
+      <div class="m"><div class="t">${esc(title)}</div><div class="s">${esc(sub)}</div></div>
+      <div class="a">${amt}<br><small class="muted num">${one ? fmt(after[t.id], C) : ''}</small></div></div>`;
+    rows += locked ? row : swRow(row, swBtn('Sil', 'del-tx', t.id));
+  }
+  return `<div class="card">
+    <div class="krow"><div style="flex:1;min-width:0"><div class="muted" style="font-size:13px">${sel && sel !== a ? `${esc(a.name)} › ${esc(sel.name)}` : 'Bakiye'}${one ? '' : ` (≈ ${C})`}</div>
+      <div class="big num ${bal < 0 ? 'exp' : ''}">${fmt(bal, C)}</div></div>
+      <button class="btn sm" data-action="edit-acc" data-id="${(sel || a).id}">Düzenle</button></div>
+    ${kids.length ? `<div class="chips">${chip(null, 'Tümü')}${chip(a, 'Ana hesap')}${kids.map(k => chip(k, k.name)).join('')}</div>` : ''}
+    <div class="kpis">
+      <div class="kpi"><div class="l">Bu ay giren</div><div class="v num inc">${fmt(inn, C)}</div></div>
+      <div class="kpi"><div class="l">Bu ay çıkan</div><div class="v num exp">${fmt(out, C)}</div></div>
+    </div>
+    <div class="kbtns">
+      <button class="btn" data-action="acc-tx" data-type="expense">− Gider</button>
+      <button class="btn" data-action="acc-tx" data-type="income">+ Gelir</button>
+      <button class="btn" data-action="acc-tx" data-type="transfer">⇄ Transfer</button>
+    </div>
+  </div>
+  <div class="card" style="padding:4px 12px">
+    ${list.length ? rows : '<div class="empty">Bu hesapta henüz işlem yok.</div>'}
+    ${list.length > shown.length ? `<button class="btn block" data-action="acc-more" style="margin:10px 0">Tümünü göster (${list.length})</button>` : ''}
+  </div>
+  <p class="muted" style="font-size:12px;margin:0 4px 14px">${list.length} işlem${one ? ' · tutarın altındaki rakam o işlemden sonraki bakiye' : ''}. Düzenlemek için işleme dokunun, silmek için sola kaydırın.</p>`;
+}
+/* Yeni işlem panelini bu hesap seçili açar. */
+function accPreset() {
+  const id = ui.accSel || ui.accId, f = F();
+  if (!acc(id) || ![...f.accountId.options].some(o => o.value === id)) return;
+  f.accountId.value = id; resetFx(); syncTx();
 }
 /* İşlemin başlığı, alt satırı, rengi ve tutarı — listede ve raporda ortak. */
 function txInfo(t) {
@@ -1766,7 +1842,7 @@ const ICON = {
 const svg = k => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICON[k]}</svg>`;
 const TABS = [['ozet', 'Özet'], ['islemler', 'İşlemler'], ['borclar', 'Borçlar'], ['piyasa', 'Piyasa'], ['daha', 'Daha fazla']];
 /* Her ekranın alt menüde hangi sekmeye ait olduğu. */
-const TAB_OF = { hatirlat: 'daha', kalk: 'daha', kur: 'piyasa', altin: 'piyasa', hesaplar: 'daha', kategoriler: 'daha', ayarlar: 'daha', silinenler: 'daha' };
+const TAB_OF = { hesap: 'ozet', hatirlat: 'daha', kalk: 'daha', kur: 'piyasa', altin: 'piyasa', hesaplar: 'daha', kategoriler: 'daha', ayarlar: 'daha', silinenler: 'daha' };
 const TITLES = { ozet: 'Özet', islemler: 'İşlemler', borclar: 'Borç / Alacak', kur: 'Piyasa', altin: 'Piyasa', daha: 'Daha fazla',
   hesaplar: 'Hesaplar', kategoriler: 'Kategoriler', ayarlar: 'Ayarlar', silinenler: 'Silinenler', kalk: 'Ayağa kalk', hatirlat: 'Hatırlatıcılar' };
 const MORE = [
@@ -1778,12 +1854,17 @@ $('#tabbar').innerHTML = TABS.map(([k, l]) => `<button data-action="nav" data-ta
 /* Üst çubuk: alt sayfalarda geri butonu, sağda o ekranın "ekle" butonu. */
 function drawNav() {
   const t = ui.tab, sub = TAB_OF[t] === 'daha';
-  $('#navT').textContent = TITLES[t];
-  $('#navL').innerHTML = sub ? '<button class="nav-txt" data-action="tab" data-tab="daha"><span class="chev">‹</span>Daha fazla</button>' : '';
+  $('#navT').textContent = t === 'hesap' ? accName() : TITLES[t];
+  $('#navL').innerHTML = sub ? '<button class="nav-txt" data-action="tab" data-tab="daha"><span class="chev">‹</span>Daha fazla</button>'
+    : t === 'hesap' ? `<button class="nav-txt" data-action="tab" data-tab="${ui.accBack || 'ozet'}"><span class="chev">‹</span>${esc(TITLES[ui.accBack || 'ozet'])}</button>` : '';
   const add = { hesaplar: 'new-acc', kategoriler: 'new-cat', borclar: 'new-debt', kur: 'new-rate', hatirlat: 'rem-new' }[t];
   $('#navR').innerHTML = add ? `<button class="nav-txt" data-action="${add}" aria-label="Ekle">${svg('plus')}</button>`
     : t === 'silinenler' && db.trash.length ? '<button class="nav-txt" data-action="trash-empty">Boşalt</button>' : '';
 }
+/* Hesap ekranında seçili hesaplar farklı para birimindeyse toplam seçilen birimde (IQD/USD) gösterilir. */
+const accMixed = () => { const a = acc(ui.accId); if (!a) return false;
+  const ids = acc(ui.accSel) ? [ui.accSel] : [a.id, ...accChildren(a.id).map(k => k.id)]; return new Set(ids.map(i => acc(i).currency)).size > 1; };
+const accName = () => { const a = acc(ui.accId); return a ? a.name : 'Hesap'; };
 const onScroll = () => document.body.classList.toggle('scrolled', scrollY > 34);
 addEventListener('scroll', onScroll, { passive: true });
 
@@ -1984,11 +2065,11 @@ function render() {
   const top = TAB_OF[ui.tab] || ui.tab;
   document.querySelectorAll('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === top));
   document.querySelectorAll('#disp button').forEach(b => b.classList.toggle('on', b.dataset.cur === disp()));
-  $('#disp').classList.toggle('hide', !['ozet', 'islemler', 'borclar', 'hesaplar'].includes(ui.tab));
-  $('#ltitle').textContent = TITLES[ui.tab];
-  document.body.classList.toggle('has-fab', ['ozet', 'islemler'].includes(ui.tab));
+  $('#disp').classList.toggle('hide', !['ozet', 'islemler', 'borclar', 'hesaplar'].includes(ui.tab) && !(ui.tab === 'hesap' && accMixed()));
+  $('#ltitle').textContent = ui.tab === 'hesap' ? accName() : TITLES[ui.tab];
+  document.body.classList.toggle('has-fab', ['ozet', 'islemler', 'hesap'].includes(ui.tab));
   drawNav();
-  const views = { ozet: vOzet, islemler: vTx, hesaplar: vAcc, borclar: vDebt, kategoriler: vCat, kur: vRate, altin: vGold, ayarlar: vSet, daha: vDaha, silinenler: vTrash, kalk: vKalk, hatirlat: vHat };
+  const views = { ozet: vOzet, islemler: vTx, hesaplar: vAcc, borclar: vDebt, kategoriler: vCat, kur: vRate, altin: vGold, ayarlar: vSet, daha: vDaha, silinenler: vTrash, kalk: vKalk, hatirlat: vHat, hesap: vHesap };
   const v = $('#view');
   v.innerHTML = views[ui.tab]();
   openSw = null;
@@ -2203,7 +2284,15 @@ document.addEventListener('click', e => {
       ui.tab = 'islemler'; render(); scrollTo(0, 0); break;
     }
     case 'clear-f': ui.f = { q: '', acc: '', cat: '', from: '', to: '' }; ui.fcShow = false; render(); break;
-    case 'new-tx': openTx(d.type); break;
+    case 'new-tx': openTx(d.type); if (ui.tab === 'hesap') accPreset(); break;
+    case 'acc-open':
+      if (!acc(d.id)) break;
+      if (ui.tab !== 'hesap') ui.accBack = ui.tab;
+      ui.accId = d.id; ui.accSel = d.sel && d.sel !== d.id ? d.sel : ''; ui.accMore = false;
+      ui.tab = 'hesap'; render(); scrollTo(0, 0); onScroll(); break;
+    case 'acc-sel': ui.accSel = d.id; ui.accMore = false; render(); break;
+    case 'acc-more': ui.accMore = true; render(); break;
+    case 'acc-tx': openTx(d.type); accPreset(); break;
     case 'edit-tx': openTx(null, d.id); break;
     case 'tx-type': dlg.type = d.type; resetFx(); syncTx(); break;
     case 'quick-acc': {
