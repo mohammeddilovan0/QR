@@ -418,17 +418,22 @@ dialog.sheet{overflow-x:hidden;touch-action:pan-y}
       <div><button type="button" class="btn primary sm" data-action="quick-acc" id="quickAccBtn"></button></div>
     </div>
     <div id="toAmtWrap" class="fxbox">
-      <label>Hedef hesaba giren tutar
+      <label><span id="toAmtLbl">Hedef hesaba giren tutar</span>
         <div class="amt" id="toAmtBox"><input name="toAmount" inputmode="decimal" autocomplete="off" placeholder="0"><span id="toCur"></span></div></label>
       <label>Kur — 1 $ kaç dinar?
         <div class="amt" id="fxRateBox"><input name="fxRate" inputmode="decimal" autocomplete="off" placeholder="0"><span>IQD</span></div></label>
       <div class="hint" id="fxHint"></div>
       <label class="check"><input type="checkbox" name="saveRate"> Bu kuru <span id="fxDate"></span> günün kuru olarak kaydet</label>
     </div>
-    <label id="feeWrap">Transfer ücreti <span class="muted">(ücret yoksa boş bırakın — 0 sayılır)</span>
-      <div class="amt"><input name="fee" inputmode="decimal" autocomplete="off" placeholder="0"><span id="feeCur">IQD</span></div>
+    <div id="feeWrap">
+      <label>Transfer ücreti <span class="muted">(ücret yoksa boş bırakın — 0 sayılır)</span>
+        <div class="amt"><input name="fee" inputmode="decimal" autocomplete="off" placeholder="0"><span id="feeCur">IQD</span></div></label>
+      <input type="hidden" name="feeSide" value="from">
+      <div class="seg mseg" id="feeSide" style="margin:8px 0 0">
+        <button type="button" data-action="fee-side" data-v="from"></button>
+        <button type="button" data-action="fee-side" data-v="to"></button></div>
       <div class="hint" id="feeHint"></div>
-    </label>
+    </div>
     <div class="hint" id="trHint" style="min-height:0"></div>
     <label>Tarih<input type="date" name="date" required></label>
     <label>Not<input name="note" maxlength="140" placeholder="İsteğe bağlı" autocomplete="off"></label>
@@ -721,14 +726,16 @@ function balance(id, upto) {
     if (t.accountId === id) {
       if (t.type === 'income' || t.type === 'opening' || t.type === 'debt-in') b += t.amount;
       else if (t.type === 'expense' || t.type === 'debt-out') b -= t.amount;
-      else if (t.type === 'transfer') b -= t.amount + (t.fee || 0);
+      else if (t.type === 'transfer') b -= t.amount + (t.feeTo ? 0 : t.fee || 0);
     }
-    if (t.type === 'transfer' && t.toAccountId === id) b += t.toAmount;
+    if (t.type === 'transfer' && t.toAccountId === id) b += t.toAmount - (t.feeTo ? t.fee || 0 : 0);
   }
   return b;
 }
-/* Harcama sayılan kısım (çıkan hesabın para biriminde): gider tutarı veya transfer ücreti. */
+/* Harcama sayılan kısım: gider tutarı veya transfer ücreti. Para birimi txCur: çıkan hesabınki; ücret alan taraftan
+   kesildiyse (feeTo) hedef hesabınki. Bu durumda toAmount çevrilen (ücretten önceki) tutardır, hedefe toAmount − ücret girer. */
 const txCost = t => t.type === 'expense' ? t.amount : t.type === 'transfer' ? (t.fee || 0) : 0;
+const txCur = t => { const a = acc(t.type === 'transfer' && t.feeTo ? t.toAccountId : t.accountId) || acc(t.accountId); return a ? a.currency : ''; };
 const FEE = '__fee';
 /* Transfer ücretlerinin sayıldığı gider kategorisi (Ayarlar); seçilmemişse ayrı "Transfer ücretleri" kalemi. */
 const feeCat = () => { const c = cat(db.settings.feeCat); return c && c.type === 'expense' ? c.id : ''; };
@@ -774,9 +781,9 @@ function stats(start, end) {
     const a = acc(t.accountId); if (!a) continue;
     const cost = t.type === 'income' ? t.amount : txCost(t);
     if (!cost) continue;
-    const v = conv(cost, a.currency, D, rateAt(t.date));
+    const cc = t.type === 'income' ? a.currency : txCur(t), v = conv(cost, cc, D, rateAt(t.date));
     if (t.type !== 'income') {
-      exp += v; native[a.currency] += cost;
+      exp += v; native[cc] += cost;
       const k = t.type === 'transfer' ? feeCat() || FEE : t.categoryId && cat(t.categoryId) ? t.categoryId : '';
       const top = k && k !== FEE ? topOf(k) : k;
       byCat[k] = (byCat[k] || 0) + v;
@@ -1041,7 +1048,7 @@ function renderTxList() {
   for (const t of rows) {
     const a = acc(t.accountId); if (!a) continue;
     if (t.type === 'income') inc += conv(t.amount, a.currency, D, rateAt(t.date));
-    else exp += conv(txCost(t), a.currency, D, rateAt(t.date));
+    else exp += conv(txCost(t), txCur(t), D, rateAt(t.date));
   }
   const active = f.q || f.acc || f.cat || f.from || f.to;
   // Ana kategori (veya alt kategorisi) seçiliyse: "Tümü" + her alt kategori için seçim çipleri.
@@ -1061,7 +1068,7 @@ function renderTxList() {
   const dayTotals = {};
   for (const t of rows) {
     const a = acc(t.accountId), cost = txCost(t); if (!a || !cost) continue;
-    dayTotals[t.date] = (dayTotals[t.date] || 0) + conv(cost, a.currency, D, rateAt(t.date));
+    dayTotals[t.date] = (dayTotals[t.date] || 0) + conv(cost, txCur(t), D, rateAt(t.date));
   }
   for (const t of rows) {
     if (t.date !== lastDay) {
@@ -1081,9 +1088,9 @@ function accDelta(t, id) {
   if (t.accountId === id) {
     if (t.type === 'income' || t.type === 'opening' || t.type === 'debt-in') d += t.amount;
     else if (t.type === 'expense' || t.type === 'debt-out') d -= t.amount;
-    else if (t.type === 'transfer') d -= t.amount + (t.fee || 0);
+    else if (t.type === 'transfer') d -= t.amount + (t.feeTo ? 0 : t.fee || 0);
   }
-  if (t.type === 'transfer' && t.toAccountId === id) d += t.toAmount;
+  if (t.type === 'transfer' && t.toAccountId === id) d += t.toAmount - (t.feeTo ? t.fee || 0 : 0);
   return d;
 }
 function vHesap() {
@@ -1154,8 +1161,9 @@ function txInfo(t) {
     const b = acc(t.toAccountId);
     title = 'Transfer'; col = '#64748b'; ic = '⇄';
     sub = `${accLabel(a)} → ${accLabel(b)}`;
-    amt = `<span class="num">${fmt(t.amount, cur)}</span>${b && b.currency !== cur ? `<br><small class="muted num">→ ${fmt(t.toAmount, b.currency)}</small>` : ''}` +
-      (t.fee ? `<br><small class="exp num">ücret −${fmt(t.fee, cur)}</small>` : '');
+    const net = t.toAmount - (t.feeTo ? t.fee || 0 : 0);
+    amt = `<span class="num">${fmt(t.amount, cur)}</span>${b && (b.currency !== cur || t.feeTo && t.fee) ? `<br><small class="muted num">→ ${fmt(net, b.currency)}</small>` : ''}` +
+      (t.fee ? `<br><small class="exp num">ücret −${fmt(t.fee, t.feeTo && b ? b.currency : cur)}</small>` : '');
   } else if (t.type === 'opening') {
     title = 'Başlangıç Girişi'; col = '#14b8a6'; ic = 'B';
     sub = accLabel(a);
@@ -2104,6 +2112,7 @@ function openTx(type, id, preset) {
   f.amount.value = t ? fmtIn(t.amount, 'any') : preset ? fmtIn(preset.amount, 'any') : '';
   f.note.value = t ? (t.note || '') : '';
   f.fee.value = t && t.fee ? fmtIn(t.fee, 'any') : '';
+  f.feeSide.value = t ? (t.feeTo ? 'to' : 'from') : ui.lastFeeSide || 'from';
   f.saveRate.checked = !t;
   syncTx(t);
   const tr = t && t.type === 'transfer' ? t : preset;
@@ -2125,9 +2134,15 @@ function fillAccSelect(sel, value, exclude) {
   if (value && list.some(a => a.id === value)) sel.value = value;
 }
 /* Transferin iki ucunu tek satırda özetler: çıkan hesaptan düşen (tutar + ücret) ve hedefe giren. */
-function trSummary(a, b, amt, toAmt, fee) {
+function trSummary(a, b, amt, toAmt, fee, feeTo) {
   if (!a || !b || !(amt > 0)) return '';
   fee = fee > 0 ? fee : 0;
+  if (feeTo) {
+    const inTxt = toAmt > 0 ? `+${fmt(toAmt - fee, b.currency)}` : '—';
+    return `<b>${esc(accLabel(a))}</b> <span class="exp num">−${fmt(amt, a.currency)}</span>` +
+      ` → <b>${esc(accLabel(b))}</b> <span class="inc num">${inTxt}</span>` +
+      (fee && toAmt > 0 ? ` <small class="muted">(${fmt(toAmt, b.currency)} − ${fmt(fee, b.currency)} ücret)</small>` : '');
+  }
   const feeTxt = fee ? ` <small class="muted">(${fmt(amt, a.currency)} + ${fmt(fee, a.currency)} ücret)</small>` : '';
   const inTxt = toAmt > 0 ? `+${fmt(toAmt, b.currency)}` : '—';
   return `<b>${esc(accLabel(a))}</b> <span class="exp num">−${fmt(amt + fee, a.currency)}</span>${feeTxt}` +
@@ -2166,10 +2181,18 @@ function syncTx(t) {
   $('#toWrap').classList.toggle('hide', !isTr || noTarget);
   $('#toEmpty').classList.toggle('hide', !noTarget);
   if (noTarget) $('#quickAccBtn').textContent = cur === 'IQD' ? '+ "Nakit Dolar" hesabı oluştur' : '+ "Nakit Dinar" hesabı oluştur';
-  // Ücret çıkan hesabın para biriminde, tutara ek olarak o hesaptan düşer.
+  // Ücret ya gönderen hesaptan (onun para biriminde, tutara ek) ya da alan hesaptan (onun para biriminde, girenden düşer) kesilir.
   $('#feeWrap').classList.toggle('hide', !isTr || noTarget);
-  if (isTr) $('#feeCur').textContent = cur;
   const b = isTr ? acc(f.toAccountId.value) : null;
+  const feeTo = isTr && !!b && f.feeSide.value === 'to';
+  if (isTr) {
+    $('#feeCur').textContent = feeTo ? b.currency : cur;
+    const [bf, bt] = document.querySelectorAll('#feeSide button');
+    bf.textContent = `Gönderenden${a ? ` (${a.currency})` : ''}`; bt.textContent = `Alandan${b ? ` (${b.currency})` : ''}`;
+    bf.classList.toggle('on', !feeTo); bt.classList.toggle('on', feeTo);
+    $('#feeHint').textContent = feeTo ? 'Ücret alan hesaba giren paradan düşer.' : 'Ücret tutara ek olarak gönderen hesaptan düşer.';
+    $('#toAmtLbl').textContent = feeTo ? 'Çevrilen tutar (ücret kesilmeden önce)' : 'Hedef hesaba giren tutar';
+  }
   const fx = isTr && b && a && b.currency !== a.currency;
   $('#toAmtWrap').classList.toggle('hide', !fx);
   const date = f.date.value || today(), rate = rateAt(date);
@@ -2189,12 +2212,12 @@ function syncTx(t) {
     $('#fxHint').textContent = `Herhangi ikisini yazın, üçüncüsü hesaplanır. Kayıtlı kur: 1 $ = ${fmtNum(rate)} IQD` +
       (R > 0 && Math.abs(R - rate) >= 0.01 ? ` (fark ${R > rate ? '+' : '−'}${fmtNum(Math.abs(R - rate), 2)})` : '');
     $('#amtHint').textContent = '';
-    $('#trHint').innerHTML = trSummary(a, b, num(f.amount.value), num(f.toAmount.value), num(f.fee.value));
+    $('#trHint').innerHTML = trSummary(a, b, num(f.amount.value), num(f.toAmount.value), num(f.fee.value), feeTo);
     return;
   }
   const amount = num(f.amount.value), other = cur === 'USD' ? 'IQD' : 'USD';
   // Aynı para birimindeki transferde giren tutar, çıkan tutarla aynıdır (ücret ayrıca düşer).
-  $('#trHint').innerHTML = isTr ? trSummary(a, b, amount, amount, num(f.fee.value)) : '';
+  $('#trHint').innerHTML = isTr ? trSummary(a, b, amount, amount, num(f.fee.value), feeTo) : '';
   // Yazılan rakamın nasıl okunduğunu göster ki nokta/virgül karışıklığı hemen fark edilsin.
   $('#amtHint').textContent = amount > 0 ? `= ${fmt(amount, cur)}  ≈ ${fmt(conv(amount, cur, other, rate), other)}` : '';
 }
@@ -2215,6 +2238,11 @@ function submitTx(e) {
     if (!(t.toAmount > 0)) { toast('Hedef tutarı veya kuru girin.'); return; }
     t.fee = f.fee.value.trim() ? num(f.fee.value) : 0;
     if (!(t.fee >= 0)) { toast('Transfer ücreti geçersiz.'); f.fee.focus(); return; }
+    ui.lastFeeSide = f.feeSide.value;
+    if (t.fee > 0 && f.feeSide.value === 'to') {
+      if (t.fee >= t.toAmount) { toast('Ücret, çevrilen tutardan küçük olmalı.'); f.fee.focus(); return; }
+      t.feeTo = true;
+    }
     ui.lastTrAcc = a.id; ui.lastTrTo = b.id;
     if (a.currency !== b.currency && f.saveRate.checked) {
       const R = a.currency === 'IQD' ? amount / t.toAmount : t.toAmount / amount;
@@ -2295,6 +2323,7 @@ document.addEventListener('click', e => {
     case 'acc-tx': openTx(d.type); accPreset(); break;
     case 'edit-tx': openTx(null, d.id); break;
     case 'tx-type': dlg.type = d.type; resetFx(); syncTx(); break;
+    case 'fee-side': F().feeSide.value = d.v; syncTx(); break;
     case 'quick-acc': {
       const f = F(), a = acc(f.accountId.value), currency = a && a.currency === 'USD' ? 'IQD' : 'USD';
       const na = { id: uid(), name: currency === 'USD' ? 'Nakit Dolar' : 'Nakit Dinar', currency, opening: 0 };
