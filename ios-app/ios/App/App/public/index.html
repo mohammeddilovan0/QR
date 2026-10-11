@@ -176,6 +176,31 @@ label>input,label>select,label>.amt{margin-top:4px}
 .ins .it{display:flex;gap:8px;align-items:baseline;font-size:14px;line-height:1.35}
 .ins .it .ic{flex:none;width:16px;text-align:center;font-size:12px}
 .ins .it.tap{cursor:pointer}
+.goal{display:grid;gap:8px;padding:12px 0;border-bottom:1px solid var(--line)}
+.goal:last-child{border-bottom:0}
+.goal .gh{display:flex;align-items:center;gap:10px}
+.goal .ge{font-size:24px;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;flex:none}
+.goal .gn{flex:1;min-width:0}
+.goal .gn b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.goal .gp{font-size:20px;font-weight:700}
+.goal .bar-track{height:12px}
+.goal .gl{display:flex;justify-content:space-between;gap:8px;font-size:13px;flex-wrap:wrap}
+.goal .acts{display:flex;gap:6px;flex-wrap:wrap}
+.goal .moves{display:grid;gap:2px;border-left:2px solid var(--line);padding-left:10px}
+.goal.mini{padding:8px 0;gap:5px}
+.goal.mini .ge{font-size:18px;width:30px;height:30px;border-radius:9px}
+.goal.mini .bar-track{height:8px}
+.emo{display:flex;gap:6px;flex-wrap:wrap}
+.emo .chip.pick{font-size:20px;padding:4px 8px;line-height:1.2}
+.mon{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 10px;align-items:center}
+.mon .mr{display:contents;cursor:pointer}
+.mon .mn{font-size:14px;white-space:nowrap}
+.mon .mn i{font-style:normal;display:inline-block;width:22px;color:var(--muted);font-size:12px}
+.mon .mv{text-align:right;font-size:14px;white-space:nowrap}
+.mon .mr.now .mn,.mon .mr.now .mv{font-weight:700}
+.mon .mr.fut{opacity:.4}
+.mon .bar-track{height:8px}
+.mon .tot{grid-column:1/-1;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:8px;margin-top:4px;font-size:14px}
 .otobak{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:14px}
 .otobak .hint{margin:6px 0 10px}
 .toast{position:fixed;left:50%;bottom:calc(var(--tabh) + 84px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20}
@@ -517,6 +542,7 @@ function seed() {
     tx: [],
     debts: [],
     reminders: [],
+    goals: [],
     remLists: JSON.parse(JSON.stringify(REM_LIST_DEF)),
     trash: [],
     settings: { display: 'IQD', weekStart: 1, lastBackup: '', rateCity: 'erbil', bridge: DEF_BRIDGE, goldCity: 'erbil' },
@@ -535,6 +561,12 @@ function norm(d) {
     if (root !== c && root.type) c.type = root.type;
   }
   if (!Array.isArray(d.reminders)) d.reminders = [];
+  if (!Array.isArray(d.goals)) d.goals = [];
+  d.goals = d.goals.filter(g => g && g.id && typeof g.name === 'string' && +g.target > 0).map(g => Object.assign(g, {
+    currency: g.currency === 'USD' ? 'USD' : 'IQD', mode: g.mode === 'acc' ? 'acc' : 'manual', due: /^\d{4}-\d\d-\d\d$/.test(g.due || '') ? g.due : '',
+    accounts: Array.isArray(g.accounts) ? g.accounts.map(String) : [], target: +g.target,
+    moves: (Array.isArray(g.moves) ? g.moves : []).filter(m => m && m.id && isFinite(+m.amount) && /^\d{4}-\d\d-\d\d$/.test(m.date || '')).map(m => Object.assign(m, { amount: +m.amount })),
+  }));
   if (!Array.isArray(d.remLists) || !d.remLists.length) d.remLists = JSON.parse(JSON.stringify(REM_LIST_DEF));
   d.remLists = d.remLists.filter(l => l && l.id && typeof l.name === 'string' && l.name.trim())
     .map(l => ({ id: String(l.id), name: l.name.trim().slice(0, 30), color: /^#[0-9a-f]{6}$/i.test(l.color) ? l.color : '#8e8e93' }));
@@ -968,7 +1000,7 @@ function vOzet() {
   </div>`;
   const ins = insights(ui.period, ui.anchor);
 
-  return warn + remOzet() + `
+  return warn + remOzet() + goalOzet() + `
   <div class="card">
     <div class="muted" style="font-size:13px">Net servet (${D})</div>
     <div class="big num ${total < 0 ? 'exp' : ''}">${fmt(total, D)}</div>
@@ -1017,7 +1049,34 @@ function vOzet() {
     ${bars || '<div class="empty">Bu dönemde harcama yok.</div>'}
     <h3>${ui.period === 'year' ? `${esc(rg.label)} — aylara göre harcama` : `Son ${N} ${ui.period === 'week' ? 'hafta' : 'ay'} — harcama`}</h3>
     <div class="trend">${trend}</div>
-  </div>`;
+  </div>
+  ${monthList()}`;
+}
+
+/* Seçilen yılın 12 ayında harcanan, alt alta. Bir aya dokununca Özet o aya geçer. */
+const MNAME = new Intl.DateTimeFormat('tr-TR', { month: 'long' });
+function monthList() {
+  const D = disp(), t = today(), y = ui.monYear || +t.slice(0, 4);
+  const rows = Array.from({ length: 12 }, (_, m) => {
+    const g = range('month', `${y}-${pad(m + 1)}-01`);
+    return { m, g, v: stats(g.start, g.end).exp, fut: g.start > t, cur: t >= g.start && t <= g.end };
+  });
+  const max = Math.max(...rows.map(r => r.v), 1), tot = rows.reduce((s, r) => s + r.v, 0);
+  // Ortalama: harcama olan ilk aydan bu aya (geçmiş yıl ise Aralık'a) kadar.
+  const firstIdx = rows.findIndex(r => r.v > 0), lastIdx = rows.reduce((l, r, i) => r.fut ? l : i, -1);
+  const n = firstIdx >= 0 && lastIdx >= firstIdx ? lastIdx - firstIdx + 1 : 0;
+  const nm = r => { const s = MNAME.format(parse(r.g.start)); return s[0].toUpperCase() + s.slice(1); };
+  return `<div class="card">
+    <div class="krow" style="margin-bottom:10px"><b style="flex:1;font-size:16px">Aylık harcamalar</b>
+      <button class="icon" data-action="mon-year" data-n="-1" aria-label="Önceki yıl">‹</button>
+      <b class="num" style="min-width:44px;text-align:center">${y}</b>
+      <button class="icon" data-action="mon-year" data-n="1" aria-label="Sonraki yıl">›</button></div>
+    <div class="mon">${rows.map(r => `<div class="mr ${r.cur ? 'now' : ''} ${r.fut ? 'fut' : ''}" data-action="mon-open" data-d="${r.g.start}" title="${esc(r.g.label)} özetini aç">
+      <span class="mn"><i>${r.m + 1}.</i>${esc(nm(r))}</span>
+      <span class="bar-track"><span class="bar-fill" style="display:block;width:${r.v ? Math.max(2, r.v / max * 100) : 0}%;background:var(--exp)"></span></span>
+      <span class="mv num">${r.fut ? '—' : fmt(r.v, D)}</span></div>`).join('')}
+      <div class="tot"><span>Toplam <b class="num">${fmt(tot, D)}</b></span><span class="muted">Aylık ort. <b class="num">${fmt(n ? tot / n : 0, D)}</b></span></div>
+    </div></div>`;
 }
 
 /* ---------- rapor (PDF) ---------- */
@@ -2052,6 +2111,149 @@ if (NATIVE) {
   document.addEventListener('visibilitychange', () => { if (document.hidden) otoYedek(); });
 }
 
+/* ---------- birikim hedefleri ---------- */
+/* Hedefin biriken tutarı iki şekilde izlenir: "Elle" — para ekle/çek kayıtları (hesap bakiyelerini değiştirmez);
+   "Hesap" — seçilen hesapların bugünkü bakiyesi (hedefin para birimine bugünkü kurla çevrilir). */
+const GOAL_EMOJI = ['💰', '🚗', '🏠', '📱', '💻', '✈️', '💍', '🎓', '🏥', '🎁', '🕋', '🛋️'];
+const goalAccs = g => g.accounts.map(acc).filter(Boolean);
+function goalSaved(g) {
+  if (g.mode === 'acc') { const r = nowRate(); return goalAccs(g).reduce((s, a) => s + conv(balance(a.id), a.currency, g.currency, r), 0); }
+  return g.moves.reduce((s, m) => s + m.amount, 0);
+}
+const goalDone = g => goalSaved(g) >= g.target - (g.currency === 'USD' ? 0.005 : 0.5);
+const goalsActive = () => db.goals.filter(g => !goalDone(g));
+const addMonthsYmd = (n) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + n); return d; };
+/* Son tarih varsa ayda ne kadar gerektiği; yoksa (elle) şimdiye kadarki hıza göre ne zaman biteceği. */
+function goalPlan(g, saved) {
+  const left = g.target - saved, t = today();
+  if (left <= 0) return '';
+  if (g.due) {
+    const days = daysBetween(t, g.due);
+    if (days < 0) return `<span class="exp">Son tarih geçti (${esc(SHORTDATE.format(parse(g.due)))}) — ${fmt(left, g.currency)} eksik</span>`;
+    if (days <= 31) return `${days ? days + ' gün kaldı' : 'Son gün bugün'} · kalan <b class="num">${fmt(left, g.currency)}</b>`;
+    return `Hedefe yetişmek için ayda ~<b class="num">${fmt(left / (days / 30.44), g.currency)}</b> <small class="muted">(son tarih ${esc(SHORTDATE.format(parse(g.due)))})</small>`;
+  }
+  if (g.mode === 'manual' && g.moves.length) {
+    const first = g.moves.reduce((m, x) => x.date < m ? x.date : m, t), days = daysBetween(first, t);
+    if (days >= 14 && saved > 0) {
+      const perMonth = saved / (days / 30.44), n = Math.ceil(left / perMonth);
+      return `Bu hızla (ayda ~${fmt(perMonth, g.currency)}) <b>${esc(MONTH.format(addMonthsYmd(n)))}</b> civarı tamamlanır`;
+    }
+  }
+  return '';
+}
+function goalRow(g, mini) {
+  const saved = goalSaved(g), pct = Math.max(0, Math.min(100, saved / g.target * 100)), done = goalDone(g);
+  const col = g.color || '#2e9e6b', head = `<div class="gh">
+      <span class="ge" style="background:${col}22">${esc(g.emoji || '💰')}</span>
+      <div class="gn"><b>${esc(g.name)}</b><small class="muted num">${fmt(Math.max(0, saved), g.currency)} / ${fmt(g.target, g.currency)}</small></div>
+      <span class="gp num ${done ? 'inc' : ''}">${done ? '🎉' : Math.floor(pct) + '%'}</span></div>
+    <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${col}"></div></div>`;
+  if (mini) return `<div class="goal mini tap" data-action="tab" data-tab="hedefler">${head}</div>`;
+  const plan = done ? `<span class="inc"><b>Tamamlandı!</b>${saved > g.target ? ` Fazlası ${fmt(saved - g.target, g.currency)}` : ''}</span>` : goalPlan(g, saved);
+  const src = g.mode === 'acc' ? `Hesaplardan: ${goalAccs(g).map(a => esc(accLabel(a))).join(', ') || '<span class="exp">hesap yok</span>'}` : '';
+  const moves = g.mode === 'manual' ? [...g.moves].sort((a, b) => b.date.localeCompare(a.date) || (b.ts || 0) - (a.ts || 0)) : [];
+  const open = ui.goalOpen === g.id;
+  return swRow(`<div class="goal">${head}
+    ${plan || src ? `<div class="gl"><span>${plan}</span>${src ? `<small class="muted">${src}</small>` : ''}</div>` : ''}
+    ${g.mode === 'manual' ? `<div class="acts">
+      <button class="btn sm primary" data-action="goal-move" data-id="${g.id}" data-sign="1">+ Para ekle</button>
+      ${saved > 0 ? `<button class="btn sm" data-action="goal-move" data-id="${g.id}" data-sign="-1">− Çek</button>` : ''}
+      ${moves.length ? `<button class="btn sm" data-action="goal-hist" data-id="${g.id}">${open ? 'Geçmişi gizle' : `Geçmiş (${moves.length})`}</button>` : ''}</div>` : ''}
+    ${open && moves.length ? `<div class="moves">${moves.map(m => `<div class="subline"><span>${esc(SHORTDATE.format(parse(m.date)))}${m.note ? ' · ' + esc(m.note) : ''}</span>
+      <span class="num ${m.amount < 0 ? 'exp' : 'inc'}">${fmt(m.amount, g.currency, true)}<button class="icon xs" data-action="goal-mv-del" data-id="${g.id}" data-mv="${m.id}" aria-label="Kaydı sil">✕</button></span></div>`).join('')}</div>` : ''}
+  </div>`, swBtn('Düzenle', 'goal-edit', g.id, 'edit') + swBtn('Sil', 'goal-del', g.id));
+}
+function vGoals() {
+  if (!db.goals.length) return `<div class="card"><div class="empty">Henüz hedef yok.<br><small>Araba, ev, telefon… ne için biriktiriyorsan hedef koy, ilerlemeyi gör.</small><br>
+    <button class="btn primary" data-action="goal-new" style="margin-top:12px">+ Hedef ekle</button></div></div>`;
+  const D = disp(), r = nowRate(), act = goalsActive(), done = db.goals.filter(goalDone);
+  const sum = k => act.reduce((s, g) => s + conv(k === 't' ? g.target : Math.max(0, goalSaved(g)), g.currency, D, r), 0);
+  const st = sum('t'), ss = sum('s');
+  return `${act.length ? `<div class="card">
+    <div class="kpis" style="margin-top:0">
+      <div class="kpi"><div class="l">Biriken</div><div class="v num inc">${fmt(ss, D)}</div></div>
+      <div class="kpi"><div class="l">Hedeflerin toplamı</div><div class="v num">${fmt(st, D)}</div></div>
+      <div class="kpi"><div class="l">Kalan</div><div class="v num">${fmt(Math.max(0, st - ss), D)}</div></div>
+    </div></div>` : ''}
+  <div class="card">${act.length ? act.map(g => goalRow(g)).join('') : '<div class="empty">Bütün hedefler tamamlandı 🎉</div>'}</div>
+  ${done.length ? `<div class="card"><h2>Tamamlananlar</h2>${done.map(g => goalRow(g)).join('')}</div>` : ''}
+  <p class="muted" style="font-size:12px;margin:0 4px">Düzenlemek veya silmek için sola kaydırın. “Elle” hedeflerde para ekle/çek kayıtları hesap bakiyelerini değiştirmez.</p>`;
+}
+function goalOzet() {
+  const act = goalsActive();
+  if (!act.length) return '';
+  return `<div class="card">
+    <div class="krow" style="margin-bottom:2px"><b style="flex:1;font-size:16px">Birikim hedefleri</b><a class="lnk" data-action="tab" data-tab="hedefler">Tümü ›</a></div>
+    ${act.slice(0, 3).map(g => goalRow(g, true)).join('')}
+    ${act.length > 3 ? `<a class="lnk" data-action="tab" data-tab="hedefler" style="display:block;margin-top:6px">+${act.length - 3} hedef daha</a>` : ''}
+  </div>`;
+}
+function goalSheet(e) {
+  const g = e || { name: '', emoji: '💰', target: 0, currency: 'USD', due: '', mode: 'manual', accounts: [] };
+  ui.goalAccs = new Set(g.accounts);
+  const accs = accOrdered();
+  openSheet(`<form data-form="goal" class="dlg"${e ? ` data-id="${e.id}"` : ''}>${sheetNav(e ? 'Hedefi düzenle' : 'Yeni hedef', e ? 'Kaydet' : 'Ekle')}
+    <div class="sheet-body" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+      <label style="grid-column:1/-1">Ne için?<input name="name" required maxlength="40" autocomplete="off" placeholder="ör. Araba" value="${esc(g.name)}"></label>
+      <div style="grid-column:1/-1"><input type="hidden" name="emoji" value="${esc(g.emoji || '💰')}">
+        <div class="emo">${GOAL_EMOJI.map(x => `<button type="button" class="chip pick ${x === (g.emoji || '💰') ? 'sel' : ''}" data-action="goal-emoji" data-v="${x}">${x}</button>`).join('')}</div></div>
+      <label>Hedef tutar<input name="target" inputmode="decimal" autocomplete="off" placeholder="0" value="${g.target ? esc(fmtIn(g.target, 'any')) : ''}" required></label>
+      <label>Para birimi<select name="currency"><option value="USD" ${g.currency === 'USD' ? 'selected' : ''}>Dolar (USD)</option><option value="IQD" ${g.currency === 'IQD' ? 'selected' : ''}>Dinar (IQD)</option></select></label>
+      <label style="grid-column:1/-1">Son tarih <span class="muted">(isteğe bağlı)</span><input type="date" name="due" value="${g.due || ''}"></label>
+      <div style="grid-column:1/-1"><label>Biriken nasıl izlensin?</label><input type="hidden" name="mode" value="${g.mode}">
+        <div class="seg" style="margin-top:6px"><button type="button" data-action="goal-mode" data-v="manual" class="${g.mode === 'manual' ? 'on' : ''}">Elle eklerim</button>
+          <button type="button" data-action="goal-mode" data-v="acc" class="${g.mode === 'acc' ? 'on' : ''}">Hesap bakiyesi</button></div></div>
+      <div style="grid-column:1/-1" data-goal-manual class="${g.mode === 'manual' ? '' : 'hide'}">
+        ${e ? '<p class="muted" style="font-size:12px;margin:0">Para ekle / çek düğmeleriyle biriken tutarı güncellersin. Hesap bakiyeleri değişmez.</p>'
+          : `<label>Şu an biriken <span class="muted">(varsa)</span><input name="start" inputmode="decimal" autocomplete="off" placeholder="0"></label>`}</div>
+      <div style="grid-column:1/-1" data-goal-acc class="${g.mode === 'acc' ? '' : 'hide'}">
+        <p class="muted" style="font-size:12px;margin:0 0 6px">Birikimini tuttuğun hesap(lar)ı seç; biriken = bu hesapların bugünkü bakiyesi.</p>
+        <div class="chips" style="margin-top:0">${accs.length ? accs.map(a => `<button type="button" class="chip pick ${ui.goalAccs.has(a.id) ? 'sel' : ''}" data-action="goal-acc" data-v="${a.id}">${esc(accLabel(a))} <small>${a.currency}</small></button>`).join('') : '<span class="muted">Hesap yok</span>'}</div></div>
+    </div></form>`);
+}
+function goalSubmit(form, v) {
+  const name = (v.name || '').trim(), target = num(v.target), mode = v.mode === 'acc' ? 'acc' : 'manual';
+  if (!name) { toast('Hedefin adını yazın.'); return false; }
+  if (!(target > 0)) { toast('Geçerli bir hedef tutar girin.'); form.elements.target.focus(); return false; }
+  const accounts = [...ui.goalAccs].filter(id => acc(id));
+  if (mode === 'acc' && !accounts.length) { toast('En az bir hesap seçin.'); return false; }
+  const data = { name, emoji: GOAL_EMOJI.includes(v.emoji) ? v.emoji : '💰', target, currency: v.currency === 'IQD' ? 'IQD' : 'USD', due: v.due || '', mode, accounts };
+  const e = form.dataset.id && db.goals.find(g => g.id === form.dataset.id);
+  if (e) {
+    if (e.mode === 'manual' && e.moves.length && e.currency !== data.currency) { toast('Kaydı olan hedefin para birimi değiştirilemez.'); return false; }
+    Object.assign(e, data); toast('Hedef güncellendi');
+  } else {
+    const g = Object.assign({ id: uid(), ts: Date.now(), color: PALETTE[(db.goals.length + 3) % PALETTE.length], moves: [] }, data);
+    const st = num(v.start);
+    if (mode === 'manual' && st > 0) g.moves.push({ id: uid(), ts: Date.now(), date: today(), amount: st, note: 'Başlangıç' });
+    db.goals.push(g); toast('Hedef eklendi');
+  }
+  return true;
+}
+function goalMoveSheet(g, sign) {
+  const saved = goalSaved(g);
+  openSheet(`<form data-form="gmove" class="dlg" data-id="${g.id}" data-sign="${sign}">${sheetNav(`${sign > 0 ? 'Para ekle' : 'Para çek'} — ${g.name}`, sign > 0 ? 'Ekle' : 'Çek')}
+    <div class="sheet-body" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+      <p class="muted" style="grid-column:1/-1;margin:0">Biriken ${fmt(saved, g.currency)} · kalan ${fmt(Math.max(0, g.target - saved), g.currency)}</p>
+      <label>Tutar (${g.currency})<input name="amount" inputmode="decimal" autocomplete="off" placeholder="0" required></label>
+      <label>Tarih<input type="date" name="date" value="${today()}" required></label>
+      <label style="grid-column:1/-1">Not<input name="note" maxlength="100" autocomplete="off" placeholder="İsteğe bağlı"></label>
+    </div></form>`);
+  setTimeout(() => { const i = $('#sheet [name=amount]'); if (i) i.focus(); }, 50);
+}
+function goalMoveSubmit(form, v) {
+  const g = db.goals.find(x => x.id === form.dataset.id); if (!g) return false;
+  const amount = num(v.amount), sign = +form.dataset.sign < 0 ? -1 : 1;
+  if (!(amount > 0)) { toast('Geçerli bir tutar girin.'); return false; }
+  if (!v.date) { toast('Tarih seçin.'); return false; }
+  const was = goalDone(g);
+  g.moves.push({ id: uid(), ts: Date.now(), date: v.date, amount: sign * amount, note: (v.note || '').trim() });
+  if (!was && goalDone(g)) toast(`🎉 “${g.name}” hedefi tamamlandı!`);
+  else toast(sign > 0 ? 'Eklendi' : 'Çekildi');
+  return true;
+}
+
 /* ---------- uygulama kabuğu: alt menü, üst çubuk, büyük başlık ---------- */
 /* iPhone'da iki parmakla yakınlaştırmayı engelle (Safari viewport ayarını her zaman dinlemiyor). */
 ['gesturestart', 'gesturechange', 'gestureend'].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
@@ -2068,16 +2270,17 @@ const ICON = {
   ayarlar: '<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   hatirlat: '<path d="M6 9a6 6 0 0 1 12 0c0 6.5 2.5 8 2.5 8h-17S6 15.5 6 9"/><path d="M10.2 20.5a2 2 0 0 0 3.6 0"/>',
+  hedefler: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".8"/>',
   kalk: '<circle cx="12" cy="4.5" r="2"/><path d="M12 8v6.5M12 14.5l-3 6M12 14.5l3 6M6.5 11l5.5-2.5 5.5 2.5"/>',
 };
 const svg = k => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICON[k]}</svg>`;
 const TABS = [['ozet', 'Özet'], ['islemler', 'İşlemler'], ['borclar', 'Borçlar'], ['piyasa', 'Piyasa'], ['daha', 'Daha fazla']];
 /* Her ekranın alt menüde hangi sekmeye ait olduğu. */
-const TAB_OF = { hesap: 'ozet', hatirlat: 'daha', kalk: 'daha', kur: 'piyasa', altin: 'piyasa', hesaplar: 'daha', kategoriler: 'daha', ayarlar: 'daha', silinenler: 'daha' };
+const TAB_OF = { hesap: 'ozet', hatirlat: 'daha', hedefler: 'daha', kalk: 'daha', kur: 'piyasa', altin: 'piyasa', hesaplar: 'daha', kategoriler: 'daha', ayarlar: 'daha', silinenler: 'daha' };
 const TITLES = { ozet: 'Özet', islemler: 'İşlemler', borclar: 'Borç / Alacak', kur: 'Piyasa', altin: 'Piyasa', daha: 'Daha fazla',
-  hesaplar: 'Hesaplar', kategoriler: 'Kategoriler', ayarlar: 'Ayarlar', silinenler: 'Silinenler', kalk: 'Ayağa kalk', hatirlat: 'Hatırlatıcılar' };
+  hesaplar: 'Hesaplar', kategoriler: 'Kategoriler', ayarlar: 'Ayarlar', silinenler: 'Silinenler', kalk: 'Ayağa kalk', hatirlat: 'Hatırlatıcılar', hedefler: 'Birikim hedefleri' };
 const MORE = [
-  [['hatirlat', 'Hatırlatıcılar', '#ff9500'], ['kalk', 'Ayağa kalk', '#30a46c']],
+  [['hatirlat', 'Hatırlatıcılar', '#ff9500'], ['hedefler', 'Birikim hedefleri', '#2e9e6b'], ['kalk', 'Ayağa kalk', '#30a46c']],
   [['hesaplar', 'Hesaplar', '#3b82c4'], ['kategoriler', 'Kategoriler', '#e8a33d']],
   [['silinenler', 'Silinenler', '#e5484d'], ['ayarlar', 'Ayarlar', '#8e8e93']],
 ];
@@ -2088,7 +2291,7 @@ function drawNav() {
   $('#navT').textContent = t === 'hesap' ? accName() : TITLES[t];
   $('#navL').innerHTML = sub ? '<button class="nav-txt" data-action="tab" data-tab="daha"><span class="chev">‹</span>Daha fazla</button>'
     : t === 'hesap' ? `<button class="nav-txt" data-action="tab" data-tab="${ui.accBack || 'ozet'}"><span class="chev">‹</span>${esc(TITLES[ui.accBack || 'ozet'])}</button>` : '';
-  const add = { hesaplar: 'new-acc', kategoriler: 'new-cat', borclar: 'new-debt', kur: 'new-rate', hatirlat: 'rem-new' }[t];
+  const add = { hesaplar: 'new-acc', kategoriler: 'new-cat', borclar: 'new-debt', kur: 'new-rate', hatirlat: 'rem-new', hedefler: 'goal-new' }[t];
   $('#navR').innerHTML = add ? `<button class="nav-txt" data-action="${add}" aria-label="Ekle">${svg('plus')}</button>`
     : t === 'silinenler' && db.trash.length ? '<button class="nav-txt" data-action="trash-empty">Boşalt</button>' : '';
 }
@@ -2104,7 +2307,7 @@ function vDaha() {
 }
 function vDahaList() {
   const due = remToday().length, over = remToday().filter(r => remOverdue(r)).length;
-  const val = { hatirlat: over ? `<span class="rbadge">${over}</span>` : due || remActive().length || '', kalk: kalkOn() ? 'Açık' : 'Kapalı', hesaplar: db.accounts.length, kategoriler: db.categories.length, silinenler: db.trash.length || '', ayarlar: '' };
+  const val = { hatirlat: over ? `<span class="rbadge">${over}</span>` : due || remActive().length || '', kalk: kalkOn() ? 'Açık' : 'Kapalı', hedefler: goalsActive().length || '', hesaplar: db.accounts.length, kategoriler: db.categories.length, silinenler: db.trash.length || '', ayarlar: '' };
   return MORE.map(g => `<div class="group">${g.map(([k, l, c]) => `<button class="gitem" data-action="tab" data-tab="${k}">
     <span class="gi" style="background:${c}">${svg(k)}</span>
     <span class="gt"><span>${l}</span><span class="gv">${val[k]}<span class="chev-r">›</span></span></span></button>`).join('')}</div>`).join('');
@@ -2222,7 +2425,7 @@ const TRASH_MAX = 500;
 const TRASH_KIND = {
   tx: ['İşlem', 'islemler', '#64748b'], acc: ['Hesap', 'hesaplar', '#3b82c4'], cat: ['Kategori', 'kategoriler', '#e8a33d'],
   debt: ['Borç / alacak', 'borclar', '#9b59b6'], pay: ['Ödeme / tahsilat', 'borclar', '#9b59b6'], rate: ['Kur', 'piyasa', '#14b8a6'],
-  rem: ['Hatırlatıcı', 'hatirlat', '#ff9500'],
+  rem: ['Hatırlatıcı', 'hatirlat', '#ff9500'], goal: ['Hedef', 'hedefler', '#2e9e6b'],
 };
 const copy = o => JSON.parse(JSON.stringify(o));
 function trashPut(kind, label, sub, data) {
@@ -2264,6 +2467,8 @@ function trashRestore(id) {
     if (!debt) return "Bu ödemenin borç/alacak kaydı silinmiş. Önce onu Silinenler'den geri alın.";
     const err = needAcc([d.tx && d.tx.accountId]); if (err) return err;
     if (!has(debt.payments, d.pay.id)) { debt.payments.push(d.pay); if (d.tx && !has(db.tx, d.tx.id)) db.tx.push(d.tx); }
+  } else if (x.kind === 'goal') {
+    if (!has(db.goals, d.id)) db.goals.push(d);
   } else if (x.kind === 'rem') {
     if (!has(db.reminders, d.id)) { db.reminders.push(d); remPlanSoon(); }
   } else if (x.kind === 'rate') {
@@ -2301,7 +2506,7 @@ function render() {
   $('#ltitle').textContent = ui.tab === 'hesap' ? accName() : TITLES[ui.tab];
   document.body.classList.toggle('has-fab', ['ozet', 'islemler', 'hesap'].includes(ui.tab));
   drawNav();
-  const views = { ozet: vOzet, islemler: vTx, hesaplar: vAcc, borclar: vDebt, kategoriler: vCat, kur: vRate, altin: vGold, ayarlar: vSet, daha: vDaha, silinenler: vTrash, kalk: vKalk, hatirlat: vHat, hesap: vHesap };
+  const views = { ozet: vOzet, islemler: vTx, hesaplar: vAcc, borclar: vDebt, kategoriler: vCat, kur: vRate, altin: vGold, ayarlar: vSet, daha: vDaha, silinenler: vTrash, kalk: vKalk, hatirlat: vHat, hesap: vHesap, hedefler: vGoals };
   const v = $('#view');
   v.innerHTML = views[ui.tab]();
   v.querySelectorAll('[data-cp-val]').forEach(i => cpDraw(i.dataset.cpVal));
@@ -2682,6 +2887,44 @@ document.addEventListener('click', e => {
       });
       break;
     }
+    case 'goal-new': goalSheet(); break;
+    case 'goal-edit': { const g = db.goals.find(x => x.id === d.id); if (g) { closeSw(); goalSheet(g); } break; }
+    case 'goal-del': {
+      const g = db.goals.find(x => x.id === d.id); if (!g) break;
+      ask({ msg: `“${g.name}” hedefi silinsin mi?`, ok: 'Sil' }).then(ok => {
+        if (!ok) return closeSw();
+        const tid = trashPut('goal', `${g.emoji || ''} ${g.name}`.trim(), `Hedef ${fmt(g.target, g.currency)}`, g);
+        db.goals = db.goals.filter(x => x.id !== g.id); save(); render(); toastUndo('Hedef silindi', tid);
+      });
+      break;
+    }
+    case 'goal-move': { const g = db.goals.find(x => x.id === d.id); if (g) goalMoveSheet(g, +d.sign); break; }
+    case 'goal-hist': ui.goalOpen = ui.goalOpen === d.id ? null : d.id; render(); break;
+    case 'goal-mv-del': {
+      const g = db.goals.find(x => x.id === d.id), m = g && g.moves.find(y => y.id === d.mv); if (!m) break;
+      ask({ msg: `${fmt(m.amount, g.currency, true)} (${SHORTDATE.format(parse(m.date))}) kaydı silinsin mi?`, ok: 'Sil' }).then(ok => {
+        if (!ok) return;
+        g.moves = g.moves.filter(y => y.id !== m.id); save(); render(); toast('Silindi');
+      });
+      break;
+    }
+    case 'goal-emoji': {
+      const f = el.closest('form'); f.elements.emoji.value = d.v;
+      f.querySelectorAll('[data-action=goal-emoji]').forEach(b => b.classList.toggle('sel', b === el)); break;
+    }
+    case 'goal-mode': {
+      const f = el.closest('form'); f.elements.mode.value = d.v;
+      f.querySelectorAll('[data-action=goal-mode]').forEach(b => b.classList.toggle('on', b === el));
+      f.querySelector('[data-goal-manual]').classList.toggle('hide', d.v !== 'manual');
+      f.querySelector('[data-goal-acc]').classList.toggle('hide', d.v !== 'acc'); break;
+    }
+    case 'goal-acc': ui.goalAccs.has(d.v) ? ui.goalAccs.delete(d.v) : ui.goalAccs.add(d.v); el.classList.toggle('sel', ui.goalAccs.has(d.v)); break;
+    case 'mon-year': ui.monYear = (ui.monYear || +today().slice(0, 4)) + +d.n; render(); break;
+    case 'mon-open': {
+      ui.period = 'month'; ui.anchor = d.d; render();
+      const pb = $('.periodbar'); if (pb) pb.closest('.card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      break;
+    }
     case 'edit-debt': { const x = db.debts.find(y => y.id === d.id); if (x) { closeSw(); debtSheet(x); } break; }
     case 'del-debt': {
       const x = db.debts.find(y => y.id === d.id); if (!x) break;
@@ -2791,6 +3034,10 @@ document.addEventListener('submit', e => {
     toast('Kaydedildi');
   } else if (form.dataset.form === 'rem') {
     if (!remSubmit(form, v)) return;
+  } else if (form.dataset.form === 'goal') {
+    if (!goalSubmit(form, v)) return;
+  } else if (form.dataset.form === 'gmove') {
+    if (!goalMoveSubmit(form, v)) return;
   } else if (form.dataset.form === 'debt') {
     const person = (v.person || '').trim(), amount = num(v.amount), opening = v.entryMode === 'opening';
     const a = opening ? null : acc(v.accountId);
