@@ -1304,7 +1304,7 @@ function vHesap() {
     const { title, sub, col, ic, locked } = txInfo(t), d = delta(t);
     const amt = Math.abs(d) < (C === 'USD' ? 0.005 : 0.5) ? `<span class="num muted">⇄ ${fmt(t.amount, acc(t.accountId)?.currency || C)}</span>`
       : `<span class="num ${d < 0 ? 'exp' : 'inc'}">${d < 0 ? '−' : '+'}${fmt(Math.abs(d), C)}</span>`;
-    const row = `<div class="tx" ${locked ? '' : `data-action="edit-tx" data-id="${t.id}"`}>
+    const row = `<div class="tx" data-action="${locked ? 'debt-tx' : 'edit-tx'}" data-id="${t.id}">
       <div class="ic" style="background:${col}">${ic}</div>
       <div class="m"><div class="t">${esc(title)}</div><div class="s">${esc(sub)}</div></div>
       <div class="a">${amt}<br><small class="muted num">${one ? fmt(after[t.id], C) : ''}</small></div></div>`;
@@ -1373,7 +1373,7 @@ function txInfo(t) {
 }
 function txRow(t) {
   const { title, sub, col, ic, amt, locked } = txInfo(t);
-  const row = `<div class="tx" ${locked ? '' : `data-action="edit-tx" data-id="${t.id}"`}>
+  const row = `<div class="tx" data-action="${locked ? 'debt-tx' : 'edit-tx'}" data-id="${t.id}">
     <div class="ic" style="background:${col}">${ic}</div>
     <div class="m"><div class="t">${esc(title)}</div><div class="s">${esc(sub)}</div></div>
     <div class="a">${amt}</div></div>`;
@@ -2922,6 +2922,15 @@ document.addEventListener('click', e => {
       if (x) { payFull(); syncPay(); }
       break;
     }
+    case 'debt-tx': {
+      // Borç/alacak hareketi: ilk kayıt borç/alacak düzenleme panelini, ödeme/tahsilat kendi panelini açar.
+      const t = db.tx.find(y => y.id === d.id), x = t && db.debts.find(y => y.id === t.debtId);
+      if (!x) { toast('Bu hareketin borç/alacak kaydı bulunamadı.'); break; }
+      const p = t.paymentId && x.payments.find(y => y.id === t.paymentId);
+      if (p) paySheet(x, p, t); else debtSheet(x);
+      break;
+    }
+    case 'debt-open': { const x = db.debts.find(y => y.id === d.id); if (x) debtSheet(x); break; }
     case 'del-pay': {
       const x = db.debts.find(y => y.id === d.id), p = x && x.payments.find(y => y.id === d.pay);
       if (!x || !p) break;
@@ -2930,7 +2939,7 @@ document.addEventListener('click', e => {
         const tx = p.txId ? db.tx.find(t => t.id === p.txId) : null;
         const tid = trashPut('pay', `${x.person} · ${fmt(p.amount, x.currency)}`, `${x.dir === 'lent' ? 'Tahsilat' : 'Ödeme'} · ${SHORTDATE.format(parse(p.date))}`, { debtId: x.id, pay: p, tx });
         if (p.txId) db.tx = db.tx.filter(t => t.id !== p.txId);
-        x.payments = x.payments.filter(y => y.id !== d.pay); save(); render(); toastUndo('Ödeme silindi', tid);
+        x.payments = x.payments.filter(y => y.id !== d.pay); closeSheet($('#sheet')); save(); render(); toastUndo('Ödeme silindi', tid);
       });
       break;
     }
@@ -3085,6 +3094,15 @@ document.addEventListener('submit', e => {
     toast('Kaydedildi');
   } else if (form.dataset.form === 'rem') {
     if (!remSubmit(form, v)) return;
+  } else if (form.dataset.form === 'paytx') {
+    const x = db.debts.find(y => y.id === form.dataset.id), p = x && x.payments.find(y => y.id === form.dataset.pay);
+    const t = p && db.tx.find(y => y.id === p.txId); if (!t) return;
+    const fee = String(v.fee || '').trim() ? num(v.fee) : 0;
+    if (!(fee >= 0)) { toast('Geçerli bir havale ücreti girin.'); return; }
+    const note = (v.note || '').trim();
+    t.note = note; p.note = note;
+    if (fee) t.fee = fee; else delete t.fee;
+    toast('Kaydedildi');
   } else if (form.dataset.form === 'goal') {
     if (!goalSubmit(form, v)) return;
   } else if (form.dataset.form === 'gmove') {
@@ -3197,6 +3215,29 @@ function delTx(id, fromSheet) {
   });
 }
 function openDebtSheet() { debtSheet(); syncDebtForm(); }
+/* Ödeme/tahsilat hareketinin ayrıntısı: not ve havale ücreti düzenlenir; tutar için silip yeniden eklenir. */
+function paySheet(x, p, t) {
+  const a = acc(t.accountId), cur = a ? a.currency : x.currency, incoming = x.dir === 'lent';
+  const line = (l, v) => `<div class="subline"><span class="muted">${l}</span><span class="num">${v}</span></div>`;
+  openSheet(`<form data-form="paytx" class="dlg" data-id="${x.id}" data-pay="${p.id}">${sheetNav(incoming ? 'Tahsilat' : 'Ödeme', 'Kaydet')}
+    <div class="sheet-body">
+      <div class="fxbox">
+        ${line('Kişi', esc(x.person))}
+        ${line(incoming ? 'Alınan' : 'Ödenen', fmt(t.amount, cur))}
+        ${p.paid ? line(`${x.dir === 'lent' ? 'Alacaktan' : 'Borçtan'} düşen`, `${fmt(p.amount, x.currency)} <small class="muted">(1 $ = ${fmtNum(p.paid.rate)})</small>`) : ''}
+        ${line('Hesap', esc(accLabel(a)))}
+        ${line('Tarih', esc(SHORTDATE.format(parse(t.date))))}
+        ${line('Kalan', fmt(debtLeft(x), x.currency))}
+      </div>
+      <label>Havale ücreti / komisyon (${cur})<input name="fee" inputmode="decimal" autocomplete="off" placeholder="0" value="${esc(fmtIn(t.fee || 0, 'any'))}"></label>
+      <label>Not<input name="note" maxlength="100" autocomplete="off" placeholder="İsteğe bağlı" value="${esc(t.note || '')}"></label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="btn" data-action="debt-open" data-id="${x.id}">${incoming ? 'Alacak' : 'Borç'} kaydını aç</button>
+        <button type="button" class="btn danger" data-action="del-pay" data-id="${x.id}" data-pay="${p.id}">Sil</button>
+      </div>
+      <p class="muted" style="font-size:12px;margin:0">Tutarı değiştirmek için bu kaydı silip yeniden ekleyin.</p>
+    </div></form>`);
+}
 
 /* ---------- ayağa kalk hatırlatıcısı ----------
    Ayarlar bu cihaza özeldir (yedeğe girmez). Uygulama açıkken hatırlatmayı uygulama kendisi yapar ve seçilen sesi çalar.
