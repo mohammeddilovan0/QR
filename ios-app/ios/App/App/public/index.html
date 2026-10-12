@@ -616,7 +616,7 @@ const fmtTs = ts => new Date(ts).toLocaleString('tr-TR', { day: 'numeric', month
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(db)); }
   catch (e) { toast('Kaydedilemedi! Tarayıcı depolaması kapalı olabilir — Ayarlar’dan yedek alın.'); }
-  otoPlan();
+  otoPlan(); widgetPlan();
 }
 let db = load() || seed();
 if (!load()) save();
@@ -2031,6 +2031,41 @@ async function doBackup() {
     return;
   }
   downloadBackup(file);
+}
+
+/* ---------- ana ekran / kilit ekranı widget'ı (iPhone uygulaması) ---------- */
+/* Widget uygulamanın verisini okuyamaz; bakiye ve bu ayın özeti hazır yazılar olarak ortak klasöre yazılır
+   (ImzaPlugin.widget → widget.json). Veri değişince ve uygulama arka plana geçerken güncellenir. */
+var wgT = 0, wgSon = '';
+function widgetPlan() {
+  if (!NATIVE) return;
+  clearTimeout(wgT); wgT = setTimeout(widgetYaz, 1500);
+}
+function widgetVeri() {
+  const D = disp(), r = nowRate(), dt = debtTotals();
+  const total = db.accounts.reduce((s, a) => s + conv(balance(a.id), a.currency, D, r), 0) + dt.lent - dt.owed;
+  const rg = range('month', today()), st = stats(rg.start, rg.end), bg = stats(today(), today());
+  const kisa = v => { const a = Math.abs(v), sg = v < 0 ? '−' : '';
+    return sg + (D === 'USD' ? '$' + fmtNum(a) : a >= 1e6 ? fmtNum(a / 1e6, a >= 1e7 ? 0 : 1) + 'M' : a >= 1e3 ? fmtNum(a / 1e3) + 'K' : fmtNum(a)); };
+  const ay = MNAME.format(parse(rg.start));
+  return { bakiye: fmt(total, D), bakiyeK: kisa(total), bakiyeL: dt.lent || dt.owed ? 'Net servet' : 'Toplam bakiye',
+    harcama: fmt(st.exp, D), harcamaK: kisa(st.exp), gelir: fmt(st.inc, D), bugun: fmt(bg.exp, D),
+    ay: ay[0].toUpperCase() + ay.slice(1), bitis: imzaBitis || 0, yenilendi: imzaYen || 0 };
+}
+async function widgetYaz() {
+  if (!NATIVE) return;
+  clearTimeout(wgT);
+  let v; try { v = widgetVeri(); } catch (e) { return; }
+  const key = JSON.stringify(v);
+  if (key === wgSon) return; // aynı içerik tekrar yazılmaz (widget yenileme hakkı sınırlı)
+  try {
+    await Capacitor.nativePromise('Imza', 'widget', { veri: JSON.stringify(Object.assign(v, { guncel: Date.now() })) });
+    wgSon = key;
+  } catch (e) {}
+}
+if (NATIVE) {
+  setTimeout(widgetYaz, 2500);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) widgetYaz(); });
 }
 
 /* ---------- otomatik yedek (iPhone uygulaması) ---------- */
@@ -3461,7 +3496,7 @@ if (NATIVE) {
    SideStore'un Refresh All'ı uygulamayı yeniden kurmaz, telefona yeni imza profili yükler; paketteki imza eski kalır.
    Bu yüzden kullanıcı "Yeniledim"e basınca o andan 7 gün sayılır (hangisi daha geçse o geçerli). */
 const IMZA = KEY + '-imza', IMZA_YEN = KEY + '-imza-yenilendi', IMZA_IDS = [2001, 2002, 2003, ...Array.from({ length: 30 }, (_, i) => 2010 + i)];
-let imzaBitis = 0, imzaTahmin = false, imzaElle = false;
+let imzaBitis = 0, imzaTahmin = false, imzaElle = false, imzaYen = 0;
 async function imzaYukle() {
   if (!NATIVE) return;
   let t = 0, yen = 0;
@@ -3474,11 +3509,13 @@ async function imzaYukle() {
     t = first + 7 * 864e5;
   }
   try { yen = Math.max(yen, +localStorage.getItem(IMZA_YEN) || 0); } catch (e) {}
+  imzaYen = yen;
   imzaElle = yen + 7 * 864e5 > t;
   if (imzaElle) t = yen + 7 * 864e5;
   const changed = t !== imzaBitis;
   imzaBitis = t;
   imzaBarDraw();
+  widgetPlan();
   if (!changed) return;
   imzaPlanla();
   if (['daha', 'ozet'].includes(ui.tab) && !document.querySelector('dialog[open]')) render();

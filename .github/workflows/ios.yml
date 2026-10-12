@@ -33,6 +33,14 @@ jobs:
           mkdir Payload
           cp -R ios-app/ios/App/build/Build/Products/Release-iphoneos/App.app Payload/
           test -d Payload/App.app/PlugIns/ImzaWidget.appex || { echo 'widget uzantısı pakette yok'; exit 1; }
+          # İmzasız derlemede yetkiler (entitlements) pakete girmez. SideStore yetkileri ikili dosyadaki imzadan okur;
+          # widget ile ortak klasör (App Group) için geçici (ad-hoc) imzayla yetkiler eklenir. SideStore kurarken yeniden imzalar.
+          find Payload/App.app -name '*.dylib' -o -name '*.framework' -type d | while read -r f; do codesign --force --sign - "$f"; done
+          codesign --force --sign - --entitlements ios-app/ios/App/ImzaWidget/ImzaWidget.entitlements Payload/App.app/PlugIns/ImzaWidget.appex
+          codesign --force --sign - --entitlements ios-app/ios/App/App/App.entitlements Payload/App.app
+          for b in Payload/App.app Payload/App.app/PlugIns/ImzaWidget.appex; do
+            codesign -d --entitlements - --xml "$b" 2>/dev/null | grep -q 'group.com.mohammeddilovan.kisiselhesap' || { echo "$b yetkileri eksik"; exit 1; }
+          done
           zip -qry KisiselHesap.ipa Payload
           ls -la KisiselHesap.ipa
       - uses: actions/upload-artifact@v4
