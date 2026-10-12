@@ -1,6 +1,7 @@
 import Foundation
 import AppIntents
 import UserNotifications
+import WidgetKit
 
 /// SideStore'un Refresh All'ı uygulamayı yeniden kurmaz, telefona yeni imza profili yükler; paketteki
 /// embedded.mobileprovision eski kalır. Kestirmeler eylemi yenileme zamanını buraya yazar, uygulama
@@ -17,6 +18,11 @@ enum Yenileme {
         let now = Date()
         UserDefaults.standard.set(now.timeIntervalSince1970, forKey: anahtar)
         planla(bitis: now.addingTimeInterval(7 * 86400))
+        // Widget de yeni süreyi uygulama açılmadan göstersin.
+        var o = Ortak.oku()
+        o["yenilendi"] = now.timeIntervalSince1970 * 1000
+        Ortak.yaz(o)
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     /// index.html'deki imzaPlanla ile aynı: 2 gün kala bir bildirim, son 24 saatte saat başı (kimlikler 2001, 2010-2039).

@@ -16,7 +16,8 @@ public class ImzaPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDelegate {
         CAPPluginMethod(name: "yedekDurum", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "yedekKlasor", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "yedekKlasorSil", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "yedekYaz", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "yedekYaz", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "widget", returnType: CAPPluginReturnPromise)
     ]
 
     @objc func bitis(_ call: CAPPluginCall) {
@@ -192,5 +193,32 @@ public class ImzaPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDelegate {
                 try? fm.removeItem(at: u)
             }
         }
+    }
+
+    // MARK: Widget verisi
+    /// Uygulama bakiye/harcama özetini widget ile ortak klasöre (App Group) widget.json olarak yazar.
+    /// Grup kimliği App/ImzaWidget içindeki Ortak.swift ile aynı kuralla bulunur (bu paket o dosyayı göremez).
+    static func ortakDosya() -> URL? {
+        let taban = "group.com.mohammeddilovan.kisiselhesap"
+        var adaylar: [String] = []
+        if let e = profil(Bundle.main.bundleURL)?["Entitlements"] as? [String: Any],
+           let g = e["com.apple.security.application-groups"] as? [String] { adaylar += g }
+        if let g = Bundle.main.object(forInfoDictionaryKey: "ALTAppGroups") as? [String] { adaylar += g }
+        let grup = adaylar.first { $0.hasPrefix(taban) } ?? adaylar.first ?? taban
+        return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: grup)?.appendingPathComponent("widget.json")
+    }
+
+    @objc func widget(_ call: CAPPluginCall) {
+        guard let veri = call.getString("veri")?.data(using: .utf8),
+              var yeni = (try? JSONSerialization.jsonObject(with: veri)) as? [String: Any] else { call.reject("veri yok"); return }
+        guard let url = ImzaPlugin.ortakDosya() else { call.resolve(["grup": false]); return }
+        // Kestirmeler'in yazdığı yenileme zamanı daha yeniyse korunur.
+        if let d = try? Data(contentsOf: url), let eski = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any],
+           let y = eski["yenilendi"] as? Double, y > (yeni["yenilendi"] as? Double ?? 0) { yeni["yenilendi"] = y }
+        guard let out = try? JSONSerialization.data(withJSONObject: yeni), (try? out.write(to: url, options: .atomic)) != nil else {
+            call.resolve(["grup": false]); return
+        }
+        WidgetCenter.shared.reloadAllTimelines()
+        call.resolve(["grup": true])
     }
 }
