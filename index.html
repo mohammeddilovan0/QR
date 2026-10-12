@@ -485,6 +485,7 @@ dialog.sheet{overflow-x:hidden;touch-action:pan-y}
     <label><span id="payAccLbl">Hesap</span><select name="accountId" required></select></label>
     <label id="payRateWrap" class="hide">Kur — 1 $ kaç dinar?<div class="amt"><input name="rate" inputmode="decimal" autocomplete="off"><span>IQD</span></div></label>
     <div class="muted" id="payHint" style="font-size:13px"></div>
+    <label>Havale ücreti / komisyon <span class="muted">(varsa)</span><div class="amt"><input name="fee" inputmode="decimal" autocomplete="off" placeholder="0"><span id="payFeeCur">IQD</span></div></label>
     <label>Tarih<input type="date" name="date" required></label>
     <label>Not<input name="note" maxlength="100" placeholder="İsteğe bağlı" autocomplete="off"></label>
     </div>
@@ -806,6 +807,7 @@ function balance(id, upto) {
       if (t.type === 'income' || t.type === 'opening' || t.type === 'debt-in') b += t.amount;
       else if (t.type === 'expense' || t.type === 'debt-out') b -= t.amount;
       else if (t.type === 'transfer') b -= t.amount + (t.feeTo ? 0 : t.fee || 0);
+      if (isDebtTx(t)) b -= t.fee || 0; // borç/alacak hareketinin havale ücreti
     }
     if (t.type === 'transfer' && t.toAccountId === id) b += t.toAmount - (t.feeTo ? t.fee || 0 : 0);
   }
@@ -813,7 +815,9 @@ function balance(id, upto) {
 }
 /* Harcama sayılan kısım: gider tutarı veya transfer ücreti. Para birimi txCur: çıkan hesabınki; ücret alan taraftan
    kesildiyse (feeTo) hedef hesabınki. Bu durumda toAmount çevrilen (ücretten önceki) tutardır, hedefe toAmount − ücret girer. */
-const txCost = t => t.type === 'expense' ? t.amount : t.type === 'transfer' ? (t.fee || 0) : 0;
+const isDebtTx = t => t.type === 'debt-in' || t.type === 'debt-out';
+/* Borç/alacak hareketinin havale ücreti (fee) de transfer ücreti gibi harcamadır; hesabın para biriminde, hesaptan düşer. */
+const txCost = t => t.type === 'expense' ? t.amount : t.type === 'transfer' || isDebtTx(t) ? (t.fee || 0) : 0;
 const txCur = t => { const a = acc(t.type === 'transfer' && t.feeTo ? t.toAccountId : t.accountId) || acc(t.accountId); return a ? a.currency : ''; };
 const FEE = '__fee';
 /* Transfer ücretlerinin sayıldığı gider kategorisi (Ayarlar); seçilmemişse ayrı "Transfer ücretleri" kalemi. */
@@ -863,7 +867,7 @@ function stats(start, end) {
     const cc = t.type === 'income' ? a.currency : txCur(t), v = conv(cost, cc, D, rateAt(t.date));
     if (t.type !== 'income') {
       exp += v; native[cc] += cost;
-      const k = t.type === 'transfer' ? feeCat() || FEE : t.categoryId && cat(t.categoryId) ? t.categoryId : '';
+      const k = t.type !== 'expense' ? feeCat() || FEE : t.categoryId && cat(t.categoryId) ? t.categoryId : '';
       const top = k && k !== FEE ? topOf(k) : k;
       byCat[k] = (byCat[k] || 0) + v;
       byTop[top] = (byTop[top] || 0) + v;
@@ -1206,11 +1210,11 @@ function renderTxList() {
     // Ana hesap seçiliyse alt hesaplarının (kartlarının) işlemleri de gelir.
     const inAcc = id => id && (id === f.acc || acc(id)?.parentId === f.acc);
     if (f.acc && !inAcc(t.accountId) && !inAcc(t.toAccountId)) return false;
-    if (f.cat === '__transfer' && t.type !== 'transfer') return false;
+    if (f.cat === '__transfer' && t.type !== 'transfer' && !(isDebtTx(t) && t.fee > 0)) return false;
     if (f.cat === '__debt' && t.type !== 'debt-in' && t.type !== 'debt-out') return false;
     if (f.cat === '__opening' && t.type !== 'opening') return false;
     // Ana kategori seçiliyse alt kategorilerinin işlemleri de gelir.
-    const fc = t.type === 'transfer' && t.fee > 0 ? feeCat() : '';
+    const fc = (t.type === 'transfer' || isDebtTx(t)) && t.fee > 0 ? feeCat() : '';
     if (f.cat && !['__transfer','__debt','__opening'].includes(f.cat) && !catUnder(t.categoryId, f.cat) && !(fc && catUnder(fc, f.cat))) return false;
     if (f.from && t.date < f.from) return false;
     if (f.to && t.date > f.to) return false;
@@ -1268,6 +1272,7 @@ function accDelta(t, id) {
     if (t.type === 'income' || t.type === 'opening' || t.type === 'debt-in') d += t.amount;
     else if (t.type === 'expense' || t.type === 'debt-out') d -= t.amount;
     else if (t.type === 'transfer') d -= t.amount + (t.feeTo ? 0 : t.fee || 0);
+    if (isDebtTx(t)) d -= t.fee || 0;
   }
   if (t.type === 'transfer' && t.toAccountId === id) d += t.toAmount - (t.feeTo ? t.fee || 0 : 0);
   return d;
@@ -1353,7 +1358,8 @@ function txInfo(t) {
     title = t.debtKind === 'lent' ? (incoming ? 'Alacak Tahsilatı' : 'Borç Verildi') : (incoming ? 'Borç Alındı' : 'Borç Ödemesi');
     col = incoming ? '#2e9e6b' : '#d9534f'; ic = incoming ? '↓' : '↑';
     sub = `${t.person ? t.person + ' · ' : ''}${accLabel(a)}`;
-    amt = `<span class="num ${incoming ? 'inc' : 'exp'}">${incoming ? '+' : '−'}${fmt(t.amount, cur)}</span>`;
+    amt = `<span class="num ${incoming ? 'inc' : 'exp'}">${incoming ? '+' : '−'}${fmt(t.amount, cur)}</span>` +
+      (t.fee ? `<br><small class="exp num">ücret −${fmt(t.fee, cur)}</small>` : '');
   } else {
     const c = cat(t.categoryId);
     title = c ? catLabel(c) : (t.type === 'income' ? 'Gelir' : 'Kategorisiz');
@@ -1856,10 +1862,12 @@ function debtSheet(e) {
       <label style="grid-column:1/-1">Kişi<input name="person" required maxlength="40" autocomplete="off" placeholder="ör. Ahmed" value="${v('person')}"></label>
       <label${e ? ' style="grid-column:1/-1"' : ''}>Tutar${e ? ` (${e.currency})` : ''}<input name="amount" inputmode="decimal" autocomplete="off" placeholder="0" value="${e ? esc(fmtIn(e.amount, 'any')) : ''}"></label>
       ${e ? '' : `<label>Para birimi<select name="currency" data-debt-currency><option value="IQD">Dinar (IQD)</option><option value="USD">Dolar (USD)</option></select></label>
-      <label style="grid-column:1/-1" data-debt-account-wrap><span data-debt-account-label>Paranın çıktığı hesap</span><select name="accountId" data-debt-account required>${debtAccOptions('IQD')}</select></label>`}
+      <label style="grid-column:1/-1" data-debt-account-wrap><span data-debt-account-label>Paranın çıktığı hesap</span><select name="accountId" data-debt-account required>${debtAccOptions('IQD')}</select></label>
+      <label style="grid-column:1/-1" data-debt-fee-wrap>Havale ücreti / komisyon <span class="muted">(varsa)</span><div class="amt"><input name="fee" inputmode="decimal" autocomplete="off" placeholder="0"><span data-debt-fee-cur>IQD</span></div></label>`}
+      ${e && e.txId && db.tx.some(t => t.id === e.txId) ? `<label style="grid-column:1/-1">Havale ücreti / komisyon (${e.currency})<input name="fee" inputmode="decimal" autocomplete="off" placeholder="0" value="${esc(fmtIn((db.tx.find(t => t.id === e.txId) || {}).fee || 0, 'any'))}"></label>` : ''}
       <label>Tarih<input type="date" name="date" value="${e ? e.date : today()}" required></label>
       <label>Not<input name="note" maxlength="100" autocomplete="off" placeholder="İsteğe bağlı" value="${v('note')}"></label>
-      ${e ? '' : '<p class="muted" style="grid-column:1/-1;font-size:12px;margin:0">Yeni kayıtta para seçilen hesaba girer veya hesaptan çıkar. Başlangıç kaydı önceden var olan borç/alacağı ekler, hiçbir hesap bakiyesini değiştirmez.</p>'}
+      ${e ? '' : '<p class="muted" style="grid-column:1/-1;font-size:12px;margin:0">Yeni kayıtta para seçilen hesaba girer veya hesaptan çıkar. Havale ücreti borç/alacak tutarına eklenmez; hesaptan ayrıca düşer ve harcamalarda transfer ücreti olarak görünür. Başlangıç kaydı önceden var olan borç/alacağı ekler, hiçbir hesap bakiyesini değiştirmez.</p>'}
     </div></form>`);
 }
 function syncDebtForm() {
@@ -1868,6 +1876,8 @@ function syncDebtForm() {
   const sel = f.elements.accountId, wrap = f.querySelector('[data-debt-account-wrap]');
   const opening = mode === 'opening';
   if (wrap) wrap.classList.toggle('hide', opening);
+  const fw = f.querySelector('[data-debt-fee-wrap]');
+  if (fw) { fw.classList.toggle('hide', opening); fw.querySelector('[data-debt-fee-cur]').textContent = cur; }
   sel.required = !opening;
   if (!opening) {
     const keep = sel.value;
@@ -1892,7 +1902,7 @@ function payFull() {
 function syncPay() {
   const x = db.debts.find(d => d.id === payId); if (!x) return;
   const f = $('#payForm').elements, a = acc(f.accountId.value), cur = a ? a.currency : x.currency, fx = cur !== x.currency;
-  $('#payCur').textContent = cur;
+  $('#payCur').textContent = cur; $('#payFeeCur').textContent = cur;
   $('#payRateWrap').classList.toggle('hide', !fx);
   if (fx && !payRateTyped.v) f.rate.value = fmtIn(payDefRate(f), 'rate');
   const amount = num(f.amount.value), R = num(f.rate.value), left = debtLeft(x);
@@ -1909,7 +1919,7 @@ function openPay(id) {
   const list = accOrdered().sort((a, b) => (a.currency !== x.currency) - (b.currency !== x.currency));
   f.accountId.innerHTML = list.length ? accOptions(list) : '<option value="">— hesap yok —</option>';
   if (x.accountId && acc(x.accountId)) f.accountId.value = x.accountId;
-  f.date.value = today(); f.note.value = ''; f.rate.value = '';
+  f.date.value = today(); f.note.value = ''; f.rate.value = ''; f.fee.value = '';
   $('#payTitle').textContent = `${x.dir === 'lent' ? 'Tahsilat' : 'Ödeme'} — ${x.person}`;
   $('#payInfo').textContent = `Kalan: ${fmt(debtLeft(x), x.currency)}`;
   $('#payAccLbl').textContent = x.dir === 'lent' ? 'Paranın gireceği hesap' : 'Paranın çıkacağı hesap';
@@ -1926,6 +1936,8 @@ function submitPay(e) {
   if (!f.date.value) { toast('Tarih seçin.'); return; }
   const fx = a.currency !== x.currency, R = num(f.rate.value);
   if (fx && !(R > 0)) { toast('Geçerli bir kur girin.'); return; }
+  const fee = f.fee.value.trim() ? num(f.fee.value) : 0;
+  if (!(fee >= 0)) { toast('Geçerli bir havale ücreti girin.'); return; }
   const left = debtLeft(x);
   let ded = fx ? conv(amount, a.currency, x.currency, R) : amount;
   // Kur çevirisinde küçük yuvarlama farkı (%0,5'e kadar) kalanı kapatır.
@@ -1940,7 +1952,7 @@ function submitPay(e) {
   db.tx.push({
     id: txid, ts: Date.now(), type: incoming ? 'debt-in' : 'debt-out', date: f.date.value,
     accountId: a.id, amount, note: f.note.value.trim(), debtId: x.id, paymentId: pid,
-    debtKind: x.dir, person: x.person, locked: true,
+    debtKind: x.dir, person: x.person, locked: true, ...(fee ? { fee } : {}),
   });
   save(); closeSheet($('#payDlg')); render(); toast(debtOpen(x) ? 'Kaydedildi' : 'Kapandı ✓');
 }
@@ -3061,12 +3073,14 @@ document.addEventListener('submit', e => {
     if (!(amount > 0)) { toast('Geçerli bir tutar girin.'); return; }
     if (!v.date) { toast('Tarih seçin.'); return; }
     if (amount < debtPaid(x) - 0.005) { toast(`Tutar, ödenmiş kısımdan (${fmt(debtPaid(x), x.currency)}) az olamaz.`); return; }
+    const fee = v.fee === undefined || !String(v.fee).trim() ? 0 : num(v.fee);
+    if (!(fee >= 0)) { toast('Geçerli bir havale ücreti girin.'); return; }
     Object.assign(x, { person, amount, note, date: v.date });
     // Bağlı hesap hareketleri de güncellenir (bakiye ve isim tutarlı kalsın).
     for (const t of db.tx) {
       if (t.debtId !== x.id) continue;
       t.person = person;
-      if (t.id === x.txId) Object.assign(t, { amount, date: v.date, note });
+      if (t.id === x.txId) { Object.assign(t, { amount, date: v.date, note }); if (v.fee !== undefined) { if (fee) t.fee = fee; else delete t.fee; } }
     }
     toast('Kaydedildi');
   } else if (form.dataset.form === 'rem') {
@@ -3082,6 +3096,8 @@ document.addEventListener('submit', e => {
     if (!(amount > 0)) { toast('Geçerli bir tutar girin.'); form.elements.amount.focus(); return; }
     if (!opening && (!a || a.currency !== v.currency)) { toast(`${v.currency} para biriminde bir hesap seçin.`); return; }
     if (!v.date) { toast('Tarih seçin.'); return; }
+    const fee = opening || !String(v.fee || '').trim() ? 0 : num(v.fee);
+    if (!(fee >= 0)) { toast('Geçerli bir havale ücreti girin.'); form.elements.fee.focus(); return; }
     const did = uid(), txid = opening ? '' : uid(), note = (v.note || '').trim();
     db.debts.push({
       id: did, dir: v.dir, person, amount, currency: v.currency, accountId: a ? a.id : '', txId: txid,
@@ -3090,9 +3106,9 @@ document.addEventListener('submit', e => {
     if (!opening) {
       db.tx.push({
         id: txid, ts: Date.now(), type: v.dir === 'owed' ? 'debt-in' : 'debt-out', date: v.date,
-        accountId: a.id, amount, note, debtId: did, debtKind: v.dir, person, locked: true,
+        accountId: a.id, amount, note, debtId: did, debtKind: v.dir, person, locked: true, ...(fee ? { fee } : {}),
       });
-      toast(v.dir === 'lent' ? 'Alacak eklendi · hesaptan düşüldü' : 'Borç eklendi · hesaba girdi');
+      toast(v.dir === 'lent' ? `Alacak eklendi · hesaptan düşüldü${fee ? ' (+ ücret)' : ''}` : 'Borç eklendi · hesaba girdi');
     } else {
       toast(v.dir === 'lent' ? 'Başlangıç alacağı eklendi' : 'Başlangıç borcu eklendi');
     }
