@@ -3511,7 +3511,10 @@ async function kalkCheck(force) {
   }
   drawPush();
 }
-function drawPush() { const el = $('#kalkPush'); if (el) el.innerHTML = vPush(); }
+function drawPush() {
+  const el = $('#kalkPush'); if (el) el.innerHTML = vPush();
+  const n = $('#kalkNat'); if (n) n.innerHTML = natRolling ? '⚠️ ' + natNote() : '';
+}
 function vPush() {
   const guide = '<a href="https://github.com/mohammeddilovan0/QR/blob/main/kopru/KURULUM.md#ayağa-kalk-hatırlatıcısı" target="_blank" rel="noopener">kurulum</a>';
   const p = kalkPush;
@@ -3526,8 +3529,7 @@ function vPush() {
     'kv-yok': `<p class="muted">Köprü güncel ama hatırlatma deposu bağlı değil: Cloudflare’de <b>HATIRLATICI</b> adlı KV deposunu köprüye bağlayın (${guide}).</p><button class="btn sm" data-kalk="check">Tekrar dene</button>`,
     hata: NATIVE ? `<p class="muted">Bildirimler kurulamadı (${esc(p.err || '')}).</p><button class="btn sm" data-kalk="check">Tekrar dene</button>` : `<p class="muted">Köprüye ulaşılamadı (${esc(p.err || '')}).</p><button class="btn sm" data-kalk="check">Tekrar dene</button>`,
     hazir: NATIVE ? `<p style="margin-top:0"><span class="ok">✓</span> Uygulama kapalıyken de seçtiğin sesle bildirim gelir.</p>
-      ${natRolling ? '<p class="muted" style="font-size:12px">Bu ayarlarla sonraki hatırlatmalar tek tek kuruldu; uygulamayı arada bir açman yeter.</p>' : ''}
-      ${natSitUntil ? `<p class="muted" style="font-size:12px">iPhone en fazla 64 bekleyen bildirime izin verdiği için oturma hatırlatmaları şimdilik sonraki birkaç saat için kuruldu (son: ${esc(whenLabel(natSitUntil))}); uygulamayı açtıkça ileri kayar. Kalk hatırlatmaları her gün kendiliğinden gelir.</p>` : ''}
+      ${natRolling ? `<p class="muted" style="font-size:12px">${natNote()}</p>` : ''}
       <button class="btn sm" data-kalk="test">Deneme bildirimi gönder</button>` : `<p style="margin-top:0"><span class="ok">✓</span> Uygulama kapalıyken de bildirim gelir.</p>
       <p class="muted" style="font-size:12px">${p.last ? `Son gönderilen hatırlatma: ${esc(fmtTs(p.last))}` : 'Henüz zamanı gelen hatırlatma gönderilmedi.'}</p>
       <button class="btn sm" data-kalk="test">Deneme bildirimi gönder</button>`,
@@ -3553,6 +3555,8 @@ function pushEnable() {
    hep çalışır); ara verildiyse ya da saatler çok uzunsa sonraki 60 hatırlatma tek tek kurulur ve uygulama her açıldığında yenilenir. */
 const NAT_MAX = 36; // iOS 64 bekleyen bildirim sınırı: 36 hatırlatıcı + 25 imza (2 gün kala + son 24 saat her saat)
 let natT, natRolling = false, natSitUntil = 0;
+/* iPhone en fazla 64 bekleyen bildirim tutar; ayarlar tekrarlı kuruluma sığmayınca bildirimler belli bir saate kadar kurulur. */
+const natNote = () => `iPhone en fazla 64 bekleyen bildirime izin verdiği için bu ayarlarla hatırlatmalar tek tek kuruldu${natSitUntil ? ` (son: <b>${esc(whenLabel(natSitUntil))}</b>)` : ''}; uygulamayı her açtığında ileri kayar. Her gün kendiliğinden gelmeleri için sıklığı artır (ör. 60 dk) ya da saat aralığını kısalt.`;
 function nativeScheduleSoon() { if (!NATIVE) return; clearTimeout(natT); natT = setTimeout(nativeSchedule, 300); }
 function kalkSlots(shift = 0) {
   const s = hm(K.start), e = hm(K.end), span = ((e - s + 1440) % 1440) || 1440, out = [];
@@ -3580,24 +3584,19 @@ async function nativeSchedule() {
     const recentSit = () => { if (sit) for (let b = Math.floor(now / 60e3) * 60e3; b > now - sit * 60e3; b -= 60e3)
       if (kalkDue(a, b)) return [{ ...sb, schedule: { at: new Date(b + sit * 60e3) } }]; return []; };
     let list = [];
-    if (rep) {
-      list = rep(slots).map(x => ({ ...base, ...x }));
-      if (sit) {
-        const sits = rep(kalkSlots(sit)).map(x => ({ ...sb, ...x }));
-        if (list.length + sits.length <= NAT) list = list.concat(sits);
-        else {
-          // Oturma bildirimleri tekrarlıya sığmıyor: kalan yere sonrakiler tek tek kurulur, uygulama açıldıkça ileri kayar.
-          list = list.concat(recentSit());
-          for (let t = now; list.length < NAT;) { t = kalkNext(t); if (!t) break; list.push({ ...sb, schedule: { at: new Date(t + sit * 60e3) } }); natSitUntil = t + sit * 60e3; }
-        }
-      }
+    // Kalk (ve açıksa otur) bildirimlerinin hepsi tekrarlı sığıyorsa bir kez kurulur, hep çalışır.
+    const sits = rep && sit ? rep(kalkSlots(sit)) : [];
+    if (rep && rep(slots).length + sits.length <= NAT) {
+      list = rep(slots).map(x => ({ ...base, ...x })).concat(sits.map(x => ({ ...sb, ...x })));
     } else {
+      // Sığmıyorsa sonraki hatırlatmalar (kalk + otur çift çift) tek tek kurulur; uygulama her açıldığında ve
+      // açıkken her bildirimde ileri kayar.
       natRolling = true;
       list = recentSit();
       for (let t = now; list.length < NAT;) {
         t = kalkNext(t); if (!t) break;
-        list.push({ ...base, schedule: { at: new Date(t) } });
-        if (sit && list.length < NAT) list.push({ ...sb, schedule: { at: new Date(t + sit * 60e3) } });
+        list.push({ ...base, schedule: { at: new Date(t) } }); natSitUntil = t;
+        if (sit && list.length < NAT) { list.push({ ...sb, schedule: { at: new Date(t + sit * 60e3) } }); natSitUntil = t + sit * 60e3; }
       }
     }
     if (list.length) await LN('schedule', { notifications: list.map((x, i) => ({ id: 1000 + i, ...x })) });
@@ -3608,6 +3607,8 @@ if (NATIVE) {
   // Uygulama açıkken gelen bildirimi telefon sesiyle gösterir; üstteki uyarı da görünsün (ses ikinci kez çalmadan).
   Capacitor.addListener('LocalNotifications', 'localNotificationReceived', n => {
     if (+n.id === 999) return;
+    // Tek tek kurulan kalk/otur bildirimleri: biri geldikçe sonrakiler ileri kaydırılır.
+    if (+n.id >= 1000 && +n.id < 2000 && natRolling) nativeScheduleSoon();
     $('#kalkBanI').textContent = +n.id >= REM_ID ? '⏰' : +n.id >= 2000 ? '📲' : /^Otur/.test(n.title || '') ? '🪑' : '🧍';
     $('#kalkBanT').textContent = n.title || 'Kalk biraz 🧍'; $('#kalkBanB').textContent = n.body || '';
     const b = $('#kalkBan'); if (b.showPopover) try { b.showPopover(); } catch (_) {}
@@ -4293,6 +4294,7 @@ function vKalk() {
       <div class="muted" style="font-size:13px">${paused ? 'Ara verildi · sonraki hatırlatma' : 'Sonraki hatırlatma'}${sit ? ` · otur: ${esc(hhmm(next + sit * 60e3))} 🪑` : ''}</div>
       <div class="kbtns">${paused ? '<button class="btn" data-kalk="resume">Devam et</button>'
         : '<button class="btn" data-kalk="pause" data-min="60">1 saat ara ver</button><button class="btn" data-kalk="pause-day">Bugünlük yeter</button>'}</div>` : ''}
+    ${NATIVE && K.on ? `<p class="muted" id="kalkNat" style="font-size:12px;margin:10px 0 0">${natRolling ? '⚠️ ' + natNote() : ''}</p>` : ''}
   </div>
   <div class="card">
     <h2>Ne sıklıkla?</h2>
