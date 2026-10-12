@@ -3247,8 +3247,9 @@ const KALK = KEY + '-kalk';
 /* iPhone uygulaması (ios-app, Capacitor) içinde: hatırlatmalar telefonun yerel bildirimleriyle kurulur ve seçilen ses
    pakette (kalk-*.wav) olduğu için uygulama kapalıyken de o çalar. Köprü/Web Push gerekmez. (NATIVE en üstte tanımlı.) */
 const LN = (m, o) => Capacitor.nativePromise('LocalNotifications', m, o || {});
-const KALK_DEF = { on: false, every: 20, start: '09:00', end: '22:00', days: [0, 1, 2, 3, 4, 5, 6], sound: 'zil', pause: 0 };
+const KALK_DEF = { on: false, every: 20, start: '09:00', end: '22:00', days: [0, 1, 2, 3, 4, 5, 6], sound: 'zil', pause: 0, sit: 5 };
 const KALK_EVERY = [15, 20, 25, 30, 45, 60];
+const KALK_SIT = [0, 2, 3, 5, 10, 15]; // kalk hatırlatmasından kaç dakika sonra "oturabilirsin" (0: kapalı)
 const KALK_DAYS = [[1, 'Pzt'], [2, 'Sal'], [3, 'Çar'], [4, 'Per'], [5, 'Cum'], [6, 'Cmt'], [0, 'Paz']];
 const SOUNDS = [['zil', 'Zil'], ['marimba', 'Marimba'], ['kus', 'Kuş cıvıltısı'], ['gong', 'Gong'], ['yumusak', 'Yumuşak'], ['bip', 'Bip bip'], ['yok', 'Sessiz']];
 const hm = s => { const m = /^(\d\d):(\d\d)$/.exec(s || ''); return m && +m[1] < 24 && +m[2] < 60 ? +m[1] * 60 + +m[2] : null; };
@@ -3263,10 +3264,14 @@ function loadKalk() {
   k.days = Array.isArray(k.days) ? KALK_DAYS.map(d => d[0]).filter(d => k.days.includes(d)) : KALK_DEF.days.slice();
   if (!SOUNDS.some(s => s[0] === k.sound)) k.sound = 'zil';
   k.pause = +k.pause || 0;
+  k.sit = KALK_SIT.includes(+k.sit) ? +k.sit : KALK_DEF.sit;
   return k;
 }
 let K = loadKalk();
 const kalkOn = () => K.on;
+/* Oturma hatırlatması: kalk hatırlatmasından "sit" dakika sonra; aralıktan kısa değilse kapalı sayılır. */
+const kalkSit = () => K.sit && K.sit < K.every ? K.sit : 0;
+const sitBase = () => ({ title: 'Oturabilirsin 🪑', body: `${kalkSit()} dakikadır ayaktasın. Şimdi oturabilirsin.`, sound: `kalk-${K.sound}.wav` });
 function saveKalk(sync = true) {
   try { localStorage.setItem(KALK, JSON.stringify(K)); } catch (e) {}
   if (NATIVE) nativeScheduleSoon(); else if (sync) pushSyncSoon();
@@ -3381,10 +3386,15 @@ function kalkFire(title, body) {
 function kalkBanClose() { const b = $('#kalkBan'); b.classList.remove('on'); if (b.hidePopover) try { b.hidePopover(); } catch (_) {} }
 function kalkTick() {
   if (NATIVE) return; // uygulamada bildirimi telefon kendisi gösterir, sesiyle birlikte
-  const t = Math.floor(Date.now() / 60e3) * 60e3;
-  if (document.hidden || t === kalkLast || !kalkDue(kalkAyar(), t)) return;
-  kalkLast = t;
-  kalkFire('Kalk biraz 🧍', `${K.every} dakikadır oturuyorsun. Kalk, birkaç adım yürü.`);
+  const t = Math.floor(Date.now() / 60e3) * 60e3, sit = kalkSit();
+  if (document.hidden || t === kalkLast) return;
+  if (kalkDue(kalkAyar(), t)) {
+    kalkLast = t;
+    kalkFire('Kalk biraz 🧍', `${K.every} dakikadır oturuyorsun. Kalk, birkaç adım yürü.`);
+  } else if (sit && kalkDue(kalkAyar(), t - sit * 60e3)) {
+    kalkLast = t;
+    const b = sitBase(); kalkFire(b.title, b.body); $('#kalkBanI').textContent = '🪑';
+  } else return;
   if (ui.tab === 'kalk') render();
 }
 setInterval(kalkTick, 5e3);
@@ -3479,6 +3489,7 @@ function vPush() {
     hata: NATIVE ? `<p class="muted">Bildirimler kurulamadı (${esc(p.err || '')}).</p><button class="btn sm" data-kalk="check">Tekrar dene</button>` : `<p class="muted">Köprüye ulaşılamadı (${esc(p.err || '')}).</p><button class="btn sm" data-kalk="check">Tekrar dene</button>`,
     hazir: NATIVE ? `<p style="margin-top:0"><span class="ok">✓</span> Uygulama kapalıyken de seçtiğin sesle bildirim gelir.</p>
       ${natRolling ? '<p class="muted" style="font-size:12px">Bu ayarlarla sonraki hatırlatmalar tek tek kuruldu; uygulamayı arada bir açman yeter.</p>' : ''}
+      ${natSitUntil ? `<p class="muted" style="font-size:12px">iPhone en fazla 64 bekleyen bildirime izin verdiği için oturma hatırlatmaları şimdilik sonraki birkaç saat için kuruldu (son: ${esc(whenLabel(natSitUntil))}); uygulamayı açtıkça ileri kayar. Kalk hatırlatmaları her gün kendiliğinden gelir.</p>` : ''}
       <button class="btn sm" data-kalk="test">Deneme bildirimi gönder</button>` : `<p style="margin-top:0"><span class="ok">✓</span> Uygulama kapalıyken de bildirim gelir.</p>
       <p class="muted" style="font-size:12px">${p.last ? `Son gönderilen hatırlatma: ${esc(fmtTs(p.last))}` : 'Henüz zamanı gelen hatırlatma gönderilmedi.'}</p>
       <button class="btn sm" data-kalk="test">Deneme bildirimi gönder</button>`,
@@ -3503,12 +3514,12 @@ function pushEnable() {
 /* iOS en fazla 64 bekleyen bildirim tutar. Ayarlar elverirse haftalık/günlük tekrar eden bildirimler kurulur (bir kez kurulur,
    hep çalışır); ara verildiyse ya da saatler çok uzunsa sonraki 60 hatırlatma tek tek kurulur ve uygulama her açıldığında yenilenir. */
 const NAT_MAX = 36; // iOS 64 bekleyen bildirim sınırı: 36 hatırlatıcı + 25 imza (2 gün kala + son 24 saat her saat)
-let natT, natRolling = false;
+let natT, natRolling = false, natSitUntil = 0;
 function nativeScheduleSoon() { if (!NATIVE) return; clearTimeout(natT); natT = setTimeout(nativeSchedule, 300); }
-function kalkSlots() {
+function kalkSlots(shift = 0) {
   const s = hm(K.start), e = hm(K.end), span = ((e - s + 1440) % 1440) || 1440, out = [];
   for (const d of K.days) for (let off = K.every; off <= span; off += K.every) {
-    const m = s + off;
+    const m = s + off + shift;
     out.push({ weekday: (d + Math.floor(m / 1440)) % 7 + 1, hour: Math.floor(m % 1440 / 60), minute: m % 60 });
   }
   return out;
@@ -3519,20 +3530,39 @@ async function nativeSchedule() {
   try {
     const pend = ((await LN('getPending')).notifications || []).filter(n => +n.id < 2000); // 2000+: imza hatırlatmaları
     if (pend.length) await LN('cancel', { notifications: pend.map(n => ({ id: +n.id })) });
-    natRolling = false;
+    natRolling = false; natSitUntil = 0;
     if (!K.on || !K.days.length) return;
-    const now = Date.now(), slots = kalkSlots(), per = slots.length / K.days.length;
+    const now = Date.now(), sit = kalkSit(), slots = kalkSlots(), per = slots.length / K.days.length;
+    const base = natBase(), sb = sitBase(), a = kalkAyar();
+    // Tekrarlı kurulum: 7 gün seçiliyse günlük, değilse haftalık. Önce kalk hatırlatmaları sığdırılır (hep çalışsın).
+    const day = sl => sl.slice(0, per).map(({ hour, minute }) => ({ schedule: { on: { hour, minute } } }));
+    const week = sl => sl.map(on => ({ schedule: { on } }));
+    const rep = K.pause > now ? null : K.days.length === 7 && per <= NAT ? day : slots.length <= NAT ? week : null;
+    // Az önce gelen kalk hatırlatmasının oturma bildirimi henüz gelmediyse o da yeniden kurulur.
+    const recentSit = () => { if (sit) for (let b = Math.floor(now / 60e3) * 60e3; b > now - sit * 60e3; b -= 60e3)
+      if (kalkDue(a, b)) return [{ ...sb, schedule: { at: new Date(b + sit * 60e3) } }]; return []; };
     let list = [];
-    if (K.pause <= now) {
-      if (K.days.length === 7 && per <= NAT) list = slots.slice(0, per).map(({ hour, minute }) => ({ schedule: { on: { hour, minute } } }));
-      else if (slots.length <= NAT) list = slots.map(on => ({ schedule: { on } }));
-    }
-    if (!list.length) {
+    if (rep) {
+      list = rep(slots).map(x => ({ ...base, ...x }));
+      if (sit) {
+        const sits = rep(kalkSlots(sit)).map(x => ({ ...sb, ...x }));
+        if (list.length + sits.length <= NAT) list = list.concat(sits);
+        else {
+          // Oturma bildirimleri tekrarlıya sığmıyor: kalan yere sonrakiler tek tek kurulur, uygulama açıldıkça ileri kayar.
+          list = list.concat(recentSit());
+          for (let t = now; list.length < NAT;) { t = kalkNext(t); if (!t) break; list.push({ ...sb, schedule: { at: new Date(t + sit * 60e3) } }); natSitUntil = t + sit * 60e3; }
+        }
+      }
+    } else {
       natRolling = true;
-      for (let t = now, i = 0; i < NAT; i++) { t = kalkNext(t); if (!t) break; list.push({ schedule: { at: new Date(t) } }); }
+      list = recentSit();
+      for (let t = now; list.length < NAT;) {
+        t = kalkNext(t); if (!t) break;
+        list.push({ ...base, schedule: { at: new Date(t) } });
+        if (sit && list.length < NAT) list.push({ ...sb, schedule: { at: new Date(t + sit * 60e3) } });
+      }
     }
-    const base = natBase();
-    if (list.length) await LN('schedule', { notifications: list.map((x, i) => ({ id: 1000 + i, ...base, ...x })) });
+    if (list.length) await LN('schedule', { notifications: list.map((x, i) => ({ id: 1000 + i, ...x })) });
   } catch (e) { kalkPush = { st: 'hata', err: e.message || String(e) }; }
   drawPush();
 }
@@ -3540,7 +3570,7 @@ if (NATIVE) {
   // Uygulama açıkken gelen bildirimi telefon sesiyle gösterir; üstteki uyarı da görünsün (ses ikinci kez çalmadan).
   Capacitor.addListener('LocalNotifications', 'localNotificationReceived', n => {
     if (+n.id === 999) return;
-    $('#kalkBanI').textContent = +n.id >= REM_ID ? '⏰' : +n.id >= 2000 ? '📲' : '🧍';
+    $('#kalkBanI').textContent = +n.id >= REM_ID ? '⏰' : +n.id >= 2000 ? '📲' : /^Otur/.test(n.title || '') ? '🪑' : '🧍';
     $('#kalkBanT').textContent = n.title || 'Kalk biraz 🧍'; $('#kalkBanB').textContent = n.body || '';
     const b = $('#kalkBan'); if (b.showPopover) try { b.showPopover(); } catch (_) {}
     b.classList.add('on'); clearTimeout(kalkBanT); kalkBanT = setTimeout(kalkBanClose, 60e3);
@@ -4215,19 +4245,23 @@ document.addEventListener('change', e => {
 
 function vKalk() {
   const now = Date.now(), paused = K.on && K.pause > now, next = K.on ? kalkNext(Math.max(now, K.pause - 60e3)) : 0;
-  const status = !K.on ? 'Kapalı' : !K.days.length ? 'Hiç gün seçili değil' : `Her ${K.every} dk · ${K.start}–${K.end}`;
+  const sit = kalkSit();
+  const status = !K.on ? 'Kapalı' : !K.days.length ? 'Hiç gün seçili değil' : `Her ${K.every} dk · ${K.start}–${K.end}${sit ? ` · ${sit} dk sonra otur` : ''}`;
   return `
   <div class="card">
     <div class="krow"><div style="flex:1"><b style="font-size:17px">Ayağa kalk hatırlatıcısı</b><div class="muted" style="font-size:13px">${esc(status)}</div></div>
       <button class="tgl ${K.on ? 'on' : ''}" data-kalk="toggle" role="switch" aria-checked="${K.on}" aria-label="Hatırlatıcı"></button></div>
     ${K.on && next ? `<div class="knext num">${esc(whenLabel(next))}</div>
-      <div class="muted" style="font-size:13px">${paused ? 'Ara verildi · sonraki hatırlatma' : 'Sonraki hatırlatma'}</div>
+      <div class="muted" style="font-size:13px">${paused ? 'Ara verildi · sonraki hatırlatma' : 'Sonraki hatırlatma'}${sit ? ` · otur: ${esc(hhmm(next + sit * 60e3))} 🪑` : ''}</div>
       <div class="kbtns">${paused ? '<button class="btn" data-kalk="resume">Devam et</button>'
         : '<button class="btn" data-kalk="pause" data-min="60">1 saat ara ver</button><button class="btn" data-kalk="pause-day">Bugünlük yeter</button>'}</div>` : ''}
   </div>
   <div class="card">
     <h2>Ne sıklıkla?</h2>
     <div class="chips" style="margin-top:0">${KALK_EVERY.map(m => `<button class="chip pick ${K.every === m ? 'sel' : ''}" data-kalk="every" data-v="${m}">${m} dk</button>`).join('')}</div>
+    <h2 style="margin-top:18px">Sonra otur</h2>
+    <div class="chips" style="margin-top:0">${KALK_SIT.map(m => `<button class="chip pick ${(K.sit === m) ? 'sel' : ''}" data-kalk="sit" data-v="${m}" ${m && m >= K.every ? 'disabled style="opacity:.4"' : ''}>${m ? m + ' dk' : 'Kapalı'}</button>`).join('')}</div>
+    <p class="muted" style="font-size:12px;margin:10px 0 0">${sit ? `Her kalk hatırlatmasından ${sit} dakika sonra “Oturabilirsin 🪑” bildirimi gelir.` : K.sit ? 'Oturma süresi hatırlatma aralığından kısa olmalı.' : 'Kalktıktan sonra oturma hatırlatması gelmez.'}</p>
     <h2 style="margin-top:18px">Hangi saatlerde?</h2>
     <div class="ktimes"><label>Başlangıç<input type="time" data-kalk-set="start" value="${K.start}"></label><label>Bitiş<input type="time" data-kalk-set="end" value="${K.end}"></label></div>
     <div class="chips kdays">${KALK_DAYS.map(([d, l]) => `<button class="chip pick ${K.days.includes(d) ? 'sel' : ''}" data-kalk="day" data-v="${d}">${l}</button>`).join('')}</div>
@@ -4251,6 +4285,7 @@ document.addEventListener('click', e => {
       if (K.on) { audio(); if (NATIVE) pushEnable(); else if (pushOk() && db.settings.bridge && Notification.permission === 'default') pushEnable(); }
       return;
     case 'every': K.every = +v; break;
+    case 'sit': K.sit = +v; break;
     case 'day': { const d = +v; K.days = K.days.includes(d) ? K.days.filter(x => x !== d) : [...K.days, d]; break; }
     case 'sound': K.sound = v; saveKalk(false); playSound(v); render(); return;
     case 'pause': K.pause = Date.now() + (+el.dataset.min) * 60e3; toast('1 saat ara verildi'); break;
