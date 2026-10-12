@@ -1053,7 +1053,7 @@ function vOzet() {
   ${monthList()}`;
 }
 
-/* Seçilen yılın 12 ayında harcanan, alt alta. Bir aya dokununca Özet o aya geçer. */
+/* Seçilen yılın 12 ayında harcanan, alt alta. Bir aya dokununca o ayın işlemleri açılır. */
 const MNAME = new Intl.DateTimeFormat('tr-TR', { month: 'long' });
 function monthList() {
   const D = disp(), t = today(), y = ui.monYear || +t.slice(0, 4);
@@ -1071,7 +1071,7 @@ function monthList() {
       <button class="icon" data-action="mon-year" data-n="-1" aria-label="Önceki yıl">‹</button>
       <b class="num" style="min-width:44px;text-align:center">${y}</b>
       <button class="icon" data-action="mon-year" data-n="1" aria-label="Sonraki yıl">›</button></div>
-    <div class="mon">${rows.map(r => `<div class="mr ${r.cur ? 'now' : ''} ${r.fut ? 'fut' : ''}" data-action="mon-open" data-d="${r.g.start}" title="${esc(r.g.label)} özetini aç">
+    <div class="mon">${rows.map(r => `<div class="mr ${r.cur ? 'now' : ''} ${r.fut ? 'fut' : ''}" data-action="mon-open" data-d="${r.g.start}" title="${esc(r.g.label)} işlemlerini gör">
       <span class="mn"><i>${r.m + 1}.</i>${esc(nm(r))}</span>
       <span class="bar-track"><span class="bar-fill" style="display:block;width:${r.v ? Math.max(2, r.v / max * 100) : 0}%;background:var(--exp)"></span></span>
       <span class="mv num">${r.fut ? '—' : fmt(r.v, D)}</span></div>`).join('')}
@@ -2956,8 +2956,10 @@ document.addEventListener('click', e => {
     case 'goal-acc': ui.goalAccs.has(d.v) ? ui.goalAccs.delete(d.v) : ui.goalAccs.add(d.v); el.classList.toggle('sel', ui.goalAccs.has(d.v)); break;
     case 'mon-year': ui.monYear = (ui.monYear || +today().slice(0, 4)) + +d.n; render(); break;
     case 'mon-open': {
-      ui.period = 'month'; ui.anchor = d.d; render();
-      const pb = $('.periodbar'); if (pb) pb.closest('.card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // O ayın bütün işlemleri: İşlemler ekranı o ayın tarihleriyle süzülmüş açılır.
+      const rg = range('month', d.d);
+      ui.f = { q: '', acc: '', cat: '', from: rg.start, to: rg.end }; ui.fcShow = false;
+      ui.tab = 'islemler'; render(); scrollTo(0, 0); onScroll();
       break;
     }
     case 'edit-debt': { const x = db.debts.find(y => y.id === d.id); if (x) { closeSw(); debtSheet(x); } break; }
