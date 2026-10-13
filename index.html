@@ -437,6 +437,14 @@ dialog.sheet{overflow-x:hidden;touch-action:pan-y}
       <div class="amt" id="amtBox"><input name="amount" inputmode="decimal" autocomplete="off" placeholder="0"><span id="amtCur">IQD</span></div>
       <div class="hint" id="amtHint"></div>
     </label>
+    <div id="paidWrap">
+      <button type="button" class="btn sm" data-action="paid-toggle" id="paidBtn"></button>
+      <div id="paidBox" class="fxbox hide" style="margin-top:8px">
+        <label><span id="paidLbl">Ödenen tutar</span>
+          <div class="amt"><input name="paidAmt" inputmode="decimal" autocomplete="off" placeholder="0"><span id="paidCur">USD</span></div></label>
+        <div class="hint" id="paidHint"></div>
+      </div>
+    </div>
     <label><span id="accLbl">Hesap</span><select name="accountId"></select></label>
     <div id="catWrap"><label>Kategori</label>
       <select name="categoryId" class="hide" tabindex="-1"></select>
@@ -1384,7 +1392,8 @@ function txInfo(t) {
     col = c ? c.color : (t.type === 'income' ? '#2e9e6b' : '#999');
     ic = esc((c ? c.name : title).trim()[0] || '•').toLocaleUpperCase('tr');
     sub = accLabel(a);
-    amt = `<span class="num ${t.type === 'expense' ? 'exp' : 'inc'}">${t.type === 'expense' ? '−' : '+'}${fmt(t.amount, cur)}</span>`;
+    amt = `<span class="num ${t.type === 'expense' ? 'exp' : 'inc'}">${t.type === 'expense' ? '−' : '+'}${fmt(t.amount, cur)}</span>` +
+      (t.paid ? `<br><small class="muted num">${fmt(t.paid.amount, t.paid.currency)} · 1 $ = ${fmtNum(cur === 'IQD' ? t.amount / t.paid.amount : t.paid.amount / t.amount)}</small>` : '');
   }
   if (t.note) sub += ' · ' + t.note;
   return { title, sub, col, ic, amt, locked };
@@ -2615,6 +2624,9 @@ function openTx(type, id, preset) {
   f.fee.value = t && t.fee ? fmtIn(t.fee, 'any') : '';
   f.feeSide.value = t ? (t.feeTo ? 'to' : 'from') : ui.lastFeeSide || 'from';
   f.saveRate.checked = !t;
+  // Hesaptan başka para biriminde ödenen gider/gelir (ör. $95.57'lik ödeme dinar hesabından 151,526 IQD çekti).
+  dlg.paidOn = !!(t && t.paid);
+  f.paidAmt.value = t && t.paid ? fmtIn(t.paid.amount, 'any') : '';
   syncTx(t);
   const tr = t && t.type === 'transfer' ? t : preset;
   if (tr) {
@@ -2717,6 +2729,18 @@ function syncTx(t) {
     return;
   }
   const amount = num(f.amount.value), other = cur === 'USD' ? 'IQD' : 'USD';
+  const showPaid = !isTr && !isOpening;
+  $('#paidWrap').classList.toggle('hide', !showPaid);
+  if (showPaid) {
+    const word = other === 'USD' ? 'Dolar' : 'Dinar';
+    $('#paidBtn').textContent = dlg.paidOn ? `${word} ödemesini kaldır` : `+ ${word} ile ödendi`;
+    $('#paidBox').classList.toggle('hide', !dlg.paidOn);
+    $('#paidCur').textContent = other;
+    $('#paidLbl').textContent = `${tp === 'income' ? 'Gelen' : 'Ödenen'} tutar (${other})`;
+    const p = num(f.paidAmt.value);
+    $('#paidHint').textContent = !(p > 0) ? `Hesaptan ${cur} olarak ${tp === 'income' ? 'giren' : 'çekilen'} tutarı yukarıya, ${other} karşılığını buraya yazın.`
+      : amount > 0 ? `Uygulanan kur: 1 $ = ${fmtNum(cur === 'IQD' ? amount / p : p / amount, 2)} IQD · kayıtlı kur ${fmtNum(rate)}` : '';
+  }
   // Aynı para birimindeki transferde giren tutar, çıkan tutarla aynıdır (ücret ayrıca düşer).
   $('#trHint').innerHTML = isTr ? trSummary(a, b, amount, amount, num(f.fee.value), feeTo) : '';
   // Yazılan rakamın nasıl okunduğunu göster ki nokta/virgül karışıklığı hemen fark edilsin.
@@ -2758,6 +2782,11 @@ function submitTx(e) {
       toast('Kategori seçin.'); $('#cpick').classList.remove('hide'); drawCatPick(); return;
     }
     if (dlg.type === 'income') ui.lastIncAcc = t.accountId; else ui.lastExpAcc = t.accountId;
+    if (dlg.paidOn && f.paidAmt.value.trim()) {
+      const p = num(f.paidAmt.value), a = acc(t.accountId);
+      if (!(p > 0)) { toast(`Geçerli bir ${a && a.currency === 'IQD' ? 'dolar' : 'dinar'} tutarı girin.`); f.paidAmt.focus(); return; }
+      t.paid = { amount: p, currency: a && a.currency === 'IQD' ? 'USD' : 'IQD' };
+    }
   }
   const i = db.tx.findIndex(x => x.id === t.id);
   if (i >= 0) db.tx[i] = t; else db.tx.push(t);
@@ -2825,6 +2854,7 @@ document.addEventListener('click', e => {
     case 'edit-tx': openTx(null, d.id); break;
     case 'tx-type': dlg.type = d.type; resetFx(); syncTx(); break;
     case 'fee-side': F().feeSide.value = d.v; syncTx(); break;
+    case 'paid-toggle': dlg.paidOn = !dlg.paidOn; syncTx(); if (dlg.paidOn) setTimeout(() => F().paidAmt.focus(), 30); break;
     case 'quick-acc': {
       const f = F(), a = acc(f.accountId.value), currency = a && a.currency === 'USD' ? 'IQD' : 'USD';
       const na = { id: uid(), name: currency === 'USD' ? 'Nakit Dolar' : 'Nakit Dinar', currency, opening: 0 };
@@ -3180,7 +3210,7 @@ document.addEventListener('input', e => {
   if (el.closest('#txForm')) {
     if (['amount', 'toAmount', 'fxRate'].includes(el.name)) touch(dlg.fxOrder, el.name);
     if (el.name === 'fxRate') dlg.rateTyped = true;
-    if (['amount', 'toAmount', 'fxRate', 'fee'].includes(el.name)) syncTx();
+    if (['amount', 'toAmount', 'fxRate', 'fee', 'paidAmt'].includes(el.name)) syncTx();
     return;
   }
   if (el.dataset.cv) {
