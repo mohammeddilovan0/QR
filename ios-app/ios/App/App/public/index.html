@@ -1872,7 +1872,22 @@ function vDebt() {
   ${sect('Alacaklarım', lent, 'Açık alacak yok.')}
   ${sect('Borçlarım', owed, 'Açık borç yok.')}
   ${done.length ? `<div class="card"><h2>Kapananlar</h2>${done.map(debtRow).join('')}</div>` : ''}
+  ${debtTxCard()}
   <p class="muted" style="font-size:12px;margin:0 4px">Yeni kayıt için sağ üstteki <b>+</b>, silmek için sola kaydırın.</p>`;
+}
+/* Borç/alacak ekranının altında yalnız borç/alacak hareketleri (verilen/alınan, ödeme, tahsilat), yeniden eskiye. */
+function debtTxCard() {
+  const all = db.tx.filter(isDebtTx).sort((a, b) => b.date.localeCompare(a.date) || (b.ts || 0) - (a.ts || 0));
+  const shown = all.slice(0, ui.debtTxN || 30);
+  let rows = '', last = '';
+  for (const t of shown) {
+    if (t.date !== last) { last = t.date; rows += `<div class="day"><span>${esc(DAYFMT.format(parse(t.date)))}</span></div>`; }
+    rows += txRow(t);
+  }
+  return `<div class="card"><h2>Hareketler</h2>
+    ${rows || '<div class="empty">Henüz borç/alacak hareketi yok.</div>'}
+    ${all.length > shown.length ? `<button class="btn block" data-action="debt-more" style="margin-top:8px">Daha fazla göster (${all.length - shown.length})</button>` : ''}
+  </div>`;
 }
 /* Yeni borç/alacak; e verilirse düzenleme (kişi, tutar, tarih, not). Tür, para birimi ve hesap sonradan değişmez. */
 function debtSheet(e) {
@@ -2984,6 +2999,7 @@ document.addEventListener('click', e => {
       if (p) paySheet(x, p, t); else debtSheet(x);
       break;
     }
+    case 'debt-more': ui.debtTxN = (ui.debtTxN || 30) + 30; render(); break;
     case 'debt-open': { const x = db.debts.find(y => y.id === d.id); if (x) debtSheet(x); break; }
     case 'del-pay': {
       const x = db.debts.find(y => y.id === d.id), p = x && x.payments.find(y => y.id === d.pay);
