@@ -586,6 +586,7 @@ function norm(d) {
   d.debts.forEach(x => {
     if (!Array.isArray(x.payments)) x.payments = [];
     x.payments.forEach(p => { if (!p.accountId) p.accountId = ''; if (!p.txId) p.txId = ''; });
+    x.adds = (Array.isArray(x.adds) ? x.adds : []).filter(a => a && a.id && +a.amount > 0).map(a => Object.assign(a, { amount: +a.amount, accountId: a.accountId || '', txId: a.txId || '' }));
     if (!x.accountId) x.accountId = '';
     if (!x.txId) x.txId = '';
     x.opening = !!x.opening;
@@ -1828,7 +1829,10 @@ function renderGoldCalc() {
 /* Borç ve alacak hareketleri gerçek hesap bakiyelerine bağlıdır; gelir/gider istatistiğine dahil edilmez. */
 const SHORTDATE = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' });
 const debtPaid = x => x.payments.reduce((s, p) => s + p.amount, 0);
-const debtLeft = x => Math.max(0, x.amount - debtPaid(x));
+/* Sonradan eklenen tutarlar (x.adds): borç/alacağı büyütür; hesap seçilmediyse hiçbir bakiyeyi değiştirmez. */
+const debtAdded = x => (x.adds || []).reduce((s, a) => s + a.amount, 0);
+const debtTotal = x => x.amount + debtAdded(x);
+const debtLeft = x => Math.max(0, debtTotal(x) - debtPaid(x));
 const debtOpen = x => debtLeft(x) >= (x.currency === 'USD' ? 0.005 : 0.5);
 const debtAccounts = cur => accOrdered().filter(a => a.currency === cur);
 function debtAccOptions(cur, selected) {
@@ -1842,17 +1846,20 @@ function debtTotals() {
   return t;
 }
 function debtRow(x) {
-  const left = debtLeft(x), open = debtOpen(x), pct = Math.min(100, debtPaid(x) / x.amount * 100);
+  const left = debtLeft(x), open = debtOpen(x), pct = Math.min(100, debtPaid(x) / debtTotal(x) * 100);
   const pays = [...x.payments].sort((a, b) => b.date.localeCompare(a.date));
+  const adds = [...(x.adds || [])].sort((a, b) => b.date.localeCompare(a.date));
   const source = x.accountId && acc(x.accountId) ? ` · hesap: ${esc(accLabel(acc(x.accountId)))}` : '';
   return swRow(`<div class="list-row debt">
     <div class="m"><b>${esc(x.person)}</b> <span class="cur">${x.currency}</span>
-      <div class="muted" style="font-size:12px">${esc(SHORTDATE.format(parse(x.date)))}${x.opening ? ' · Başlangıç' : ''}${x.note ? ' · ' + esc(x.note) : ''}${source} · toplam ${fmt(x.amount, x.currency)}</div>
+      <div class="muted" style="font-size:12px">${esc(SHORTDATE.format(parse(x.date)))}${x.opening ? ' · Başlangıç' : ''}${x.note ? ' · ' + esc(x.note) : ''}${source} · toplam ${fmt(debtTotal(x), x.currency)}</div>
       ${x.payments.length ? `<div class="bar-track" style="margin-top:6px"><div class="bar-fill" style="width:${pct}%;background:var(--accent)"></div></div>` : ''}
     </div>
     <b class="num ${!open ? 'muted' : x.dir === 'lent' ? 'inc' : 'exp'}">${open ? fmt(left, x.currency) : 'Kapandı'}</b>
     ${pays.length ? `<div class="pays">${pays.map(p => `<div class="subline"><span>${esc(SHORTDATE.format(parse(p.date)))}${p.note ? ' · ' + esc(p.note) : ''}${p.accountId && acc(p.accountId) ? ' · ' + esc(accLabel(acc(p.accountId))) : ''}</span><span class="num">${fmt(p.amount, x.currency)}${p.paid ? ` <small class="muted">(${fmt(p.paid.amount, p.paid.currency)})</small>` : ''}<button class="icon xs" data-action="del-pay" data-id="${x.id}" data-pay="${p.id}" aria-label="Ödemeyi sil">✕</button></span></div>`).join('')}</div>` : ''}
-    ${open ? `<div class="acts"><button class="btn sm primary" data-action="pay" data-id="${x.id}">${x.dir === 'lent' ? 'Tahsilat ekle' : 'Ödeme ekle'}</button></div>` : ''}
+    ${adds.length ? `<div class="pays">${adds.map(a => `<div class="subline"><span>${esc(SHORTDATE.format(parse(a.date)))} · eklendi${a.note ? ' · ' + esc(a.note) : ''}${a.accountId && acc(a.accountId) ? ' · ' + esc(accLabel(acc(a.accountId))) : ''}</span><span class="num ${x.dir === 'lent' ? 'inc' : 'exp'}">+${fmt(a.amount, x.currency)}<button class="icon xs" data-action="del-add" data-id="${x.id}" data-add="${a.id}" aria-label="Eklemeyi sil">✕</button></span></div>`).join('')}</div>` : ''}
+    <div class="acts"><button class="btn sm" data-action="debt-add" data-id="${x.id}">+ Tutar ekle</button>
+      ${open ? `<button class="btn sm primary" data-action="pay" data-id="${x.id}">${x.dir === 'lent' ? 'Tahsilat ekle' : 'Ödeme ekle'}</button>` : ''}</div>
   </div>`, swBtn('Düzenle', 'edit-debt', x.id, 'edit') + swBtn('Sil', 'del-debt', x.id));
 }
 function vDebt() {
@@ -1874,6 +1881,37 @@ function vDebt() {
   ${done.length ? `<div class="card"><h2>Kapananlar</h2>${done.map(debtRow).join('')}</div>` : ''}
   ${debtTxCard()}
   <p class="muted" style="font-size:12px;margin:0 4px">Yeni kayıt için sağ üstteki <b>+</b>, silmek için sola kaydırın.</p>`;
+}
+/* Var olan borç/alacağa tutar ekleme (ör. Mina'ya 50,000 daha). Hesap seçilmezse hiçbir bakiye değişmez. */
+function debtAddSheet(x) {
+  const lent = x.dir === 'lent';
+  openSheet(`<form data-form="dadd" class="dlg" data-id="${x.id}">${sheetNav(`${lent ? 'Alacağa' : 'Borca'} ekle — ${x.person}`, 'Ekle')}
+    <div class="sheet-body" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+      <p class="muted" style="grid-column:1/-1;margin:0">Şu an: ${fmt(debtLeft(x), x.currency)} ${lent ? 'alacak' : 'borç'}</p>
+      <label>Eklenecek tutar (${x.currency})<input name="amount" inputmode="decimal" autocomplete="off" placeholder="0" required></label>
+      <label>Tarih<input type="date" name="date" value="${today()}" required></label>
+      <label style="grid-column:1/-1">${lent ? 'Paranın çıktığı hesap' : 'Paranın girdiği hesap'}<select name="accountId">
+        <option value="">Hiçbir hesap — bakiye değişmesin</option>${debtAccounts(x.currency).length ? accOptions(debtAccounts(x.currency)) : ''}</select></label>
+      <label style="grid-column:1/-1">Not<input name="note" maxlength="100" autocomplete="off" placeholder="İsteğe bağlı (ör. benden aldığı telefon)"></label>
+      <p class="muted" style="grid-column:1/-1;font-size:12px;margin:0">Hesap seçmezsen sadece ${lent ? 'alacak' : 'borç'} büyür, hiçbir hesaptan para çıkmaz/girmez.</p>
+    </div></form>`);
+  setTimeout(() => { const i = $('#sheet [name=amount]'); if (i) i.focus(); }, 50);
+}
+function debtAddSubmit(form, v) {
+  const x = db.debts.find(y => y.id === form.dataset.id); if (!x) return false;
+  const amount = num(v.amount), a = v.accountId ? acc(v.accountId) : null;
+  if (!(amount > 0)) { toast('Geçerli bir tutar girin.'); return false; }
+  if (!v.date) { toast('Tarih seçin.'); return false; }
+  if (a && a.currency !== x.currency) { toast(`${x.currency} para biriminde bir hesap seçin.`); return false; }
+  const add = { id: uid(), date: v.date, amount, note: (v.note || '').trim(), accountId: a ? a.id : '', txId: '' };
+  if (a) {
+    add.txId = uid();
+    db.tx.push({ id: add.txId, ts: Date.now(), type: x.dir === 'owed' ? 'debt-in' : 'debt-out', date: v.date, accountId: a.id, amount,
+      note: add.note, debtId: x.id, addId: add.id, debtKind: x.dir, person: x.person, locked: true });
+  }
+  (x.adds = x.adds || []).push(add);
+  toast(`${fmt(amount, x.currency)} eklendi${a ? '' : ' · hesaplar değişmedi'}`);
+  return true;
 }
 /* Borç/alacak ekranının altında yalnız borç/alacak hareketleri (verilen/alınan, ödeme, tahsilat), yeniden eskiye. */
 function debtTxCard() {
@@ -2519,7 +2557,7 @@ document.addEventListener('click', e => { if (swallow) { swallow = false; e.stop
 const TRASH_MAX = 500;
 const TRASH_KIND = {
   tx: ['İşlem', 'islemler', '#64748b'], acc: ['Hesap', 'hesaplar', '#3b82c4'], cat: ['Kategori', 'kategoriler', '#e8a33d'],
-  debt: ['Borç / alacak', 'borclar', '#9b59b6'], pay: ['Ödeme / tahsilat', 'borclar', '#9b59b6'], rate: ['Kur', 'piyasa', '#14b8a6'],
+  debt: ['Borç / alacak', 'borclar', '#9b59b6'], pay: ['Ödeme / tahsilat', 'borclar', '#9b59b6'], dadd: ['Eklenen tutar', 'borclar', '#9b59b6'], rate: ['Kur', 'piyasa', '#14b8a6'],
   rem: ['Hatırlatıcı', 'hatirlat', '#ff9500'], goal: ['Hedef', 'hedefler', '#2e9e6b'],
 };
 const copy = o => JSON.parse(JSON.stringify(o));
@@ -2562,6 +2600,12 @@ function trashRestore(id) {
     if (!debt) return "Bu ödemenin borç/alacak kaydı silinmiş. Önce onu Silinenler'den geri alın.";
     const err = needAcc([d.tx && d.tx.accountId]); if (err) return err;
     if (!has(debt.payments, d.pay.id)) { debt.payments.push(d.pay); if (d.tx && !has(db.tx, d.tx.id)) db.tx.push(d.tx); }
+  } else if (x.kind === 'dadd') {
+    const debt = db.debts.find(y => y.id === d.debtId);
+    if (!debt) return "Bu tutarın borç/alacak kaydı silinmiş. Önce onu Silinenler'den geri alın.";
+    const err = needAcc([d.tx && d.tx.accountId]); if (err) return err;
+    debt.adds = debt.adds || [];
+    if (!has(debt.adds, d.add.id)) { debt.adds.push(d.add); if (d.tx && !has(db.tx, d.tx.id)) db.tx.push(d.tx); }
   } else if (x.kind === 'goal') {
     if (!has(db.goals, d.id)) db.goals.push(d);
   } else if (x.kind === 'rem') {
@@ -2999,6 +3043,19 @@ document.addEventListener('click', e => {
       if (p) paySheet(x, p, t); else debtSheet(x);
       break;
     }
+    case 'debt-add': { const x = db.debts.find(y => y.id === d.id); if (x) debtAddSheet(x); break; }
+    case 'del-add': {
+      const x = db.debts.find(y => y.id === d.id), a = x && (x.adds || []).find(y => y.id === d.add);
+      if (!a) break;
+      ask({ msg: `${fmt(a.amount, x.currency)} tutarındaki ekleme silinsin mi?`, ok: 'Sil' }).then(ok => {
+        if (!ok) return;
+        const tx = a.txId ? db.tx.find(t => t.id === a.txId) : null;
+        const tid = trashPut('dadd', `${x.person} · +${fmt(a.amount, x.currency)}`, `Eklenen tutar · ${SHORTDATE.format(parse(a.date))}`, { debtId: x.id, add: a, tx });
+        if (a.txId) db.tx = db.tx.filter(t => t.id !== a.txId);
+        x.adds = x.adds.filter(y => y.id !== a.id); save(); render(); toastUndo('Ekleme silindi', tid);
+      });
+      break;
+    }
     case 'debt-more': ui.debtTxN = (ui.debtTxN || 30) + 30; render(); break;
     case 'debt-open': { const x = db.debts.find(y => y.id === d.id); if (x) debtSheet(x); break; }
     case 'del-pay': {
@@ -3060,8 +3117,8 @@ document.addEventListener('click', e => {
       const extra = x.payments.length ? `\n${x.payments.length} ödeme/tahsilat kaydı da silinecek.` : '';
       ask({ msg: `“${x.person}” için ${kind} kaydı silinsin mi?${extra}`, ok: 'Sil' }).then(ok => {
         if (!ok) return closeSw();
-        const ids = new Set([x.txId, ...x.payments.map(p => p.txId)].filter(Boolean));
-        const tid = trashPut('debt', `${x.person} · ${fmt(x.amount, x.currency)}`, `${x.dir === 'lent' ? 'Alacak' : 'Borç'} · ${SHORTDATE.format(parse(x.date))}`,
+        const ids = new Set([x.txId, ...x.payments.map(p => p.txId), ...(x.adds || []).map(a => a.txId)].filter(Boolean));
+        const tid = trashPut('debt', `${x.person} · ${fmt(debtTotal(x), x.currency)}`, `${x.dir === 'lent' ? 'Alacak' : 'Borç'} · ${SHORTDATE.format(parse(x.date))}`,
           { debt: x, txs: db.tx.filter(t => ids.has(t.id)) });
         if (ids.size) db.tx = db.tx.filter(t => !ids.has(t.id));
         db.debts = db.debts.filter(y => y.id !== d.id); save(); render(); toastUndo('Kayıt silindi', tid);
@@ -3151,7 +3208,7 @@ document.addEventListener('submit', e => {
     if (!person) { toast('Kişi adını girin.'); return; }
     if (!(amount > 0)) { toast('Geçerli bir tutar girin.'); return; }
     if (!v.date) { toast('Tarih seçin.'); return; }
-    if (amount < debtPaid(x) - 0.005) { toast(`Tutar, ödenmiş kısımdan (${fmt(debtPaid(x), x.currency)}) az olamaz.`); return; }
+    if (amount + debtAdded(x) < debtPaid(x) - 0.005) { toast(`Toplam, ödenmiş kısımdan (${fmt(debtPaid(x), x.currency)}) az olamaz.`); return; }
     const fee = v.fee === undefined || !String(v.fee).trim() ? 0 : num(v.fee);
     if (!(fee >= 0)) { toast('Geçerli bir havale ücreti girin.'); return; }
     const tx = x.txId && db.tx.find(t => t.id === x.txId), na = v.accountId && acc(v.accountId);
@@ -3184,6 +3241,8 @@ document.addEventListener('submit', e => {
     const fa = fee ? feeAccVal(v.feeAcc, t.accountId) : '';
     if (fa) t.feeAcc = fa; else delete t.feeAcc;
     toast('Kaydedildi');
+  } else if (form.dataset.form === 'dadd') {
+    if (!debtAddSubmit(form, v)) return;
   } else if (form.dataset.form === 'goal') {
     if (!goalSubmit(form, v)) return;
   } else if (form.dataset.form === 'gmove') {
