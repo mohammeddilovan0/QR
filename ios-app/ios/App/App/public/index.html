@@ -149,6 +149,15 @@ label>input,label>select,label>.amt{margin-top:4px}
 .tx .t{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tx .s{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tx .a{font-weight:650;text-align:right;white-space:nowrap}
+.tx .ck{width:24px;height:24px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;flex:none;color:transparent;font-size:13px;font-weight:800}
+.tx.on .ck{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.tx.on{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.tx.dis{opacity:.4;cursor:default}
+.selbar{position:fixed;left:0;right:0;bottom:calc(var(--tabh) + env(safe-area-inset-bottom));z-index:10;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:var(--card);border-top:1px solid var(--line);box-shadow:0 -6px 20px rgba(0,0,0,.18)}
+.selbar b{flex:1;min-width:90px}
+body.selmode .fab{display:none}
+body.selmode #view{padding-bottom:80px}
+.selbar .btn{white-space:nowrap}
 .list-row{display:flex;align-items:center;gap:10px;padding:10px 4px;border-top:1px solid var(--line)}
 .list-row:first-child{border-top:0}
 .list-row .m{flex:1;min-width:0}
@@ -753,7 +762,7 @@ function drawCatPick() {
     extras: tp === 'income' ? [['', '— Belirtme —']] : [] });
 }
 /* İşlemler sekmesindeki kategori filtresi. */
-const FILTER_EXTRAS = [['', 'Tüm kategoriler'], ['__transfer', 'Transferler'], ['__debt', 'Borç/Alacak hareketleri']];
+const FILTER_EXTRAS = [['', 'Tüm kategoriler'], ['__none', 'Kategorisiz'], ['__transfer', 'Transferler'], ['__debt', 'Borç/Alacak hareketleri']];
 function filterCatLabel(v) {
   const x = FILTER_EXTRAS.find(e => e[0] === v);
   return x ? x[1] : v === '__opening' ? 'Açılış bakiyeleri' : catLabel(cat(v)) || 'Tüm kategoriler';
@@ -1235,9 +1244,11 @@ function vTx() {
       <input type="date" data-filter="from" value="${f.from}" title="Başlangıç">
       <input type="date" data-filter="to" value="${f.to}" title="Bitiş">
       <button class="btn" data-action="clear-f">Temizle</button>
+      <button class="btn ${ui.sel ? 'primary' : ''}" data-action="sel-mode">${ui.sel ? 'Seçimi bitir' : '☑︎ Seç'}</button>
     </div>
     <div id="txlist"></div>
-  </div>`;
+  </div>
+  <div id="selbar" class="selbar ${ui.sel ? '' : 'hide'}"></div>`;
 }
 function renderTxList() {
   const el = $('#txlist'); if (!el) return;
@@ -1250,9 +1261,10 @@ function renderTxList() {
     if (f.cat === '__transfer' && t.type !== 'transfer' && !(isDebtTx(t) && t.fee > 0)) return false;
     if (f.cat === '__debt' && t.type !== 'debt-in' && t.type !== 'debt-out') return false;
     if (f.cat === '__opening' && t.type !== 'opening') return false;
+    if (f.cat === '__none' && !((t.type === 'expense' || t.type === 'income') && !cat(t.categoryId))) return false;
     // Ana kategori seçiliyse alt kategorilerinin işlemleri de gelir.
     const fc = (t.type === 'transfer' || isDebtTx(t)) && t.fee > 0 ? feeCat() : '';
-    if (f.cat && !['__transfer','__debt','__opening'].includes(f.cat) && !catUnder(t.categoryId, f.cat) && !(fc && catUnder(fc, f.cat))) return false;
+    if (f.cat && !['__transfer','__debt','__opening','__none'].includes(f.cat) && !catUnder(t.categoryId, f.cat) && !(fc && catUnder(fc, f.cat))) return false;
     if (f.from && t.date < f.from) return false;
     if (f.to && t.date > f.to) return false;
     if (q) {
@@ -1295,9 +1307,53 @@ function renderTxList() {
       lastDay = t.date;
       html += `<div class="day"><span>${esc(DAYFMT.format(parse(t.date)))}</span>${dayTotals[t.date] ? `<span class="num">−${fmt(dayTotals[t.date], D)}</span>` : ''}</div>`;
     }
-    html += txRow(t);
+    html += ui.sel ? selRow(t) : txRow(t);
   }
   el.innerHTML = html;
+  ui.selVis = rows.filter(selectable).map(t => t.id);
+  drawSelBar();
+}
+/* ---------- toplu seçim (İşlemler): eski işlemleri topluca kategoriye taşımak / silmek ---------- */
+const selectable = t => t.type === 'expense' || t.type === 'income';
+function selRow(t) {
+  const { title, sub, col, ic, amt } = txInfo(t), ok = selectable(t);
+  return `<div class="tx ${ok ? '' : 'dis'} ${ui.sel.has(t.id) ? 'on' : ''}" ${ok ? `data-action="sel-tx" data-id="${t.id}"` : ''}>
+    <span class="ck">✓</span><div class="ic" style="background:${col}">${ic}</div>
+    <div class="m"><div class="t">${esc(title)}</div><div class="s">${esc(sub)}</div></div>
+    <div class="a">${amt}</div></div>`;
+}
+function drawSelBar() {
+  const b = $('#selbar'); if (!b) return;
+  document.body.classList.toggle('selmode', !!ui.sel);
+  b.classList.toggle('hide', !ui.sel);
+  if (!ui.sel) return;
+  const n = ui.sel.size, all = ui.selVis && ui.selVis.length && ui.selVis.every(id => ui.sel.has(id));
+  b.innerHTML = `<b>${n ? `${n} seçili` : 'Dokunarak seç'}</b>
+    <button class="btn sm" data-action="sel-all">${all ? 'Hiçbiri' : 'Tümü'}</button>
+    <button class="btn sm primary" data-action="sel-cat" ${n ? '' : 'disabled'}>Kategori</button>
+    <button class="btn sm danger" data-action="sel-del" ${n ? '' : 'disabled'}>Sil</button>`;
+}
+function bulkCatSheet() {
+  const list = [...ui.sel].map(id => db.tx.find(t => t.id === id)).filter(Boolean);
+  const types = [...new Set(list.map(t => t.type))];
+  openSheet(`<form data-form="bulkcat" class="dlg">${sheetNav(`${list.length} işlemin kategorisi`, 'Uygula')}
+    <div class="sheet-body">
+      ${types.length > 1 ? '<p class="muted" style="margin:0;font-size:13px">Seçimde hem gider hem gelir var; seçtiğin kategori yalnız kendi türündeki işlemlere uygulanır.</p>' : ''}
+      <div><label>Yeni kategori</label>${cpHTML('bulkCat', { name: 'categoryId', value: '', types, extras: [['', '— Seçin —']] })}</div>
+    </div></form>`);
+  cpDraw('bulkCat');
+}
+function bulkCatSubmit(v) {
+  const c = cat(v.categoryId);
+  if (!c) { toast('Bir kategori seçin.'); return false; }
+  let n = 0, skip = 0;
+  for (const id of ui.sel) {
+    const t = db.tx.find(x => x.id === id); if (!t) continue;
+    if (t.type === c.type) { t.categoryId = c.id; n++; } else skip++;
+  }
+  ui.sel = null;
+  toast(`${n} işlem “${catLabel(c)}” kategorisine taşındı${skip ? ` · ${skip} işlem türü farklı olduğu için atlandı` : ''}`);
+  return true;
 }
 /* ---------- hesap ekranı: Özet'teki hesap kartına dokununca ----------
    Bakiye, bu ayki giren/çıkan ve hesabın işlemleri (grup hesapta alt hesaplarla birlikte; çip ile tek alt hesap seçilebilir).
@@ -2767,6 +2823,8 @@ function vTrash() {
 
 function render() {
   const top = TAB_OF[ui.tab] || ui.tab;
+  if (ui.tab !== 'islemler' && ui.sel) ui.sel = null; // toplu seçim yalnız İşlemler ekranında
+  document.body.classList.toggle('selmode', !!ui.sel);
   document.querySelectorAll('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === top));
   document.querySelectorAll('#disp button').forEach(b => b.classList.toggle('on', b.dataset.cur === disp()));
   $('#disp').classList.toggle('hide', !['ozet', 'islemler', 'borclar', 'hesaplar'].includes(ui.tab) && !(ui.tab === 'hesap' && accMixed()));
@@ -3190,6 +3248,33 @@ document.addEventListener('click', e => {
       });
       break;
     }
+    case 'sel-mode': ui.sel = ui.sel ? null : new Set(); render(); break;
+    case 'sel-tx': {
+      if (!ui.sel) break;
+      ui.sel.has(d.id) ? ui.sel.delete(d.id) : ui.sel.add(d.id);
+      el.classList.toggle('on', ui.sel.has(d.id)); drawSelBar(); break;
+    }
+    case 'sel-all': {
+      if (!ui.sel) break;
+      const vis = ui.selVis || [], all = vis.length && vis.every(id => ui.sel.has(id));
+      if (all) vis.forEach(id => ui.sel.delete(id)); else vis.forEach(id => ui.sel.add(id));
+      renderTxList(); break;
+    }
+    case 'sel-cat': if (ui.sel && ui.sel.size) bulkCatSheet(); break;
+    case 'sel-del': {
+      if (!ui.sel || !ui.sel.size) break;
+      const ids = [...ui.sel];
+      ask({ msg: `${ids.length} işlem silinsin mi? Silinenler'den geri alınabilir.`, ok: 'Sil' }).then(ok => {
+        if (!ok) return;
+        for (const id of ids) {
+          const t = db.tx.find(x => x.id === id); if (!t || t.locked) continue;
+          const [label, sub] = txLabel(t); trashPut('tx', label, sub, t);
+        }
+        db.tx = db.tx.filter(x => !ids.includes(x.id) || x.locked);
+        ui.sel = null; save(); render(); toast(`${ids.length} işlem silindi`);
+      });
+      break;
+    }
     case 'debt-more': ui.debtTxN = (ui.debtTxN || 30) + 30; render(); break;
     case 'debt-open': { const x = db.debts.find(y => y.id === d.id); if (x) debtSheet(x); break; }
     case 'del-pay': {
@@ -3377,6 +3462,8 @@ document.addEventListener('submit', e => {
     toast('Kaydedildi');
   } else if (form.dataset.form === 'dadd') {
     if (!debtAddSubmit(form, v)) return;
+  } else if (form.dataset.form === 'bulkcat') {
+    if (!bulkCatSubmit(v)) return;
   } else if (form.dataset.form === 'goal') {
     if (!goalSubmit(form, v)) return;
   } else if (form.dataset.form === 'gmove') {
