@@ -493,7 +493,7 @@ dialog.sheet{overflow-x:hidden;touch-action:pan-y}
       <div class="hint" id="feeHint"></div>
     </div>
     <div class="hint" id="trHint" style="min-height:0"></div>
-    <label>Tarih<input type="date" name="date" required></label>
+    <div class="ktimes"><label>Tarih<input type="date" name="date" required></label><label>Saat<input type="time" name="time"></label></div>
     <label>Not<input name="note" maxlength="140" placeholder="İsteğe bağlı" autocomplete="off"></label>
     <button type="button" class="btn danger block" id="txDel" data-action="tx-del">İşlemi sil</button>
     </div>
@@ -539,6 +539,14 @@ const $ = s => document.querySelector(s);
 const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pad = n => String(n).padStart(2, '0');
+/* İşlemin saati: elle yazılan (t.time) ya da eski kayıtlarda kayıt anı (ts) aynı güne düşüyorsa ondan. */
+function txHM(t) {
+  if (t.time && /^\d\d:\d\d$/.test(t.time)) return t.time;
+  if (t.ts > 1e12) { const d = new Date(t.ts); if (ymd(d) === t.date) return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+  return '';
+}
+/* Yeniden eskiye: tarih, saat, kayıt anı. */
+const txNewer = (a, b) => b.date.localeCompare(a.date) || txHM(b).localeCompare(txHM(a)) || (b.ts || 0) - (a.ts || 0);
 const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const parse = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
 const today = () => ymd(new Date());
@@ -1273,7 +1281,7 @@ function renderTxList() {
       if (!hay.includes(q)) return false;
     }
     return true;
-  }).sort((a, b) => b.date.localeCompare(a.date) || (b.ts || 0) - (a.ts || 0));
+  }).sort(txNewer);
 
   let exp = 0, inc = 0;
   for (const t of rows) {
@@ -1381,7 +1389,7 @@ function vHesap() {
   const delta = t => ids.reduce((s, id) => s + val(t, id), 0);
   const bal = ids.reduce((s, id) => s + conv(balance(id), acc(id).currency, C, one ? 1 : r), 0);
   const txs = db.tx.filter(t => ids.includes(t.accountId) || (t.type === 'transfer' && ids.includes(t.toAccountId)) || (isDebtTx(t) && t.fee && ids.includes(feeAccId(t))))
-    .sort((x, y) => x.date.localeCompare(y.date) || (x.ts || 0) - (y.ts || 0));
+    .sort((x, y) => txNewer(y, x));
   // Sonraki bakiye: açılış bakiyesinden başlayıp eskiden yeniye toplanır.
   const after = {};
   let run = ids.reduce((s, id) => s + conv(Number(acc(id).opening) || 0, acc(id).currency, C, one ? 1 : r), 0);
@@ -1463,6 +1471,7 @@ function txInfo(t) {
       (t.paid ? `<br><small class="muted num">${fmt(t.paid.amount, t.paid.currency)} · 1 $ = ${fmtNum(cur === 'IQD' ? t.amount / t.paid.amount : t.paid.amount / t.amount)}</small>` : '');
   }
   if (t.note) sub += ' · ' + t.note;
+  const hm = txHM(t); if (hm) sub = hm + ' · ' + sub;
   return { title, sub, col, ic, amt, locked };
 }
 function txRow(t) {
@@ -1985,7 +1994,7 @@ function personLedger(p) {
   const rows = [];
   p.debts.forEach((x, xi) => {
     const s = x.dir === 'lent' ? 1 : -1, acc0 = x.accountId && acc(x.accountId), ctx = x.txId && db.tx.find(t => t.id === x.txId);
-    rows.push({ date: x.date, ord: [0, xi, 0], cur: x.currency, v: s * x.amount, action: `data-action="edit-debt" data-id="${x.id}"`,
+    rows.push({ date: x.date, hm: ctx ? txHM(ctx) : '', ord: [0, xi, 0], cur: x.currency, v: s * x.amount, action: `data-action="edit-debt" data-id="${x.id}"`,
       title: x.opening ? (s > 0 ? 'Başlangıç alacağı' : 'Başlangıç borcu') : (s > 0 ? 'Borç verdim' : 'Borç aldım'),
       sub: [acc0 && accLabel(acc0), x.note, ctx && ctx.fee ? `ücret ${fmt(ctx.fee, txCur(ctx))}` : ''] });
     (x.adds || []).forEach((a, ai) => rows.push({ date: a.date, ord: [1, xi, ai], cur: x.currency, v: s * a.amount, action: `data-action="edit-debt" data-id="${x.id}"`,
@@ -1995,12 +2004,12 @@ function personLedger(p) {
       // Kişi hesabından tek seferde yapılıp kayıtlara dağıtılan ödeme ekstrede tek satır görünür.
       const same = y.grp && rows.find(r => r.grp === y.grp);
       if (same) { same.v += -s * y.amount; return; }
-      rows.push({ grp: y.grp, date: y.date, ord: [2, xi, yi], cur: x.currency, v: -s * y.amount, action: t ? `data-action="debt-tx" data-id="${t.id}"` : '',
+      rows.push({ grp: y.grp, date: y.date, hm: t ? txHM(t) : '', ord: [2, xi, yi], cur: x.currency, v: -s * y.amount, action: t ? `data-action="debt-tx" data-id="${t.id}"` : '',
         title: s > 0 ? 'Tahsilat (geri aldım)' : 'Ödeme (geri verdim)',
         sub: [y.accountId && acc(y.accountId) ? accLabel(acc(y.accountId)) : '', y.paid ? fmt(y.paid.amount, y.paid.currency) + ' ödendi' : '', y.note, t && t.fee ? `ücret ${fmt(t.fee, txCur(t))}` : ''] });
     });
   });
-  rows.sort((a, b) => a.date.localeCompare(b.date) || a.ord[0] - b.ord[0] || a.ord[1] - b.ord[1] || a.ord[2] - b.ord[2]);
+  rows.sort((a, b) => a.date.localeCompare(b.date) || (a.hm && b.hm ? a.hm.localeCompare(b.hm) : 0) || a.ord[0] - b.ord[0] || a.ord[1] - b.ord[1] || a.ord[2] - b.ord[2]);
   const run = { IQD: 0, USD: 0 };
   for (const r of rows) { run[r.cur] += r.v; r.bal = run[r.cur]; }
   return rows.reverse();
@@ -2024,7 +2033,7 @@ function vKisi() {
   </div>
   <div class="card"><h2>Hesap ekstresi</h2>
     <div class="ledger">${led.map(r => `<div class="lr ${r.action ? 'tap' : ''}" ${r.action}>
-      <div class="m"><b>${esc(r.title)}</b><small class="muted">${esc([SHORTDATE.format(parse(r.date)), ...r.sub.filter(Boolean)].join(' · '))}</small></div>
+      <div class="m"><b>${esc(r.title)}</b><small class="muted">${esc([SHORTDATE.format(parse(r.date)) + (r.hm ? ' ' + r.hm : ''), ...r.sub.filter(Boolean)].join(' · '))}</small></div>
       <div class="a"><b class="num ${r.v > 0 ? 'inc' : 'exp'}">${r.v > 0 ? '+' : '−'}${fmt(Math.abs(r.v), r.cur)}</b>
         <small class="num">bakiye ${Math.abs(r.bal) < 0.5 ? '0' : (r.bal > 0 ? '+' : '−') + fmt(Math.abs(r.bal), r.cur)}</small></div></div>`).join('')}</div>
     <p class="muted" style="font-size:12px;margin:8px 0 0">+ o sana borçlu, − sen ona borçlusun. Satıra dokununca ayrıntısı açılır.</p>
@@ -2066,7 +2075,7 @@ function debtAddSubmit(form, v) {
 }
 /* Borç/alacak ekranının altında yalnız borç/alacak hareketleri (verilen/alınan, ödeme, tahsilat), yeniden eskiye. */
 function debtTxCard() {
-  const all = db.tx.filter(isDebtTx).sort((a, b) => b.date.localeCompare(a.date) || (b.ts || 0) - (a.ts || 0));
+  const all = db.tx.filter(isDebtTx).sort(txNewer);
   const shown = all.slice(0, ui.debtTxN || 30);
   let rows = '', last = '';
   for (const t of shown) {
@@ -2862,6 +2871,7 @@ function openTx(type, id, preset) {
   f.toAccountId.innerHTML = '';
   if (!t) f.categoryId.innerHTML = '';
   f.date.value = t ? t.date : today();
+  { const n = new Date(); f.time.value = t ? txHM(t) : `${pad(n.getHours())}:${pad(n.getMinutes())}`; }
   const lastAcc = dlg.type === 'income' ? ui.lastIncAcc : dlg.type === 'expense' ? ui.lastExpAcc : dlg.type === 'opening' ? ui.lastOpeningAcc : ui.lastTrAcc;
   fillAccSelect(f.accountId, preset ? preset.from : t ? t.accountId : lastAcc);
   f.amount.value = t ? fmtIn(t.amount, 'any') : preset ? fmtIn(preset.amount, 'any') : '';
@@ -3000,6 +3010,7 @@ function submitTx(e) {
     id: dlg.id || uid(), ts: dlg.id ? (db.tx.find(x => x.id === dlg.id)?.ts || Date.now()) : Date.now(),
     type: dlg.type, date: f.date.value, accountId: f.accountId.value, amount, note: f.note.value.trim(),
   };
+  if (/^\d\d:\d\d$/.test(f.time.value)) t.time = f.time.value;
   if (dlg.type === 'transfer') {
     const a = acc(t.accountId), b = acc(f.toAccountId.value);
     if (!b || b.id === a.id) { toast('Farklı bir hedef hesap seçin (önce ikinci bir hesap ekleyin).'); return; }
