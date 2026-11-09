@@ -483,6 +483,14 @@ dialog.sheet{overflow-x:hidden;touch-action:pan-y}
       <div class="hint" id="fxHint"></div>
       <label class="check"><input type="checkbox" name="saveRate"> Bu kuru <span id="fxDate"></span> günün kuru olarak kaydet</label>
     </div>
+    <div id="sameAmtWrap" class="hide">
+      <button type="button" class="btn sm" data-action="same-toggle" id="sameBtn"></button>
+      <div id="sameBox" class="fxbox hide" style="margin-top:8px">
+        <label>Hedef hesaba giren tutar
+          <div class="amt"><input name="toSame" inputmode="decimal" autocomplete="off" placeholder="0"><span id="sameCur">IQD</span></div></label>
+        <div class="hint" id="sameHint"></div>
+      </div>
+    </div>
     <div id="feeWrap">
       <label>Transfer ücreti <span class="muted">(ücret yoksa boş bırakın — 0 sayılır)</span>
         <div class="amt"><input name="fee" inputmode="decimal" autocomplete="off" placeholder="0"><span id="feeCur">IQD</span></div></label>
@@ -1447,7 +1455,7 @@ function txInfo(t) {
     title = 'Transfer'; col = '#64748b'; ic = '⇄';
     sub = `${accLabel(a)} → ${accLabel(b)}`;
     const net = t.toAmount - (t.feeTo ? t.fee || 0 : 0);
-    amt = `<span class="num">${fmt(t.amount, cur)}</span>${b && (b.currency !== cur || t.feeTo && t.fee) ? `<br><small class="muted num">→ ${fmt(net, b.currency)}</small>` : ''}` +
+    amt = `<span class="num">${fmt(t.amount, cur)}</span>${b && (b.currency !== cur || t.feeTo && t.fee || t.toAmount !== t.amount) ? `<br><small class="muted num">→ ${fmt(net, b.currency)}</small>` : ''}` +
       (t.fee ? `<br><small class="exp num">ücret −${fmt(t.fee, t.feeTo && b ? b.currency : cur)}</small>` : '');
   } else if (t.type === 'opening') {
     title = 'Başlangıç Girişi'; col = '#14b8a6'; ic = 'B';
@@ -2881,6 +2889,10 @@ function openTx(type, id, preset) {
   f.saveRate.checked = !t;
   // Hesaptan başka para biriminde ödenen gider/gelir (ör. $95.57'lik ödeme dinar hesabından 151,526 IQD çekti).
   dlg.paidOn = !!(t && t.paid);
+  // Aynı para biriminde çekilenden farklı tutar giren transfer (ör. 98,230 çekildi, elden 100,000 alındı).
+  const ta = t && t.type === 'transfer' && acc(t.accountId), tb = t && t.type === 'transfer' && acc(t.toAccountId);
+  dlg.sameOn = !!(ta && tb && ta.currency === tb.currency && t.toAmount !== t.amount);
+  f.toSame.value = dlg.sameOn ? fmtIn(t.toAmount, 'any') : '';
   f.paidAmt.value = t && t.paid ? fmtIn(t.paid.amount, 'any') : '';
   syncTx(t);
   const tr = t && t.type === 'transfer' ? t : preset;
@@ -2963,6 +2975,7 @@ function syncTx(t) {
   }
   const fx = isTr && b && a && b.currency !== a.currency;
   $('#toAmtWrap').classList.toggle('hide', !fx);
+  $('#sameAmtWrap').classList.add('hide');
   const date = f.date.value || today(), rate = rateAt(date);
   const boxes = { amount: '#amtBox', toAmount: '#toAmtBox', fxRate: '#fxRateBox' };
   for (const k in boxes) $(boxes[k]).classList.remove('auto');
@@ -2996,8 +3009,22 @@ function syncTx(t) {
     $('#paidHint').textContent = !(p > 0) ? `Hesaptan ${cur} olarak ${tp === 'income' ? 'giren' : 'çekilen'} tutarı yukarıya, ${other} karşılığını buraya yazın.`
       : amount > 0 ? `Uygulanan kur: 1 $ = ${fmtNum(cur === 'IQD' ? amount / p : p / amount, 2)} IQD · kayıtlı kur ${fmtNum(rate)}` : '';
   }
-  // Aynı para birimindeki transferde giren tutar, çıkan tutarla aynıdır (ücret ayrıca düşer).
-  $('#trHint').innerHTML = isTr ? trSummary(a, b, amount, amount, num(f.fee.value), feeTo) : '';
+  // Aynı para birimindeki transferde giren tutar normalde çıkanla aynıdır (ücret ayrıca düşer);
+  // "Farklı tutar girdi" açılırsa hedefe yazılan tutar girer.
+  const same = isTr && !!a && !!b;
+  $('#sameAmtWrap').classList.toggle('hide', !same);
+  let toAmt = amount;
+  if (same) {
+    $('#sameBtn').textContent = dlg.sameOn ? 'Farkı kaldır (aynı tutar girdi)' : '+ Hedefe farklı tutar girdi';
+    $('#sameBox').classList.toggle('hide', !dlg.sameOn);
+    $('#sameCur').textContent = b.currency;
+    const v = num(f.toSame.value);
+    if (dlg.sameOn && v > 0) toAmt = v;
+    const d = toAmt - amount;
+    $('#sameHint').textContent = !dlg.sameOn ? '' : !(v > 0) ? `${accLabel(b)} hesabına giren tutarı yazın (ör. çekilen 98,230, elinize geçen 100,000).`
+      : amount > 0 && d ? `Fark: ${d > 0 ? '+' : '−'}${fmt(Math.abs(d), b.currency)} ${d > 0 ? '(fazla girdi)' : '(eksik girdi)'}` : '';
+  }
+  $('#trHint').innerHTML = isTr ? trSummary(a, b, amount, toAmt, num(f.fee.value), feeTo) : '';
   // Yazılan rakamın nasıl okunduğunu göster ki nokta/virgül karışıklığı hemen fark edilsin.
   $('#amtHint').textContent = amount > 0 ? `= ${fmt(amount, cur)}  ≈ ${fmt(conv(amount, cur, other, rate), other)}` : '';
 }
@@ -3015,7 +3042,7 @@ function submitTx(e) {
     const a = acc(t.accountId), b = acc(f.toAccountId.value);
     if (!b || b.id === a.id) { toast('Farklı bir hedef hesap seçin (önce ikinci bir hesap ekleyin).'); return; }
     t.toAccountId = b.id;
-    t.toAmount = a.currency === b.currency ? amount : num(f.toAmount.value);
+    t.toAmount = a.currency !== b.currency ? num(f.toAmount.value) : dlg.sameOn && num(f.toSame.value) > 0 ? num(f.toSame.value) : amount;
     if (!(t.toAmount > 0)) { toast('Hedef tutarı veya kuru girin.'); return; }
     t.fee = f.fee.value.trim() ? num(f.fee.value) : 0;
     if (!(t.fee >= 0)) { toast('Transfer ücreti geçersiz.'); f.fee.focus(); return; }
@@ -3110,6 +3137,7 @@ document.addEventListener('click', e => {
     case 'edit-tx': openTx(null, d.id); break;
     case 'tx-type': dlg.type = d.type; resetFx(); syncTx(); break;
     case 'fee-side': F().feeSide.value = d.v; syncTx(); break;
+    case 'same-toggle': dlg.sameOn = !dlg.sameOn; if (!dlg.sameOn) F().toSame.value = ''; syncTx(); if (dlg.sameOn) setTimeout(() => F().toSame.focus(), 30); break;
     case 'paid-toggle': dlg.paidOn = !dlg.paidOn; syncTx(); if (dlg.paidOn) setTimeout(() => F().paidAmt.focus(), 30); break;
     case 'quick-acc': {
       const f = F(), a = acc(f.accountId.value), currency = a && a.currency === 'USD' ? 'IQD' : 'USD';
@@ -3517,7 +3545,7 @@ document.addEventListener('input', e => {
   if (el.closest('#txForm')) {
     if (['amount', 'toAmount', 'fxRate'].includes(el.name)) touch(dlg.fxOrder, el.name);
     if (el.name === 'fxRate') dlg.rateTyped = true;
-    if (['amount', 'toAmount', 'fxRate', 'fee', 'paidAmt'].includes(el.name)) syncTx();
+    if (['amount', 'toAmount', 'fxRate', 'fee', 'paidAmt', 'toSame'].includes(el.name)) syncTx();
     return;
   }
   if (el.dataset.cv) {
