@@ -879,7 +879,18 @@ function balance(id, upto) {
    kesildiyse (feeTo) hedef hesabınki. Bu durumda toAmount çevrilen (ücretten önceki) tutardır, hedefe toAmount − ücret girer. */
 const isDebtTx = t => t.type === 'debt-in' || t.type === 'debt-out';
 /* Borç/alacak hareketinin havale ücreti (fee) de transfer ücreti gibi harcamadır; hesabın para biriminde, hesaptan düşer. */
-const txCost = t => t.type === 'expense' ? t.amount : t.type === 'transfer' || isDebtTx(t) ? (t.fee || 0) : 0;
+/* Aynı para birimindeki transferde hedefe çıkandan farklı tutar girdiyse fark (ör. 98,230 çekildi, elden 100,000 alındı: +1,770).
+   Fazlası gelir, eksiği ücret gibi harcama sayılır. */
+const trGap = t => {
+  if (t.type !== 'transfer') return 0;
+  const a = acc(t.accountId), b = acc(t.toAccountId);
+  if (!a || !b || a.currency !== b.currency) return 0;
+  const d = (t.toAmount || 0) - t.amount;
+  return Math.abs(d) < 0.005 ? 0 : d;
+};
+const txCost = t => t.type === 'expense' ? t.amount : t.type === 'transfer' ? (t.fee || 0) + Math.max(0, -trGap(t)) : isDebtTx(t) ? (t.fee || 0) : 0;
+/* Gelir sayılan kısım (çıkan hesabın para biriminde): gelir tutarı veya transferde fazla giren fark. */
+const txIncome = t => t.type === 'income' ? t.amount : Math.max(0, trGap(t));
 const txCur = t => { const a = acc(t.type === 'transfer' && t.feeTo ? t.toAccountId : isDebtTx(t) ? feeAccId(t) : t.accountId) || acc(t.accountId); return a ? a.currency : ''; };
 const FEE = '__fee';
 /* Transfer ücretlerinin sayıldığı gider kategorisi (Ayarlar); seçilmemişse ayrı "Transfer ücretleri" kalemi. */
@@ -924,16 +935,16 @@ function stats(start, end) {
   for (const t of db.tx) {
     if (t.date < start || t.date > end) continue;
     const a = acc(t.accountId); if (!a) continue;
-    const cost = t.type === 'income' ? t.amount : txCost(t);
-    if (!cost) continue;
-    const cc = t.type === 'income' ? a.currency : txCur(t), v = conv(cost, cc, D, rateAt(t.date));
-    if (t.type !== 'income') {
+    const gain = txIncome(t), cost = txCost(t);
+    if (gain) inc += conv(gain, a.currency, D, rateAt(t.date));
+    if (cost) {
+      const cc = txCur(t), v = conv(cost, cc, D, rateAt(t.date));
       exp += v; native[cc] += cost;
       const k = t.type !== 'expense' ? feeCat() || FEE : t.categoryId && cat(t.categoryId) ? t.categoryId : '';
       const top = k && k !== FEE ? topOf(k) : k;
       byCat[k] = (byCat[k] || 0) + v;
       byTop[top] = (byTop[top] || 0) + v;
-    } else inc += v;
+    }
   }
   return { exp, inc, byCat, byTop, native };
 }
@@ -1294,8 +1305,8 @@ function renderTxList() {
   let exp = 0, inc = 0;
   for (const t of rows) {
     const a = acc(t.accountId); if (!a) continue;
-    if (t.type === 'income') inc += conv(t.amount, a.currency, D, rateAt(t.date));
-    else exp += conv(txCost(t), txCur(t), D, rateAt(t.date));
+    inc += conv(txIncome(t), a.currency, D, rateAt(t.date));
+    exp += conv(txCost(t), txCur(t), D, rateAt(t.date));
   }
   const active = f.q || f.acc || f.cat || f.from || f.to;
   // Kategori seçiliyse: "Tümü" + alt kategorileri (alt kategorisi yoksa kardeşleri) için çipler, varsa bir üste dönüş.
@@ -1456,7 +1467,8 @@ function txInfo(t) {
     sub = `${accLabel(a)} → ${accLabel(b)}`;
     const net = t.toAmount - (t.feeTo ? t.fee || 0 : 0);
     amt = `<span class="num">${fmt(t.amount, cur)}</span>${b && (b.currency !== cur || t.feeTo && t.fee || t.toAmount !== t.amount) ? `<br><small class="muted num">→ ${fmt(net, b.currency)}</small>` : ''}` +
-      (t.fee ? `<br><small class="exp num">ücret −${fmt(t.fee, t.feeTo && b ? b.currency : cur)}</small>` : '');
+      (t.fee ? `<br><small class="exp num">ücret −${fmt(t.fee, t.feeTo && b ? b.currency : cur)}</small>` : '') +
+      (trGap(t) ? `<br><small class="${trGap(t) > 0 ? 'inc' : 'exp'} num">${trGap(t) > 0 ? 'kâr +' : 'fark −'}${fmt(Math.abs(trGap(t)), cur)}</small>` : '');
   } else if (t.type === 'opening') {
     title = 'Başlangıç Girişi'; col = '#14b8a6'; ic = 'B';
     sub = accLabel(a);
@@ -3022,7 +3034,7 @@ function syncTx(t) {
     if (dlg.sameOn && v > 0) toAmt = v;
     const d = toAmt - amount;
     $('#sameHint').textContent = !dlg.sameOn ? '' : !(v > 0) ? `${accLabel(b)} hesabına giren tutarı yazın (ör. çekilen 98,230, elinize geçen 100,000).`
-      : amount > 0 && d ? `Fark: ${d > 0 ? '+' : '−'}${fmt(Math.abs(d), b.currency)} ${d > 0 ? '(fazla girdi)' : '(eksik girdi)'}` : '';
+      : amount > 0 && d ? `Fark: ${d > 0 ? '+' : '−'}${fmt(Math.abs(d), b.currency)} — ${d > 0 ? 'fazla girdi, gelir (kâr) sayılır' : 'eksik girdi, transfer ücreti gibi harcama sayılır'}` : '';
   }
   $('#trHint').innerHTML = isTr ? trSummary(a, b, amount, toAmt, num(f.fee.value), feeTo) : '';
   // Yazılan rakamın nasıl okunduğunu göster ki nokta/virgül karışıklığı hemen fark edilsin.
