@@ -501,6 +501,7 @@ dialog.sheet{overflow-x:hidden;touch-action:pan-y}
       <div class="hint" id="feeHint"></div>
     </div>
     <div class="hint" id="trHint" style="min-height:0"></div>
+    <label id="forMonthWrap">Hangi ayın? <span class="muted">(ör. Kasım maaşı — isteğe bağlı)</span><input type="month" name="forMonth"></label>
     <div class="ktimes"><label>Tarih<input type="date" name="date" required></label><label>Saat<input type="time" name="time"></label></div>
     <label>Not<input name="note" maxlength="140" placeholder="İsteğe bağlı" autocomplete="off"></label>
     <button type="button" class="btn danger block" id="txDel" data-action="tx-del">İşlemi sil</button>
@@ -547,6 +548,9 @@ const $ = s => document.querySelector(s);
 const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pad = n => String(n).padStart(2, '0');
+/* Gelirin ait olduğu ay (t.forMonth, "2026-11") → "Kasım 2026". */
+const MONYEAR = new Intl.DateTimeFormat('tr-TR', { month: 'long', year: 'numeric' });
+const forMonthLabel = m => { const s = MONYEAR.format(new Date(+m.slice(0, 4), +m.slice(5, 7) - 1, 1)); return s[0].toLocaleUpperCase('tr') + s.slice(1); };
 /* İşlemin saati: elle yazılan (t.time) ya da eski kayıtlarda kayıt anı (ts) aynı güne düşüyorsa ondan. */
 function txHM(t) {
   if (t.time && /^\d\d:\d\d$/.test(t.time)) return t.time;
@@ -1296,7 +1300,7 @@ function renderTxList() {
     if (f.to && t.date > f.to) return false;
     if (q) {
       const c = cat(t.categoryId);
-      const hay = `${t.note || ''} ${t.person || ''} ${catLabel(c)} ${accLabel(acc(t.accountId))} ${t.toAccountId ? accLabel(acc(t.toAccountId)) : ''}`.toLocaleLowerCase('tr');
+      const hay = `${t.note || ''} ${t.person || ''} ${catLabel(c)} ${accLabel(acc(t.accountId))} ${t.toAccountId ? accLabel(acc(t.toAccountId)) : ''} ${t.forMonth ? forMonthLabel(t.forMonth) : ''}`.toLocaleLowerCase('tr');
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -1486,7 +1490,7 @@ function txInfo(t) {
     title = c ? catLabel(c) : (t.type === 'income' ? 'Gelir' : 'Kategorisiz');
     col = c ? c.color : (t.type === 'income' ? '#2e9e6b' : '#999');
     ic = esc((c ? c.name : title).trim()[0] || '•').toLocaleUpperCase('tr');
-    sub = accLabel(a);
+    sub = (t.type === 'income' && t.forMonth ? forMonthLabel(t.forMonth) + ' için · ' : '') + accLabel(a);
     amt = `<span class="num ${t.type === 'expense' ? 'exp' : 'inc'}">${t.type === 'expense' ? '−' : '+'}${fmt(t.amount, cur)}</span>` +
       (t.paid ? `<br><small class="muted num">${fmt(t.paid.amount, t.paid.currency)} · 1 $ = ${fmtNum(cur === 'IQD' ? t.amount / t.paid.amount : t.paid.amount / t.amount)}</small>` : '');
   }
@@ -2901,6 +2905,7 @@ function openTx(type, id, preset) {
   f.saveRate.checked = !t;
   // Hesaptan başka para biriminde ödenen gider/gelir (ör. $95.57'lik ödeme dinar hesabından 151,526 IQD çekti).
   dlg.paidOn = !!(t && t.paid);
+  f.forMonth.value = t && t.forMonth || '';
   // Aynı para biriminde çekilenden farklı tutar giren transfer (ör. 98,230 çekildi, elden 100,000 alındı).
   const ta = t && t.type === 'transfer' && acc(t.accountId), tb = t && t.type === 'transfer' && acc(t.toAccountId);
   dlg.sameOn = !!(ta && tb && ta.currency === tb.currency && t.toAmount !== t.amount);
@@ -2945,6 +2950,7 @@ function syncTx(t) {
   document.querySelectorAll('#txType button').forEach(b => b.classList.toggle('on', b.dataset.type === tp));
   // Eski "Başlangıç girişi" kayıtlarının türü değiştirilemez.
   $('#txType').classList.toggle('hide', tp === 'opening');
+  $('#forMonthWrap').classList.toggle('hide', tp !== 'income');
   const a = acc(f.accountId.value), cur = a ? a.currency : 'IQD';
   $('#amtCur').textContent = cur;
   $('#accLbl').textContent = tp === 'transfer' ? 'Çıkan hesap' : (tp === 'income' || tp === 'opening') ? 'Giren hesap' : 'Hesap';
@@ -3077,6 +3083,7 @@ function submitTx(e) {
       toast('Kategori seçin.'); $('#cpick').classList.remove('hide'); drawCatPick(); return;
     }
     if (dlg.type === 'income') ui.lastIncAcc = t.accountId; else ui.lastExpAcc = t.accountId;
+    if (dlg.type === 'income' && /^\d{4}-\d\d$/.test(f.forMonth.value)) t.forMonth = f.forMonth.value;
     if (dlg.paidOn && f.paidAmt.value.trim()) {
       const p = num(f.paidAmt.value), a = acc(t.accountId);
       if (!(p > 0)) { toast(`Geçerli bir ${a && a.currency === 'IQD' ? 'dolar' : 'dinar'} tutarı girin.`); f.paidAmt.focus(); return; }
