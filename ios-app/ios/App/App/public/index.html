@@ -371,6 +371,10 @@ dialog.sheet{overflow-x:hidden;touch-action:pan-y}
 .krow{display:flex;align-items:center;gap:12px}
 .knext{font-size:28px;font-weight:700;letter-spacing:-.02em;margin:14px 0 2px}
 .kbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+table.fuel{width:100%;border-collapse:collapse;margin-top:12px;font-size:14px}
+table.fuel th{font-size:12px;font-weight:500;color:var(--muted);text-align:left;padding:4px 2px}
+table.fuel td{padding:8px 2px;border-top:1px solid var(--line)}
+table.fuel .r{text-align:right}
 .ktimes{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
 .ktimes input{width:100%}
 .kdays{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.kdays .chip.pick{padding:7px 0;text-align:center}
@@ -469,6 +473,11 @@ dialog.sheet{overflow-x:hidden;touch-action:pan-y}
       <select name="categoryId" class="hide" tabindex="-1"></select>
       <button type="button" class="cpick-btn" data-action="cpick" id="cpickBtn"></button>
       <div id="cpick" class="cpick hide"></div>
+    </div>
+    <div id="litWrap" class="hide">
+      <label>Litre <span class="muted">(benzin — isteğe bağlı)</span>
+        <div class="amt"><input name="liters" inputmode="decimal" autocomplete="off" placeholder="0"><span>L</span></div></label>
+      <div class="hint" id="litHint"></div>
     </div>
     <label id="toWrap">Hedef hesap<select name="toAccountId"></select></label>
     <div id="toEmpty" class="fxbox hide">
@@ -696,6 +705,19 @@ function catDesc(id) {
 }
 const catUnder = (cid, anc) => !!cid && catPath(cid).some(c => c.id === anc);
 const catLabel = c => c ? catPath(c.id).map(x => x.name).join(' › ') || c.name : '';
+/* Benzin/yakıt kategorisi: kendisi ya da üstlerinden birinin adı yakıt geçiyorsa. Bu giderlerde litre tutulur. */
+const FUEL_RE = /benzin|yak[ıi]t|mazot|dizel|motorin|petrol|gasoline|fuel/i;
+const isFuelCat = id => catPath(id).some(c => FUEL_RE.test(c.name));
+const litNum = v => { const n = Number(String(v ?? '').trim().replace(/\s/g, '').replace(',', '.')); return n > 0 && isFinite(n) ? n : 0; };
+/* İşlemin litresi: elle girilen (t.liters) ya da benzin giderinin notundaki "40L" / "40 litre". */
+function txLiters(t) {
+  if (t.type !== 'expense') return 0;
+  if (t.liters > 0) return t.liters;
+  if (!isFuelCat(t.categoryId)) return 0;
+  const m = /(\d+(?:[.,]\d+)?)\s*(?:l|lt|litre|liter)\b/i.exec(t.note || '');
+  return m ? litNum(m[1]) : 0;
+}
+const fmtL = n => fmtNum(n, Math.abs(n - Math.round(n)) < 0.05 ? 0 : 1) + ' L';
 /* Bir dönemde kategorinin kendisi + altındakilerin toplamı (stats().byCat'tan). */
 const catSum = (byCat, id) => [...catDesc(id)].reduce((s, k) => s + (byCat[k] || 0), 0);
 /* Hesaplar da iki seviyeli: ana hesap (ör. ZainCash) ve altındaki kartlar. Her biri kendi para birimi ve bakiyesiyle gerçek bir hesaptır. */
@@ -1131,7 +1153,48 @@ function vOzet() {
     <h3>${ui.period === 'year' ? `${esc(rg.label)} — aylara göre harcama` : `Son ${N} ${ui.period === 'week' ? 'hafta' : 'ay'} — harcama`}</h3>
     <div class="trend">${trend}</div>
   </div>
-  ${monthList()}`;
+  ${monthList()}
+  ${fuelCard()}`;
+}
+
+/* Benzin özeti: seçilen yılın aylarına göre litre, para ve ortalama litre fiyatı (Aylık harcamalar ile aynı yıl). */
+function fuelCard() {
+  const fuel = db.tx.filter(t => t.type === 'expense' && (isFuelCat(t.categoryId) || t.liters > 0));
+  if (!fuel.length) return '';
+  const D = disp(), t0 = today(), y = ui.monYear || +t0.slice(0, 4);
+  const sum = list => {
+    let L = 0, v = 0, vL = 0;
+    for (const t of list) {
+      const a = acc(t.accountId); if (!a) continue;
+      const m = conv(t.amount, a.currency, D, rateAt(t.date)), l = txLiters(t);
+      v += m; if (l) { L += l; vL += m; }
+    }
+    return { L, v, per: L ? vL / L : 0, n: list.length };
+  };
+  const inYear = fuel.filter(t => t.date.slice(0, 4) === String(y));
+  const yr = sum(inYear), cm = sum(fuel.filter(t => t.date.slice(0, 7) === t0.slice(0, 7)));
+  const rows = Array.from({ length: 12 }, (_, m) => ({ m, s: sum(inYear.filter(t => +t.date.slice(5, 7) === m + 1)) })).filter(r => r.s.n);
+  const nm = m => { const s = MNAME.format(new Date(y, m, 1)); return s[0].toUpperCase() + s.slice(1); };
+  const months = rows.length;
+  // Aya dokununca o ayın benzin giderleri: tek bir benzin kategorisi varsa ona göre süzülür.
+  const fc = [...new Set(fuel.map(t => (catPath(t.categoryId).find(c => FUEL_RE.test(c.name)) || {}).id).filter(Boolean))].map(id => ({ id }));
+  const fcAttr = fc.length === 1 ? ` data-cat="${fc[0].id}"` : '';
+  return `<div class="card">
+    <div class="krow" style="margin-bottom:10px"><b style="flex:1;font-size:16px">⛽ Benzin</b>
+      <button class="icon" data-action="mon-year" data-n="-1" aria-label="Önceki yıl">‹</button>
+      <b class="num" style="min-width:44px;text-align:center">${y}</b>
+      <button class="icon" data-action="mon-year" data-n="1" aria-label="Sonraki yıl">›</button></div>
+    <div class="kpis">
+      ${y === +t0.slice(0, 4) ? `<div class="kpi"><div class="l">Bu ay</div><div class="v num">${fmtL(cm.L)}</div><small class="num">${fmt(cm.v, D)}</small></div>` : ''}
+      <div class="kpi"><div class="l">${y} toplam</div><div class="v num">${fmtL(yr.L)}</div><small class="num">${fmt(yr.v, D)}</small></div>
+      <div class="kpi"><div class="l">Ort. litre fiyatı</div><div class="v num">${yr.per ? fmt(yr.per, D) : '—'}</div><small>${months ? `aylık ort. ${fmtL(yr.L / months)}` : ''}</small></div>
+    </div>
+    ${rows.length ? `<table class="fuel"><tr><th>Ay</th><th class="r">Litre</th><th class="r">Para</th><th class="r">L fiyatı</th></tr>
+      ${rows.map(r => `<tr class="tap" data-action="mon-open" data-d="${y}-${pad(r.m + 1)}-01"${fcAttr}><td>${esc(nm(r.m))}</td><td class="num r">${r.s.L ? fmtL(r.s.L) : '—'}</td>
+        <td class="num r">${fmt(r.s.v, D)}</td><td class="num r">${r.s.per ? fmt(r.s.per, D) : '—'}</td></tr>`).join('')}</table>`
+      : `<div class="empty">${y} yılında benzin kaydı yok.</div>`}
+    <p class="muted" style="font-size:12px;margin:8px 0 0">Benzin giderine litre yazın (veya notuna "40L"). Litresiz kayıtlar paraya girer, litreye girmez.</p>
+  </div>`;
 }
 
 /* Seçilen yılın 12 ayında harcanan, alt alta. Bir aya dokununca o ayın işlemleri açılır. */
@@ -1493,6 +1556,8 @@ function txInfo(t) {
     sub = (t.type === 'income' && t.forMonth ? forMonthLabel(t.forMonth) + ' için · ' : '') + accLabel(a);
     amt = `<span class="num ${t.type === 'expense' ? 'exp' : 'inc'}">${t.type === 'expense' ? '−' : '+'}${fmt(t.amount, cur)}</span>` +
       (t.paid ? `<br><small class="muted num">${fmt(t.paid.amount, t.paid.currency)} · 1 $ = ${fmtNum(cur === 'IQD' ? t.amount / t.paid.amount : t.paid.amount / t.amount)}</small>` : '');
+    const L = txLiters(t);
+    if (L) amt += `<br><small class="muted num">${fmtL(L)} · ${fmt(t.amount / L, cur)}/L</small>`;
   }
   if (t.note) sub += ' · ' + t.note;
   const hm = txHM(t); if (hm) sub = hm + ' · ' + sub;
@@ -2906,6 +2971,7 @@ function openTx(type, id, preset) {
   // Hesaptan başka para biriminde ödenen gider/gelir (ör. $95.57'lik ödeme dinar hesabından 151,526 IQD çekti).
   dlg.paidOn = !!(t && t.paid);
   f.forMonth.value = t && t.forMonth || '';
+  f.liters.value = t && txLiters(t) ? String(+txLiters(t).toFixed(2)) : '';
   // Aynı para biriminde çekilenden farklı tutar giren transfer (ör. 98,230 çekildi, elden 100,000 alındı).
   const ta = t && t.type === 'transfer' && acc(t.accountId), tb = t && t.type === 'transfer' && acc(t.toAccountId);
   dlg.sameOn = !!(ta && tb && ta.currency === tb.currency && t.toAmount !== t.amount);
@@ -2945,12 +3011,21 @@ function trSummary(a, b, amt, toAmt, fee, feeTo) {
   return `<b>${esc(accLabel(a))}</b> <span class="exp num">−${fmt(amt + fee, a.currency)}</span>${feeTxt}` +
     ` → <b>${esc(accLabel(b))}</b> <span class="inc num">${inTxt}</span>`;
 }
+/* Litre kutusu yalnız benzin giderinde (ya da önceden litre yazılmışsa) görünür; litre fiyatını gösterir. */
+function syncLit() {
+  const f = F(), on = dlg.type === 'expense' && (isFuelCat(f.categoryId.value) || litNum(f.liters.value) > 0);
+  $('#litWrap').classList.toggle('hide', !on);
+  if (!on) return;
+  const L = litNum(f.liters.value), amount = num(f.amount.value), a = acc(f.accountId.value);
+  $('#litHint').textContent = L && amount > 0 ? `Litre fiyatı: ${fmt(amount / L, a ? a.currency : 'IQD')}` : 'Kaç litre aldığınızı yazın; aylık/yıllık benzin özeti Özet sayfasında.';
+}
 function syncTx(t) {
   const f = F(), tp = dlg.type;
   document.querySelectorAll('#txType button').forEach(b => b.classList.toggle('on', b.dataset.type === tp));
   // Eski "Başlangıç girişi" kayıtlarının türü değiştirilemez.
   $('#txType').classList.toggle('hide', tp === 'opening');
   $('#forMonthWrap').classList.toggle('hide', tp !== 'income');
+  syncLit();
   const a = acc(f.accountId.value), cur = a ? a.currency : 'IQD';
   $('#amtCur').textContent = cur;
   $('#accLbl').textContent = tp === 'transfer' ? 'Çıkan hesap' : (tp === 'income' || tp === 'opening') ? 'Giren hesap' : 'Hesap';
@@ -3084,6 +3159,7 @@ function submitTx(e) {
     }
     if (dlg.type === 'income') ui.lastIncAcc = t.accountId; else ui.lastExpAcc = t.accountId;
     if (dlg.type === 'income' && /^\d{4}-\d\d$/.test(f.forMonth.value)) t.forMonth = f.forMonth.value;
+    if (dlg.type === 'expense' && !$('#litWrap').classList.contains('hide') && litNum(f.liters.value)) t.liters = litNum(f.liters.value);
     if (dlg.paidOn && f.paidAmt.value.trim()) {
       const p = num(f.paidAmt.value), a = acc(t.accountId);
       if (!(p > 0)) { toast(`Geçerli bir ${a && a.currency === 'IQD' ? 'dolar' : 'dinar'} tutarı girin.`); f.paidAmt.focus(); return; }
@@ -3221,7 +3297,7 @@ document.addEventListener('click', e => {
     case 'cpick-tog':
       dlg.cpOpen.has(d.id) ? dlg.cpOpen.delete(d.id) : dlg.cpOpen.add(d.id); drawCatPick(); break;
     case 'cpick-set':
-      F().categoryId.value = d.id; $('#cpick').classList.add('hide'); drawCatPick(); break;
+      F().categoryId.value = d.id; $('#cpick').classList.add('hide'); drawCatPick(); syncLit(); break;
     case 'cat-tx':
       ui.f = { q: '', acc: '', cat: d.id, from: '', to: '' }; ui.fcShow = false;
       ui.tab = 'islemler'; ui.editCat = ui.newCatParent = null; render(); scrollTo(0, 0); break;
@@ -3383,7 +3459,7 @@ document.addEventListener('click', e => {
     case 'mon-open': {
       // O ayın bütün işlemleri: İşlemler ekranı o ayın tarihleriyle süzülmüş açılır.
       const rg = range('month', d.d);
-      ui.f = { q: '', acc: '', cat: '', from: rg.start, to: rg.end }; ui.fcShow = false;
+      ui.f = { q: '', acc: '', cat: d.cat && cat(d.cat) ? d.cat : '', from: rg.start, to: rg.end }; ui.fcShow = false;
       ui.tab = 'islemler'; render(); scrollTo(0, 0); onScroll();
       break;
     }
@@ -3565,6 +3641,7 @@ document.addEventListener('input', e => {
     if (['amount', 'toAmount', 'fxRate'].includes(el.name)) touch(dlg.fxOrder, el.name);
     if (el.name === 'fxRate') dlg.rateTyped = true;
     if (['amount', 'toAmount', 'fxRate', 'fee', 'paidAmt', 'toSame'].includes(el.name)) syncTx();
+    if (el.name === 'liters') syncLit();
     return;
   }
   if (el.dataset.cv) {
