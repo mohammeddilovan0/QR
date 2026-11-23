@@ -80,6 +80,10 @@ label>input,label>select,label>.amt{margin-top:4px}
 .check input{width:auto;margin:0}
 .accs{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
 .acc{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--card)}
+[data-reorder]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.lifting{position:relative;z-index:20;transition:none!important;box-shadow:0 10px 28px rgba(0,0,0,.28);border-radius:12px;background:var(--card);opacity:.96}
+.lifting.acc{transform-origin:center}
+body.reordering{-webkit-user-select:none;user-select:none}
 .acc .n{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px}
 .acc .n>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .acc .n .cur{flex:none}
@@ -1113,14 +1117,14 @@ function vOzet() {
     <div class="big num ${total < 0 ? 'exp' : ''}">${fmt(total, D)}</div>
     ${hasDebt ? `<div class="networth tap" data-action="nav" data-tab="borclar"><span class="muted">Hesaplar <b class="num">${fmt(accTotal, D)}</b></span>${dt.lent ? `<span class="muted">Alacak <b class="num inc">+${fmt(dt.lent, D)}</b></span>` : ''}${dt.owed ? `<span class="muted">Borç <b class="num exp">−${fmt(dt.owed, D)}</b></span>` : ''}${inv ? `<span class="muted tap" data-action="tab" data-tab="yatirim">Yatırım <b class="num">${fmt(inv, D)}</b></span>` : ''}</div>` : ''}
     <div class="muted" style="font-size:12px;margin-bottom:12px">${esc(nowRateNote())}</div>
-    ${db.accounts.length ? `<div class="accs">${accParents().map(a => {
+    ${db.accounts.length ? `<div class="accs" data-reorder-box>${accParents().map(a => {
       const b = balance(a.id), kids = accChildren(a.id);
-      if (!kids.length) return `<div class="acc tap" data-action="acc-open" data-id="${a.id}"><div class="n"><span>${esc(a.name)}</span><span class="cur">${a.currency}</span></div>
+      if (!kids.length) return `<div class="acc tap" data-action="acc-open" data-reorder="acc" data-id="${a.id}"><div class="n"><span>${esc(a.name)}</span><span class="cur">${a.currency}</span></div>
         <div class="v num ${b < 0 ? 'exp' : ''}">${fmt(b, a.currency)}</div></div>`;
       // Grup kartı: toplam + ana hesabın kendi bakiyesi (kullanılıyorsa) + alt hesaplar
       const members = (accUsed(a.id) || Number(a.opening) ? [a] : []).concat(kids);
       const tot = [a, ...kids].reduce((s, x) => s + conv(balance(x.id), x.currency, D, r), 0);
-      return `<div class="acc group tap" data-action="acc-open" data-id="${a.id}"><div class="n"><span>${esc(a.name)}</span><span class="cur">≈ ${D}</span></div>
+      return `<div class="acc group tap" data-action="acc-open" data-reorder="acc" data-id="${a.id}"><div class="n"><span>${esc(a.name)}</span><span class="cur">≈ ${D}</span></div>
         <div class="v num ${tot < 0 ? 'exp' : ''}">${fmt(tot, D)}</div>
         <div class="sublines">${members.map(x => {
           const xb = balance(x.id);
@@ -1599,10 +1603,10 @@ function vAcc() {
     </div>`, swBtn('Sil', 'del-acc', a.id));
   };
   return `
-  <div class="card" style="padding:4px 12px">
-    ${db.accounts.length ? accParents().map(p => row(p, false) + accChildren(p.id).map(k => row(k, true)).join('')).join('') : '<div class="empty">Hesap yok. Sağ üstteki <b>+</b> ile ekleyin.</div>'}
+  <div class="card" style="padding:4px 12px" data-reorder-box>
+    ${db.accounts.length ? accParents().map(p => `<div data-reorder="acc" data-id="${p.id}">${row(p, false)}<div data-reorder-box>${accChildren(p.id).map(k => `<div data-reorder="acc" data-id="${k.id}">${row(k, true)}</div>`).join('')}</div></div>`).join('') : '<div class="empty">Hesap yok. Sağ üstteki <b>+</b> ile ekleyin.</div>'}
   </div>
-  <p class="muted" style="font-size:12px;margin:0 4px">Düzenlemek için hesaba dokunun, silmek için sola kaydırın.</p>`;
+  <p class="muted" style="font-size:12px;margin:0 4px">Düzenlemek için hesaba dokunun, silmek için sola kaydırın. Sırasını değiştirmek için basılı tutup sürükleyin.</p>`;
 }
 /* Hesap ekleme / düzenleme paneli. ui.editAcc: düzenlenen hesap, ui.newAccParent: altına eklenecek ana hesap. */
 function accSheet() {
@@ -3085,6 +3089,52 @@ function endDrag(e) {
 }
 document.addEventListener('pointerup', endDrag);
 document.addEventListener('pointercancel', endDrag);
+/* Basılı tutup sürükleyerek sıralama (Özet'teki hesap kartları, Hesaplar listesi). Yarım saniyeye yakın basılı tutunca kart
+   kalkar; parmakla birlikte gider, başka bir kartın üstüne gelince yer değiştirir. Bırakınca yeni sıra db.accounts'a yazılır.
+   Basılı tutmadan kaydırırsan sayfa normal kayar. */
+let ro = null;
+const roSibs = el => [...el.parentElement.children].filter(x => x.dataset.reorder === el.dataset.reorder);
+document.addEventListener('pointerdown', e => {
+  if (e.button > 0 || ro) return;
+  const el = e.target.closest('[data-reorder]');
+  if (!el || e.target.closest('.sw-acts, button:not(.tx), input, select') || roSibs(el).length < 2) return;
+  const r = { el, id: e.pointerId, x0: e.clientX, y0: e.clientY, on: false };
+  r.timer = setTimeout(() => {
+    if (ro !== r) return;
+    r.on = true; drag = null; closeSw();
+    r.l0 = el.offsetLeft; r.t0 = el.offsetTop;
+    el.classList.add('lifting'); document.body.classList.add('reordering');
+    try { navigator.vibrate && navigator.vibrate(10); } catch (_) {}
+  }, 420);
+  ro = r;
+});
+document.addEventListener('pointermove', e => {
+  if (!ro || e.pointerId !== ro.id) return;
+  if (!ro.on) { if (Math.hypot(e.clientX - ro.x0, e.clientY - ro.y0) > 8) { clearTimeout(ro.timer); ro = null; } return; }
+  const el = ro.el;
+  // Parmağın altındaki kardeş kartla yer değiştir.
+  const over = roSibs(el).find(s => { if (s === el) return false; const b = s.getBoundingClientRect(); return e.clientX >= b.left && e.clientX <= b.right && e.clientY >= b.top && e.clientY <= b.bottom; });
+  if (over) { const sib = roSibs(el); el.parentElement.insertBefore(el, sib.indexOf(over) < sib.indexOf(el) ? over : over.nextSibling); }
+  el.style.transform = `translate(${e.clientX - ro.x0 - (el.offsetLeft - ro.l0)}px, ${e.clientY - ro.y0 - (el.offsetTop - ro.t0)}px) scale(1.02)`;
+});
+function endReorder(e) {
+  if (!ro || e.pointerId !== ro.id) return;
+  const r = ro; ro = null; clearTimeout(r.timer);
+  if (!r.on) return;
+  swallow = true;
+  r.el.classList.remove('lifting'); r.el.style.transform = ''; document.body.classList.remove('reordering');
+  // Yeni sıra: listedeki hesaplar db.accounts'ta kendi yerleri arasında yeniden dizilir (öteki hesapların yeri değişmez).
+  const ids = roSibs(r.el).map(x => x.dataset.id), pos = new Map(ids.map((id, i) => [id, i]));
+  const slots = db.accounts.map((a, i) => pos.has(a.id) ? i : -1).filter(i => i >= 0);
+  const sorted = slots.map(i => db.accounts[i]).sort((a, b) => pos.get(a.id) - pos.get(b.id));
+  if (sorted.some((a, k) => db.accounts[slots[k]] !== a)) { slots.forEach((slot, k) => { db.accounts[slot] = sorted[k]; }); save(); toast('Sıralama kaydedildi'); }
+  render();
+}
+document.addEventListener('pointerup', endReorder);
+document.addEventListener('pointercancel', endReorder);
+// Kart kaldırılmışken sayfa kaymasın (iPhone'da kaydırmayı yalnız touchmove durdurabilir).
+document.addEventListener('touchmove', e => { if (ro && ro.on) e.preventDefault(); }, { passive: false });
+document.addEventListener('contextmenu', e => { if (e.target.closest('[data-reorder]')) e.preventDefault(); });
 // Kaydırma/çekme hareketinin sonundaki tıklama bir butona basılmış sayılmasın.
 document.addEventListener('click', e => { if (swallow) { swallow = false; e.stopPropagation(); e.preventDefault(); } }, true);
 
