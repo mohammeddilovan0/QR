@@ -1550,7 +1550,7 @@ function txInfo(t) {
       (t.fee ? `<br><small class="exp num">ücret −${fmt(t.fee, t.feeTo && b ? b.currency : cur)}</small>` : '') +
       (trGap(t) ? `<br><small class="${trGap(t) > 0 ? 'inc' : 'exp'} num">${trGap(t) > 0 ? 'kâr +' : 'fark −'}${fmt(Math.abs(trGap(t)), cur)}</small>` : '');
   } else if (isInvTx(t)) {
-    const h = { sym: invSym(t), atype: invType(t) }, buy = t.type === 'inv-buy', [, ic0, c0] = INV_TYPES[h.atype];
+    const h = { sym: invSym(t), atype: invType(t) }, buy = t.type === 'inv-buy', [, ic0, c0] = invIcon(h);
     title = `${buy ? 'Alım' : 'Satış'} · ${invName(h)}`; col = c0; ic = ic0;
     sub = `${fmtQty(+t.qty, h)} × ${fmtUsd(+t.price)}` + (a ? ' · ' + accLabel(a) : '');
     amt = a ? `<span class="num ${buy ? 'exp' : 'inc'}">${buy ? '−' : '+'}${fmt(t.amount, cur)}</span>` + (cur !== 'USD' ? `<br><small class="muted num">${fmtUsd(invUsd(t))}</small>` : '')
@@ -2759,7 +2759,11 @@ const isInvTx = t => t.type === 'inv-buy' || t.type === 'inv-sell';
 const invType = t => INV_TYPES[t.atype] ? t.atype : 'other';
 const invSym = t => invType(t) === 'gold' ? `${KARATS.includes(+t.karat) ? +t.karat : 24}` : String(t.asset || '').trim().toUpperCase();
 const invKey = t => invType(t) + ':' + invSym(t);
-const invName = h => h.atype === 'gold' ? `Altın ${h.sym} ayar` : h.sym;
+/* Altına bağlı kripto tokenler: 1 token = 1 ons (31.1 gr) altın. Fiyatı OKX'ten gelir; gelmezse dünya ons fiyatı kullanılır. */
+const GOLD_TOKENS = { XAUT: 'Tether Gold', PAXG: 'PAX Gold' };
+const isGoldTok = h => h.atype === 'crypto' && !!GOLD_TOKENS[h.sym];
+const invIcon = h => INV_TYPES[isGoldTok(h) ? 'gold' : h.atype];
+const invName = h => h.atype === 'gold' ? `Altın ${h.sym} ayar` : isGoldTok(h) ? `${h.sym} (${GOLD_TOKENS[h.sym]})` : h.sym;
 const invUnit = h => h.atype === 'gold' ? 'gr' : h.atype === 'crypto' ? h.sym : 'adet';
 const fmtQty = (q, h) => `${q.toLocaleString('en-US', { maximumFractionDigits: q >= 100 ? 2 : 8 })} ${invUnit(h)}`;
 const fmtUsd = v => `${v < 0 ? '−' : ''}$${fmtNum(Math.abs(v), Math.abs(v) >= 1000 ? 0 : 2)}`;
@@ -2809,13 +2813,14 @@ function invPrice(h) {
     if (STABLE.includes(h.sym)) return { v: 1, src: 'sabit' };
     const p = invPx[h.sym];
     if (p && (!man || p.at > man.at)) return { v: p.v, src: Date.now() - p.at < 5 * 60e3 ? 'canlı' : 'son', at: p.at };
+    if (!man && isGoldTok(h) && gold.usd) return { v: gold.usd, src: 'ons' };
   }
   return man ? { v: man.v, src: 'elle', at: man.at } : null;
 }
 const invLoad = { busy: false, at: 0, err: '' };
 async function loadInvPx(force) {
   const syms = [...new Set(db.tx.filter(t => isInvTx(t) && invType(t) === 'crypto').map(invSym))].filter(s => s && !STABLE.includes(s));
-  if (!syms.length || invLoad.busy || (!force && Date.now() - invLoad.at < 60e3)) return;
+  if (!syms.length || invLoad.busy || (!force && Date.now() - invLoad.at < 15e3)) return;
   invLoad.busy = true; invLoad.err = '';
   const one = async s => {
     try {
@@ -2835,6 +2840,8 @@ async function loadInvPx(force) {
   invLoad.busy = false; invLoad.at = Date.now(); invPxSave();
   if (ui.tab === 'yatirim' || ui.tab === 'ozet') render();
 }
+/* Yatırım ekranı açıkken kripto fiyatları 15 saniyede bir yenilenir (altın ons fiyatı zaten canlı akar). */
+setInterval(() => { if (ui.tab === 'yatirim' && !document.hidden) loadInvPx(); }, 15e3);
 /* Net servete giren yatırım değeri (seçili para biriminde). */
 const invTotal = D => conv(portfolio().reduce((s, h) => s + h.value, 0), 'USD', D, nowRate());
 
@@ -2845,10 +2852,10 @@ function vInv() {
   const un = val - cost, real = ps.reduce((s, h) => s + h.real, 0), D = disp();
   const pl = (v, base) => `<span class="num ${v < 0 ? 'exp' : v > 0 ? 'inc' : 'muted'}">${v > 0 ? '+' : ''}${fmtUsd(v)}${base ? ` (${v > 0 ? '+' : ''}${fmtNum(v / base * 100, 1)}%)` : ''}</span>`;
   const row = h => {
-    const [, ic, col] = INV_TYPES[h.atype], u = h.value - h.cost;
+    const [, ic, col] = invIcon(h), u = h.value - h.cost;
     return `<div class="tx tap" data-action="inv-open" data-key="${esc(h.key)}">
       <div class="ic" style="background:${col}">${ic}</div>
-      <div class="m"><div class="t">${esc(invName(h))}</div><div class="s">${esc(fmtQty(h.qty, h))} · ort. ${esc(fmtUsd(h.avg))}${h.px ? ` · şimdi ${esc(fmtUsd(h.px.v))}${h.px.src === 'elle' ? ' (elle)' : ''}` : ' · fiyat yok'}</div></div>
+      <div class="m"><div class="t">${esc(invName(h))}</div><div class="s">${esc(fmtQty(h.qty, h))}${isGoldTok(h) ? ` ≈ ${fmtNum(h.qty * OZ, 2)} gr altın` : ''} · ort. ${esc(fmtUsd(h.avg))}${h.px ? ` · şimdi ${esc(fmtUsd(h.px.v))}${h.px.src === 'elle' ? ' (elle)' : ''}` : ' · fiyat yok'}</div></div>
       <div class="a"><b class="num">${fmtUsd(h.value)}</b><br><small>${h.px ? pl(u, h.cost) : '<span class="muted">maliyet</span>'}</small></div></div>`;
   };
   return mktSeg() + `<div class="card">
@@ -2866,7 +2873,7 @@ function vInv() {
   </div>
   <div class="card"><h2>Varlıklar</h2>${open.length ? open.sort((a, b) => b.value - a.value).map(row).join('') : '<div class="empty">Henüz yatırım yok. <b>+ Alış</b> ile OKX\'ten aldığın kriptoyu, altını veya hisseyi ekle.</div>'}</div>
   ${closed.length ? `<div class="card"><h2>Satılıp kapananlar</h2>${closed.map(h => `<div class="tx tap" data-action="inv-open" data-key="${esc(h.key)}">
-    <div class="ic" style="background:${INV_TYPES[h.atype][2]}">${INV_TYPES[h.atype][1]}</div>
+    <div class="ic" style="background:${invIcon(h)[2]}">${invIcon(h)[1]}</div>
     <div class="m"><div class="t">${esc(invName(h))}</div><div class="s">${h.txs.length} işlem</div></div>
     <div class="a">${pl(h.real)}</div></div>`).join('')}</div>` : ''}`;
 }
@@ -2910,7 +2917,7 @@ function invSheet(t, pre = {}) {
       <div class="seg mseg" style="grid-column:1/-1;margin:0" id="invType">${Object.entries(INV_TYPES).map(([k, [l]]) => `<button type="button" data-action="inv-type" data-v="${k}" class="${atype === k ? 'on' : ''}">${l}</button>`).join('')}</div>
       <label style="grid-column:1/-1" data-inv-asset class="${atype === 'gold' ? 'hide' : ''}"><span data-inv-asset-l>${atype === 'stock' ? 'Hisse (ör. AAPL)' : atype === 'crypto' ? 'Coin (ör. BTC, ETH)' : 'Varlık adı'}</span>
         <input name="asset" list="invSyms" maxlength="20" autocomplete="off" autocapitalize="characters" placeholder="BTC" value="${esc(base.asset && atype !== 'gold' ? invSym(base) : '')}">
-        <datalist id="invSyms">${syms.map(s => `<option value="${esc(s)}">`).join('')}</datalist></label>
+        <datalist id="invSyms">${[...new Set([...syms, 'BTC', 'ETH', 'XAUT', 'PAXG', 'USDT'])].map(s => `<option value="${esc(s)}">`).join('')}</datalist></label>
       <label style="grid-column:1/-1" data-inv-karat class="${atype === 'gold' ? '' : 'hide'}">Ayar<select name="karat">${KARATS.map(k => `<option value="${k}"${(+base.karat || 24) === k ? ' selected' : ''}>${k} ayar</option>`).join('')}</select></label>
       <label>Miktar <span class="muted" data-inv-unit>${atype === 'gold' ? '(gram)' : atype === 'stock' ? '(adet)' : ''}</span><input name="qty" inputmode="decimal" autocomplete="off" placeholder="0" value="${t ? esc(String(t.qty)) : ''}" required></label>
       <label>Birim fiyat ($)<input name="price" inputmode="decimal" autocomplete="off" placeholder="0" value="${t ? esc(String(+(+t.price).toFixed(8))) : ''}"></label>
@@ -2958,7 +2965,8 @@ function syncInv(changed) {
   $('#invHint').textContent = !(usd > 0) ? 'Miktarı ve birim fiyatı (ya da toplamı) yazın.'
     : `${side === 'buy' ? 'Ödenen' : 'Eline geçen'}: ${fmtUsd(usd)}${fee ? ` (komisyon ${fmtUsd(fee)} ${side === 'buy' ? 'dahil' : 'düşüldü'})` : ''}` +
       (h && h.qty ? ` · elinde ${fmtQty(h.qty, h)}, ort. ${fmtUsd(h.avg)}` : '') +
-      (side === 'sell' && h && h.avg && q ? ` · bu satışın kâr/zararı ≈ ${fmtUsd(usd - h.avg * q)}` : '');
+      (side === 'sell' && h && h.avg && q ? ` · bu satışın kâr/zararı ≈ ${fmtUsd(usd - h.avg * q)}` : '') +
+      (atype === 'crypto' && GOLD_TOKENS[sym] ? ` · 1 ${sym} = 1 ons (${fmtNum(OZ, 2)} gr) altın${q ? `, ${fmtNum(q * OZ, 2)} gr` : ''}` : '');
 }
 function invSubmit(form, v) {
   const side = v.side === 'sell' ? 'sell' : 'buy', atype = INV_TYPES[v.atype] ? v.atype : 'crypto';
@@ -3244,7 +3252,7 @@ function render() {
   if (ui.tab === 'altin') { renderGold(); loadGold(); if (db.settings.bridge) loadLive(); }
   if (ui.tab === 'yatirim' || (ui.tab === 'ozet' && db.tx.some(isInvTx))) {
     loadInvPx();
-    if (!gold.usd && db.tx.some(t => isInvTx(t) && invType(t) === 'gold')) loadGold();
+    if (!gold.usd && db.tx.some(t => isInvTx(t) && (invType(t) === 'gold' || GOLD_TOKENS[invSym(t)]))) loadGold();
   }
   goldStream();
   if (ui.tab === 'kalk') kalkCheck();
