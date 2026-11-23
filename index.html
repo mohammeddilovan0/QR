@@ -80,7 +80,8 @@ label>input,label>select,label>.amt{margin-top:4px}
 .check input{width:auto;margin:0}
 .accs{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
 .acc{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--card)}
-[data-reorder]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.grip{flex:none;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;margin:-8px -6px -8px 0;color:var(--muted);font-size:20px;line-height:1;cursor:grab;touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.acc .n .grip{margin-left:auto}
 .lifting{position:relative;z-index:20;transition:none!important;box-shadow:0 10px 28px rgba(0,0,0,.28);border-radius:12px;background:var(--card);opacity:.96}
 .lifting.acc{transform-origin:center}
 body.reordering{-webkit-user-select:none;user-select:none}
@@ -1117,14 +1118,15 @@ function vOzet() {
     <div class="big num ${total < 0 ? 'exp' : ''}">${fmt(total, D)}</div>
     ${hasDebt ? `<div class="networth tap" data-action="nav" data-tab="borclar"><span class="muted">Hesaplar <b class="num">${fmt(accTotal, D)}</b></span>${dt.lent ? `<span class="muted">Alacak <b class="num inc">+${fmt(dt.lent, D)}</b></span>` : ''}${dt.owed ? `<span class="muted">Borç <b class="num exp">−${fmt(dt.owed, D)}</b></span>` : ''}${inv ? `<span class="muted tap" data-action="tab" data-tab="yatirim">Yatırım <b class="num">${fmt(inv, D)}</b></span>` : ''}</div>` : ''}
     <div class="muted" style="font-size:12px;margin-bottom:12px">${esc(nowRateNote())}</div>
-    ${db.accounts.length ? `<div class="accs" data-reorder-box>${accParents().map(a => {
+    ${db.accounts.length ? `<div class="accs" data-reorder-box>${accParents().map((a, _, all) => {
+      const grip = all.length > 1 ? GRIP : '';
       const b = balance(a.id), kids = accChildren(a.id);
-      if (!kids.length) return `<div class="acc tap" data-action="acc-open" data-reorder="acc" data-id="${a.id}"><div class="n"><span>${esc(a.name)}</span><span class="cur">${a.currency}</span></div>
+      if (!kids.length) return `<div class="acc tap" data-action="acc-open" data-reorder="acc" data-id="${a.id}"><div class="n"><span>${esc(a.name)}</span><span class="cur">${a.currency}</span>${grip}</div>
         <div class="v num ${b < 0 ? 'exp' : ''}">${fmt(b, a.currency)}</div></div>`;
       // Grup kartı: toplam + ana hesabın kendi bakiyesi (kullanılıyorsa) + alt hesaplar
       const members = (accUsed(a.id) || Number(a.opening) ? [a] : []).concat(kids);
       const tot = [a, ...kids].reduce((s, x) => s + conv(balance(x.id), x.currency, D, r), 0);
-      return `<div class="acc group tap" data-action="acc-open" data-reorder="acc" data-id="${a.id}"><div class="n"><span>${esc(a.name)}</span><span class="cur">≈ ${D}</span></div>
+      return `<div class="acc group tap" data-action="acc-open" data-reorder="acc" data-id="${a.id}"><div class="n"><span>${esc(a.name)}</span><span class="cur">≈ ${D}</span>${grip}</div>
         <div class="v num ${tot < 0 ? 'exp' : ''}">${fmt(tot, D)}</div>
         <div class="sublines">${members.map(x => {
           const xb = balance(x.id);
@@ -1596,8 +1598,9 @@ function vAcc() {
     const b = balance(a.id), n = db.tx.filter(t => txAccs(t).includes(a.id)).length;
     const kids = isChild ? [] : accChildren(a.id);
     const tot = kids.length ? [a, ...kids].reduce((s, x) => s + conv(balance(x.id), x.currency, D, r), 0) : 0;
+    const sibs = isChild ? accChildren(a.parentId) : accParents();
     return swRow(`<div class="list-row tap ${isChild ? 'child' : ''}" data-action="edit-acc" data-id="${a.id}">
-      <span class="cur">${a.currency}</span>
+      ${sibs.length > 1 ? GRIP : ''}<span class="cur">${a.currency}</span>
       <div class="m"><b>${isChild ? '↳ ' : ''}${esc(a.name)}</b><div class="muted" style="font-size:12px">${n} işlem · açılış ${fmt(Number(a.opening) || 0, a.currency)}${a.currency !== D ? ` · ≈ ${fmt(conv(b, a.currency, D, r), D)}` : ''}${kids.length ? ` · <b>grup toplamı ≈ ${fmt(tot, D)}</b>` : ''}</div></div>
       <b class="num ${b < 0 ? 'exp' : ''}">${fmt(b, a.currency)}</b><span class="chev-r">›</span>
     </div>`, swBtn('Sil', 'del-acc', a.id));
@@ -1606,7 +1609,7 @@ function vAcc() {
   <div class="card" style="padding:4px 12px" data-reorder-box>
     ${db.accounts.length ? accParents().map(p => `<div data-reorder="acc" data-id="${p.id}">${row(p, false)}<div data-reorder-box>${accChildren(p.id).map(k => `<div data-reorder="acc" data-id="${k.id}">${row(k, true)}</div>`).join('')}</div></div>`).join('') : '<div class="empty">Hesap yok. Sağ üstteki <b>+</b> ile ekleyin.</div>'}
   </div>
-  <p class="muted" style="font-size:12px;margin:0 4px">Düzenlemek için hesaba dokunun, silmek için sola kaydırın. Sırasını değiştirmek için basılı tutup sürükleyin.</p>`;
+  <p class="muted" style="font-size:12px;margin:0 4px">Düzenlemek için hesaba dokunun, silmek için sola kaydırın. Sırasını değiştirmek için ≡ işaretinden tutup sürükleyin.</p>`;
 }
 /* Hesap ekleme / düzenleme paneli. ui.editAcc: düzenlenen hesap, ui.newAccParent: altına eklenecek ana hesap. */
 function accSheet() {
@@ -3089,28 +3092,23 @@ function endDrag(e) {
 }
 document.addEventListener('pointerup', endDrag);
 document.addEventListener('pointercancel', endDrag);
-/* Basılı tutup sürükleyerek sıralama (Özet'teki hesap kartları, Hesaplar listesi). Yarım saniyeye yakın basılı tutunca kart
-   kalkar; parmakla birlikte gider, başka bir kartın üstüne gelince yer değiştirir. Bırakınca yeni sıra db.accounts'a yazılır.
-   Basılı tutmadan kaydırırsan sayfa normal kayar. */
+/* Sürükleme tutamağı (≡): yalnız buradan tutulunca kart sürüklenir; kartın kendisi dokunma ve kaydırmada normal davranır. */
+const GRIP = '<span class="grip" data-action="grip" aria-label="Sırala">≡</span>';
+/* Sürükleyerek sıralama (Özet'teki hesap kartları, Hesaplar listesi): ≡ tutamağından tutunca kart kalkar, parmakla birlikte
+   gider, başka bir kartın üstüne gelince yer değiştirir. Bırakınca yeni sıra db.accounts'a yazılır. */
 let ro = null;
 const roSibs = el => [...el.parentElement.children].filter(x => x.dataset.reorder === el.dataset.reorder);
 document.addEventListener('pointerdown', e => {
   if (e.button > 0 || ro) return;
-  const el = e.target.closest('[data-reorder]');
-  if (!el || e.target.closest('.sw-acts, button:not(.tx), input, select') || roSibs(el).length < 2) return;
-  const r = { el, id: e.pointerId, x0: e.clientX, y0: e.clientY, on: false };
-  r.timer = setTimeout(() => {
-    if (ro !== r) return;
-    r.on = true; drag = null; closeSw();
-    r.l0 = el.offsetLeft; r.t0 = el.offsetTop;
-    el.classList.add('lifting'); document.body.classList.add('reordering');
-    try { navigator.vibrate && navigator.vibrate(10); } catch (_) {}
-  }, 420);
-  ro = r;
+  const g = e.target.closest('[data-action="grip"]'), el = g && g.closest('[data-reorder]');
+  if (!el || roSibs(el).length < 2) return;
+  e.preventDefault();
+  drag = null; closeSw();
+  ro = { el, id: e.pointerId, x0: e.clientX, y0: e.clientY, on: true, l0: el.offsetLeft, t0: el.offsetTop };
+  el.classList.add('lifting'); document.body.classList.add('reordering');
 });
 document.addEventListener('pointermove', e => {
   if (!ro || e.pointerId !== ro.id) return;
-  if (!ro.on) { if (Math.hypot(e.clientX - ro.x0, e.clientY - ro.y0) > 8) { clearTimeout(ro.timer); ro = null; } return; }
   const el = ro.el;
   // Parmağın altındaki kardeş kartla yer değiştir.
   const over = roSibs(el).find(s => { if (s === el) return false; const b = s.getBoundingClientRect(); return e.clientX >= b.left && e.clientX <= b.right && e.clientY >= b.top && e.clientY <= b.bottom; });
@@ -3119,8 +3117,7 @@ document.addEventListener('pointermove', e => {
 });
 function endReorder(e) {
   if (!ro || e.pointerId !== ro.id) return;
-  const r = ro; ro = null; clearTimeout(r.timer);
-  if (!r.on) return;
+  const r = ro; ro = null;
   swallow = true;
   r.el.classList.remove('lifting'); r.el.style.transform = ''; document.body.classList.remove('reordering');
   // Yeni sıra: listedeki hesaplar db.accounts'ta kendi yerleri arasında yeniden dizilir (öteki hesapların yeri değişmez).
@@ -3134,7 +3131,7 @@ document.addEventListener('pointerup', endReorder);
 document.addEventListener('pointercancel', endReorder);
 // Kart kaldırılmışken sayfa kaymasın (iPhone'da kaydırmayı yalnız touchmove durdurabilir).
 document.addEventListener('touchmove', e => { if (ro && ro.on) e.preventDefault(); }, { passive: false });
-document.addEventListener('contextmenu', e => { if (e.target.closest('[data-reorder]')) e.preventDefault(); });
+document.addEventListener('contextmenu', e => { if (e.target.closest('.grip')) e.preventDefault(); });
 // Kaydırma/çekme hareketinin sonundaki tıklama bir butona basılmış sayılmasın.
 document.addEventListener('click', e => { if (swallow) { swallow = false; e.stopPropagation(); e.preventDefault(); } }, true);
 
