@@ -2759,7 +2759,7 @@ const isInvTx = t => t.type === 'inv-buy' || t.type === 'inv-sell';
 const invType = t => INV_TYPES[t.atype] ? t.atype : 'other';
 const invSym = t => invType(t) === 'gold' ? `${KARATS.includes(+t.karat) ? +t.karat : 24}` : String(t.asset || '').trim().toUpperCase();
 const invKey = t => invType(t) + ':' + invSym(t);
-/* Altına bağlı kripto tokenler: 1 token = 1 ons (31.1 gr) altın. Fiyatı OKX'ten gelir; gelmezse dünya ons fiyatı kullanılır. */
+/* Altına bağlı kripto tokenler: 1 token = 1 ons (31.1 gr) altın. Fiyatı yalnız OKX'ten gelir. */
 const GOLD_TOKENS = { XAUT: 'Tether Gold', PAXG: 'PAX Gold' };
 const isGoldTok = h => h.atype === 'crypto' && !!GOLD_TOKENS[h.sym];
 const invIcon = h => INV_TYPES[isGoldTok(h) ? 'gold' : h.atype];
@@ -2813,7 +2813,6 @@ function invPrice(h) {
     if (STABLE.includes(h.sym)) return { v: 1, src: 'sabit' };
     const p = invPx[h.sym];
     if (p && (!man || p.at > man.at)) return { v: p.v, src: Date.now() - p.at < 5 * 60e3 ? 'canlı' : 'son', at: p.at };
-    if (!man && isGoldTok(h) && gold.usd) return { v: gold.usd, src: 'ons' };
   }
   return man ? { v: man.v, src: 'elle', at: man.at } : null;
 }
@@ -2828,6 +2827,7 @@ async function loadInvPx(force) {
       const j = await r.json(), v = +(j.data && j.data[0] && j.data[0].last);
       if (v > 0) return v;
     } catch (e) {}
+    if (GOLD_TOKENS[s]) throw new Error(s + ' OKX\'ten alınamadı');
     const r = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${encodeURIComponent(s)}USDT`, { cache: 'no-store' });
     const j = await r.json(), v = +j.price;
     if (v > 0) return v;
@@ -2917,7 +2917,7 @@ function invSheet(t, pre = {}) {
       <div class="seg mseg" style="grid-column:1/-1;margin:0" id="invType">${Object.entries(INV_TYPES).map(([k, [l]]) => `<button type="button" data-action="inv-type" data-v="${k}" class="${atype === k ? 'on' : ''}">${l}</button>`).join('')}</div>
       <label style="grid-column:1/-1" data-inv-asset class="${atype === 'gold' ? 'hide' : ''}"><span data-inv-asset-l>${atype === 'stock' ? 'Hisse (ör. AAPL)' : atype === 'crypto' ? 'Coin (ör. BTC, ETH)' : 'Varlık adı'}</span>
         <input name="asset" list="invSyms" maxlength="20" autocomplete="off" autocapitalize="characters" placeholder="BTC" value="${esc(base.asset && atype !== 'gold' ? invSym(base) : '')}">
-        <datalist id="invSyms">${[...new Set([...syms, 'BTC', 'ETH', 'XAUT', 'PAXG', 'USDT'])].map(s => `<option value="${esc(s)}">`).join('')}</datalist></label>
+        <datalist id="invSyms">${[...new Set([...syms, 'XAUT', 'PAXG'])].map(s => `<option value="${esc(s)}">`).join('')}</datalist></label>
       <label style="grid-column:1/-1" data-inv-karat class="${atype === 'gold' ? '' : 'hide'}">Ayar<select name="karat">${KARATS.map(k => `<option value="${k}"${(+base.karat || 24) === k ? ' selected' : ''}>${k} ayar</option>`).join('')}</select></label>
       <label>Miktar <span class="muted" data-inv-unit>${atype === 'gold' ? '(gram)' : atype === 'stock' ? '(adet)' : ''}</span><input name="qty" inputmode="decimal" autocomplete="off" placeholder="0" value="${t ? esc(String(t.qty)) : ''}" required></label>
       <label>Birim fiyat ($)<input name="price" inputmode="decimal" autocomplete="off" placeholder="0" value="${t ? esc(String(+(+t.price).toFixed(8))) : ''}"></label>
@@ -3252,7 +3252,7 @@ function render() {
   if (ui.tab === 'altin') { renderGold(); loadGold(); if (db.settings.bridge) loadLive(); }
   if (ui.tab === 'yatirim' || (ui.tab === 'ozet' && db.tx.some(isInvTx))) {
     loadInvPx();
-    if (!gold.usd && db.tx.some(t => isInvTx(t) && (invType(t) === 'gold' || GOLD_TOKENS[invSym(t)]))) loadGold();
+    if (!gold.usd && db.tx.some(t => isInvTx(t) && invType(t) === 'gold')) loadGold();
   }
   goldStream();
   if (ui.tab === 'kalk') kalkCheck();
