@@ -80,7 +80,8 @@ label>input,label>select,label>.amt{margin-top:4px}
 .check input{width:auto;margin:0}
 .accs{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
 .acc{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--card)}
-[data-reorder]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.grip{flex:none;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;margin:-8px -6px -8px 0;color:var(--muted);font-size:20px;line-height:1;cursor:grab;touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.acc .n .grip{margin-left:auto}
 .lifting{position:relative;z-index:20;transition:none!important;box-shadow:0 10px 28px rgba(0,0,0,.28);border-radius:12px;background:var(--card);opacity:.96}
 .lifting.acc{transform-origin:center}
 body.reordering{-webkit-user-select:none;user-select:none}
@@ -1117,14 +1118,15 @@ function vOzet() {
     <div class="big num ${total < 0 ? 'exp' : ''}">${fmt(total, D)}</div>
     ${hasDebt ? `<div class="networth tap" data-action="nav" data-tab="borclar"><span class="muted">Hesaplar <b class="num">${fmt(accTotal, D)}</b></span>${dt.lent ? `<span class="muted">Alacak <b class="num inc">+${fmt(dt.lent, D)}</b></span>` : ''}${dt.owed ? `<span class="muted">Borç <b class="num exp">−${fmt(dt.owed, D)}</b></span>` : ''}${inv ? `<span class="muted tap" data-action="tab" data-tab="yatirim">Yatırım <b class="num">${fmt(inv, D)}</b></span>` : ''}</div>` : ''}
     <div class="muted" style="font-size:12px;margin-bottom:12px">${esc(nowRateNote())}</div>
-    ${db.accounts.length ? `<div class="accs" data-reorder-box>${accParents().map(a => {
+    ${db.accounts.length ? `<div class="accs" data-reorder-box>${accParents().map((a, _, all) => {
+      const grip = all.length > 1 ? GRIP : '';
       const b = balance(a.id), kids = accChildren(a.id);
-      if (!kids.length) return `<div class="acc tap" data-action="acc-open" data-reorder="acc" data-id="${a.id}"><div class="n"><span>${esc(a.name)}</span><span class="cur">${a.currency}</span></div>
+      if (!kids.length) return `<div class="acc tap" data-action="acc-open" data-reorder="acc" data-id="${a.id}"><div class="n"><span>${esc(a.name)}</span><span class="cur">${a.currency}</span>${grip}</div>
         <div class="v num ${b < 0 ? 'exp' : ''}">${fmt(b, a.currency)}</div></div>`;
       // Grup kartı: toplam + ana hesabın kendi bakiyesi (kullanılıyorsa) + alt hesaplar
       const members = (accUsed(a.id) || Number(a.opening) ? [a] : []).concat(kids);
       const tot = [a, ...kids].reduce((s, x) => s + conv(balance(x.id), x.currency, D, r), 0);
-      return `<div class="acc group tap" data-action="acc-open" data-reorder="acc" data-id="${a.id}"><div class="n"><span>${esc(a.name)}</span><span class="cur">≈ ${D}</span></div>
+      return `<div class="acc group tap" data-action="acc-open" data-reorder="acc" data-id="${a.id}"><div class="n"><span>${esc(a.name)}</span><span class="cur">≈ ${D}</span>${grip}</div>
         <div class="v num ${tot < 0 ? 'exp' : ''}">${fmt(tot, D)}</div>
         <div class="sublines">${members.map(x => {
           const xb = balance(x.id);
@@ -1548,7 +1550,7 @@ function txInfo(t) {
       (t.fee ? `<br><small class="exp num">ücret −${fmt(t.fee, t.feeTo && b ? b.currency : cur)}</small>` : '') +
       (trGap(t) ? `<br><small class="${trGap(t) > 0 ? 'inc' : 'exp'} num">${trGap(t) > 0 ? 'kâr +' : 'fark −'}${fmt(Math.abs(trGap(t)), cur)}</small>` : '');
   } else if (isInvTx(t)) {
-    const h = { sym: invSym(t), atype: invType(t) }, buy = t.type === 'inv-buy', [, ic0, c0] = INV_TYPES[h.atype];
+    const h = { sym: invSym(t), atype: invType(t) }, buy = t.type === 'inv-buy', [, ic0, c0] = invIcon(h);
     title = `${buy ? 'Alım' : 'Satış'} · ${invName(h)}`; col = c0; ic = ic0;
     sub = `${fmtQty(+t.qty, h)} × ${fmtUsd(+t.price)}` + (a ? ' · ' + accLabel(a) : '');
     amt = a ? `<span class="num ${buy ? 'exp' : 'inc'}">${buy ? '−' : '+'}${fmt(t.amount, cur)}</span>` + (cur !== 'USD' ? `<br><small class="muted num">${fmtUsd(invUsd(t))}</small>` : '')
@@ -1596,8 +1598,9 @@ function vAcc() {
     const b = balance(a.id), n = db.tx.filter(t => txAccs(t).includes(a.id)).length;
     const kids = isChild ? [] : accChildren(a.id);
     const tot = kids.length ? [a, ...kids].reduce((s, x) => s + conv(balance(x.id), x.currency, D, r), 0) : 0;
+    const sibs = isChild ? accChildren(a.parentId) : accParents();
     return swRow(`<div class="list-row tap ${isChild ? 'child' : ''}" data-action="edit-acc" data-id="${a.id}">
-      <span class="cur">${a.currency}</span>
+      ${sibs.length > 1 ? GRIP : ''}<span class="cur">${a.currency}</span>
       <div class="m"><b>${isChild ? '↳ ' : ''}${esc(a.name)}</b><div class="muted" style="font-size:12px">${n} işlem · açılış ${fmt(Number(a.opening) || 0, a.currency)}${a.currency !== D ? ` · ≈ ${fmt(conv(b, a.currency, D, r), D)}` : ''}${kids.length ? ` · <b>grup toplamı ≈ ${fmt(tot, D)}</b>` : ''}</div></div>
       <b class="num ${b < 0 ? 'exp' : ''}">${fmt(b, a.currency)}</b><span class="chev-r">›</span>
     </div>`, swBtn('Sil', 'del-acc', a.id));
@@ -1606,7 +1609,7 @@ function vAcc() {
   <div class="card" style="padding:4px 12px" data-reorder-box>
     ${db.accounts.length ? accParents().map(p => `<div data-reorder="acc" data-id="${p.id}">${row(p, false)}<div data-reorder-box>${accChildren(p.id).map(k => `<div data-reorder="acc" data-id="${k.id}">${row(k, true)}</div>`).join('')}</div></div>`).join('') : '<div class="empty">Hesap yok. Sağ üstteki <b>+</b> ile ekleyin.</div>'}
   </div>
-  <p class="muted" style="font-size:12px;margin:0 4px">Düzenlemek için hesaba dokunun, silmek için sola kaydırın. Sırasını değiştirmek için basılı tutup sürükleyin.</p>`;
+  <p class="muted" style="font-size:12px;margin:0 4px">Düzenlemek için hesaba dokunun, silmek için sola kaydırın. Sırasını değiştirmek için ≡ işaretinden tutup sürükleyin.</p>`;
 }
 /* Hesap ekleme / düzenleme paneli. ui.editAcc: düzenlenen hesap, ui.newAccParent: altına eklenecek ana hesap. */
 function accSheet() {
@@ -2756,7 +2759,11 @@ const isInvTx = t => t.type === 'inv-buy' || t.type === 'inv-sell';
 const invType = t => INV_TYPES[t.atype] ? t.atype : 'other';
 const invSym = t => invType(t) === 'gold' ? `${KARATS.includes(+t.karat) ? +t.karat : 24}` : String(t.asset || '').trim().toUpperCase();
 const invKey = t => invType(t) + ':' + invSym(t);
-const invName = h => h.atype === 'gold' ? `Altın ${h.sym} ayar` : h.sym;
+/* Altına bağlı kripto tokenler: 1 token = 1 ons (31.1 gr) altın. Fiyatı yalnız OKX'ten gelir. */
+const GOLD_TOKENS = { XAUT: 'Tether Gold', PAXG: 'PAX Gold' };
+const isGoldTok = h => h.atype === 'crypto' && !!GOLD_TOKENS[h.sym];
+const invIcon = h => INV_TYPES[isGoldTok(h) ? 'gold' : h.atype];
+const invName = h => h.atype === 'gold' ? `Altın ${h.sym} ayar` : isGoldTok(h) ? `${h.sym} (${GOLD_TOKENS[h.sym]})` : h.sym;
 const invUnit = h => h.atype === 'gold' ? 'gr' : h.atype === 'crypto' ? h.sym : 'adet';
 const fmtQty = (q, h) => `${q.toLocaleString('en-US', { maximumFractionDigits: q >= 100 ? 2 : 8 })} ${invUnit(h)}`;
 const fmtUsd = v => `${v < 0 ? '−' : ''}$${fmtNum(Math.abs(v), Math.abs(v) >= 1000 ? 0 : 2)}`;
@@ -2812,7 +2819,7 @@ function invPrice(h) {
 const invLoad = { busy: false, at: 0, err: '' };
 async function loadInvPx(force) {
   const syms = [...new Set(db.tx.filter(t => isInvTx(t) && invType(t) === 'crypto').map(invSym))].filter(s => s && !STABLE.includes(s));
-  if (!syms.length || invLoad.busy || (!force && Date.now() - invLoad.at < 60e3)) return;
+  if (!syms.length || invLoad.busy || (!force && Date.now() - invLoad.at < 15e3)) return;
   invLoad.busy = true; invLoad.err = '';
   const one = async s => {
     try {
@@ -2820,6 +2827,7 @@ async function loadInvPx(force) {
       const j = await r.json(), v = +(j.data && j.data[0] && j.data[0].last);
       if (v > 0) return v;
     } catch (e) {}
+    if (GOLD_TOKENS[s]) throw new Error(s + ' OKX\'ten alınamadı');
     const r = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${encodeURIComponent(s)}USDT`, { cache: 'no-store' });
     const j = await r.json(), v = +j.price;
     if (v > 0) return v;
@@ -2832,6 +2840,8 @@ async function loadInvPx(force) {
   invLoad.busy = false; invLoad.at = Date.now(); invPxSave();
   if (ui.tab === 'yatirim' || ui.tab === 'ozet') render();
 }
+/* Yatırım ekranı açıkken kripto fiyatları 15 saniyede bir yenilenir (altın ons fiyatı zaten canlı akar). */
+setInterval(() => { if (ui.tab === 'yatirim' && !document.hidden) loadInvPx(); }, 15e3);
 /* Net servete giren yatırım değeri (seçili para biriminde). */
 const invTotal = D => conv(portfolio().reduce((s, h) => s + h.value, 0), 'USD', D, nowRate());
 
@@ -2842,10 +2852,10 @@ function vInv() {
   const un = val - cost, real = ps.reduce((s, h) => s + h.real, 0), D = disp();
   const pl = (v, base) => `<span class="num ${v < 0 ? 'exp' : v > 0 ? 'inc' : 'muted'}">${v > 0 ? '+' : ''}${fmtUsd(v)}${base ? ` (${v > 0 ? '+' : ''}${fmtNum(v / base * 100, 1)}%)` : ''}</span>`;
   const row = h => {
-    const [, ic, col] = INV_TYPES[h.atype], u = h.value - h.cost;
+    const [, ic, col] = invIcon(h), u = h.value - h.cost;
     return `<div class="tx tap" data-action="inv-open" data-key="${esc(h.key)}">
       <div class="ic" style="background:${col}">${ic}</div>
-      <div class="m"><div class="t">${esc(invName(h))}</div><div class="s">${esc(fmtQty(h.qty, h))} · ort. ${esc(fmtUsd(h.avg))}${h.px ? ` · şimdi ${esc(fmtUsd(h.px.v))}${h.px.src === 'elle' ? ' (elle)' : ''}` : ' · fiyat yok'}</div></div>
+      <div class="m"><div class="t">${esc(invName(h))}</div><div class="s">${esc(fmtQty(h.qty, h))}${isGoldTok(h) ? ` ≈ ${fmtNum(h.qty * OZ, 2)} gr altın` : ''} · ort. ${esc(fmtUsd(h.avg))}${h.px ? ` · şimdi ${esc(fmtUsd(h.px.v))}${h.px.src === 'elle' ? ' (elle)' : ''}` : ' · fiyat yok'}</div></div>
       <div class="a"><b class="num">${fmtUsd(h.value)}</b><br><small>${h.px ? pl(u, h.cost) : '<span class="muted">maliyet</span>'}</small></div></div>`;
   };
   return mktSeg() + `<div class="card">
@@ -2863,7 +2873,7 @@ function vInv() {
   </div>
   <div class="card"><h2>Varlıklar</h2>${open.length ? open.sort((a, b) => b.value - a.value).map(row).join('') : '<div class="empty">Henüz yatırım yok. <b>+ Alış</b> ile OKX\'ten aldığın kriptoyu, altını veya hisseyi ekle.</div>'}</div>
   ${closed.length ? `<div class="card"><h2>Satılıp kapananlar</h2>${closed.map(h => `<div class="tx tap" data-action="inv-open" data-key="${esc(h.key)}">
-    <div class="ic" style="background:${INV_TYPES[h.atype][2]}">${INV_TYPES[h.atype][1]}</div>
+    <div class="ic" style="background:${invIcon(h)[2]}">${invIcon(h)[1]}</div>
     <div class="m"><div class="t">${esc(invName(h))}</div><div class="s">${h.txs.length} işlem</div></div>
     <div class="a">${pl(h.real)}</div></div>`).join('')}</div>` : ''}`;
 }
@@ -2907,7 +2917,7 @@ function invSheet(t, pre = {}) {
       <div class="seg mseg" style="grid-column:1/-1;margin:0" id="invType">${Object.entries(INV_TYPES).map(([k, [l]]) => `<button type="button" data-action="inv-type" data-v="${k}" class="${atype === k ? 'on' : ''}">${l}</button>`).join('')}</div>
       <label style="grid-column:1/-1" data-inv-asset class="${atype === 'gold' ? 'hide' : ''}"><span data-inv-asset-l>${atype === 'stock' ? 'Hisse (ör. AAPL)' : atype === 'crypto' ? 'Coin (ör. BTC, ETH)' : 'Varlık adı'}</span>
         <input name="asset" list="invSyms" maxlength="20" autocomplete="off" autocapitalize="characters" placeholder="BTC" value="${esc(base.asset && atype !== 'gold' ? invSym(base) : '')}">
-        <datalist id="invSyms">${syms.map(s => `<option value="${esc(s)}">`).join('')}</datalist></label>
+        <datalist id="invSyms">${[...new Set([...syms, 'XAUT', 'PAXG'])].map(s => `<option value="${esc(s)}">`).join('')}</datalist></label>
       <label style="grid-column:1/-1" data-inv-karat class="${atype === 'gold' ? '' : 'hide'}">Ayar<select name="karat">${KARATS.map(k => `<option value="${k}"${(+base.karat || 24) === k ? ' selected' : ''}>${k} ayar</option>`).join('')}</select></label>
       <label>Miktar <span class="muted" data-inv-unit>${atype === 'gold' ? '(gram)' : atype === 'stock' ? '(adet)' : ''}</span><input name="qty" inputmode="decimal" autocomplete="off" placeholder="0" value="${t ? esc(String(t.qty)) : ''}" required></label>
       <label>Birim fiyat ($)<input name="price" inputmode="decimal" autocomplete="off" placeholder="0" value="${t ? esc(String(+(+t.price).toFixed(8))) : ''}"></label>
@@ -2955,7 +2965,8 @@ function syncInv(changed) {
   $('#invHint').textContent = !(usd > 0) ? 'Miktarı ve birim fiyatı (ya da toplamı) yazın.'
     : `${side === 'buy' ? 'Ödenen' : 'Eline geçen'}: ${fmtUsd(usd)}${fee ? ` (komisyon ${fmtUsd(fee)} ${side === 'buy' ? 'dahil' : 'düşüldü'})` : ''}` +
       (h && h.qty ? ` · elinde ${fmtQty(h.qty, h)}, ort. ${fmtUsd(h.avg)}` : '') +
-      (side === 'sell' && h && h.avg && q ? ` · bu satışın kâr/zararı ≈ ${fmtUsd(usd - h.avg * q)}` : '');
+      (side === 'sell' && h && h.avg && q ? ` · bu satışın kâr/zararı ≈ ${fmtUsd(usd - h.avg * q)}` : '') +
+      (atype === 'crypto' && GOLD_TOKENS[sym] ? ` · 1 ${sym} = 1 ons (${fmtNum(OZ, 2)} gr) altın${q ? `, ${fmtNum(q * OZ, 2)} gr` : ''}` : '');
 }
 function invSubmit(form, v) {
   const side = v.side === 'sell' ? 'sell' : 'buy', atype = INV_TYPES[v.atype] ? v.atype : 'crypto';
@@ -3089,28 +3100,23 @@ function endDrag(e) {
 }
 document.addEventListener('pointerup', endDrag);
 document.addEventListener('pointercancel', endDrag);
-/* Basılı tutup sürükleyerek sıralama (Özet'teki hesap kartları, Hesaplar listesi). Yarım saniyeye yakın basılı tutunca kart
-   kalkar; parmakla birlikte gider, başka bir kartın üstüne gelince yer değiştirir. Bırakınca yeni sıra db.accounts'a yazılır.
-   Basılı tutmadan kaydırırsan sayfa normal kayar. */
+/* Sürükleme tutamağı (≡): yalnız buradan tutulunca kart sürüklenir; kartın kendisi dokunma ve kaydırmada normal davranır. */
+const GRIP = '<span class="grip" data-action="grip" aria-label="Sırala">≡</span>';
+/* Sürükleyerek sıralama (Özet'teki hesap kartları, Hesaplar listesi): ≡ tutamağından tutunca kart kalkar, parmakla birlikte
+   gider, başka bir kartın üstüne gelince yer değiştirir. Bırakınca yeni sıra db.accounts'a yazılır. */
 let ro = null;
 const roSibs = el => [...el.parentElement.children].filter(x => x.dataset.reorder === el.dataset.reorder);
 document.addEventListener('pointerdown', e => {
   if (e.button > 0 || ro) return;
-  const el = e.target.closest('[data-reorder]');
-  if (!el || e.target.closest('.sw-acts, button:not(.tx), input, select') || roSibs(el).length < 2) return;
-  const r = { el, id: e.pointerId, x0: e.clientX, y0: e.clientY, on: false };
-  r.timer = setTimeout(() => {
-    if (ro !== r) return;
-    r.on = true; drag = null; closeSw();
-    r.l0 = el.offsetLeft; r.t0 = el.offsetTop;
-    el.classList.add('lifting'); document.body.classList.add('reordering');
-    try { navigator.vibrate && navigator.vibrate(10); } catch (_) {}
-  }, 420);
-  ro = r;
+  const g = e.target.closest('[data-action="grip"]'), el = g && g.closest('[data-reorder]');
+  if (!el || roSibs(el).length < 2) return;
+  e.preventDefault();
+  drag = null; closeSw();
+  ro = { el, id: e.pointerId, x0: e.clientX, y0: e.clientY, on: true, l0: el.offsetLeft, t0: el.offsetTop };
+  el.classList.add('lifting'); document.body.classList.add('reordering');
 });
 document.addEventListener('pointermove', e => {
   if (!ro || e.pointerId !== ro.id) return;
-  if (!ro.on) { if (Math.hypot(e.clientX - ro.x0, e.clientY - ro.y0) > 8) { clearTimeout(ro.timer); ro = null; } return; }
   const el = ro.el;
   // Parmağın altındaki kardeş kartla yer değiştir.
   const over = roSibs(el).find(s => { if (s === el) return false; const b = s.getBoundingClientRect(); return e.clientX >= b.left && e.clientX <= b.right && e.clientY >= b.top && e.clientY <= b.bottom; });
@@ -3119,8 +3125,7 @@ document.addEventListener('pointermove', e => {
 });
 function endReorder(e) {
   if (!ro || e.pointerId !== ro.id) return;
-  const r = ro; ro = null; clearTimeout(r.timer);
-  if (!r.on) return;
+  const r = ro; ro = null;
   swallow = true;
   r.el.classList.remove('lifting'); r.el.style.transform = ''; document.body.classList.remove('reordering');
   // Yeni sıra: listedeki hesaplar db.accounts'ta kendi yerleri arasında yeniden dizilir (öteki hesapların yeri değişmez).
@@ -3134,7 +3139,7 @@ document.addEventListener('pointerup', endReorder);
 document.addEventListener('pointercancel', endReorder);
 // Kart kaldırılmışken sayfa kaymasın (iPhone'da kaydırmayı yalnız touchmove durdurabilir).
 document.addEventListener('touchmove', e => { if (ro && ro.on) e.preventDefault(); }, { passive: false });
-document.addEventListener('contextmenu', e => { if (e.target.closest('[data-reorder]')) e.preventDefault(); });
+document.addEventListener('contextmenu', e => { if (e.target.closest('.grip')) e.preventDefault(); });
 // Kaydırma/çekme hareketinin sonundaki tıklama bir butona basılmış sayılmasın.
 document.addEventListener('click', e => { if (swallow) { swallow = false; e.stopPropagation(); e.preventDefault(); } }, true);
 
