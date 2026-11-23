@@ -237,6 +237,11 @@ th{font-size:12px;color:var(--muted);font-weight:600;border-top:0}
 .gold-px{border-radius:8px;padding:0 4px;margin:0 -4px}
 .gold-px.up{color:#16a34a;animation:flashUp 1s}
 .gold-px.down{color:#dc2626;animation:flashDown 1s}
+/* OKX kartı: toplamın rengi ve oku son değişimi gösterir; değişen tutar bir kez yanıp söner. */
+.gold-px.okx-up{color:#16a34a}.gold-px.okx-down{color:#dc2626}
+.gold-px.fl-up{animation:okxUp 1.2s}.gold-px.fl-down{animation:okxDown 1.2s}
+@keyframes okxUp{from{background:rgba(34,197,94,.35);color:#16a34a}}
+@keyframes okxDown{from{background:rgba(239,68,68,.35);color:#dc2626}}
 details{border-top:1px solid var(--line);margin-top:8px}
 details summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:14px;padding:10px 0}
 /* ---------- uygulama kabuğu: üst çubuk, büyük başlık, alt menü ---------- */
@@ -2876,147 +2881,238 @@ async function okxGet(path, cred) {
   if (!j || String(j.code) !== '0') throw new Error((j && OKX_ERR[j.code]) || (j && j.msg ? `${j.msg} (${j.code})` : 'OKX cevap vermedi'));
   return j.data || [];
 }
-/* OKX verisi üç parça: trade (Trading hesabı, ccy → {eq, eqUsd, upl}), fund (Funding hesabı, ccy → bakiye) ve px (fiyat,
-   ccy → {last, open}). Her değişiklikte kart bu üçünden yeniden hesaplanır. */
-okx.trade = {}; okx.fund = {}; okx.px = {};
-/* Anahtar değişince ya da bağlantı kaldırılınca: veriler ve canlı bağlantılar sıfırlanır. */
+/* OKX verisi: trade (Trading hesabı, ccy → {eq, eqUsd, upl}), fund (Funding hesabı, ccy → bakiye), earn (Simple Earn esnek
+   birikim, ccy → miktar), px (fiyat, ccy → {last, open}) ve inst (fiyatın alındığı çift, ör. BTC-USDT). Her değişiklikte kart
+   bunlardan yeniden hesaplanır; OKX'te yeni bir coin belirince (alım, yatırma, Convert…) kendiliğinden listeye girer. */
+Object.assign(okx, { trade: {}, fund: {}, earn: {}, px: {}, inst: {}, noPx: {}, gen: 0, again: '', dir: '', fl: '', okAt: 0, hold: 0, earnNext: 0,
+  privOn: false, privOk: false, privAt: 0 });
+const okxCcys = () => [...new Set([...Object.keys(okx.trade), ...Object.keys(okx.fund), ...Object.keys(okx.earn)])].filter(Boolean);
+const okxQty = c => (okx.trade[c] ? okx.trade[c].eq : 0) + (okx.fund[c] || 0) + (okx.earn[c] || 0);
+const okxTot = () => okx.snap ? okx.snap.items.reduce((a, x) => a + x.usd, 0) : 0;
+/* Anahtar değişince ya da bağlantı kaldırılınca: veriler ve canlı bağlantılar sıfırlanır (yoldaki eski sorgu sonucu da atılır). */
 function okxReset() {
-  okx.snap = null; okx.err = ''; okx.privErr = ''; okx.privOn = false; okx.loaded = false; okx.dir = ''; okx.trade = {}; okx.fund = {}; okx.px = {};
-  for (const w of [okxWs, okxPriv]) if (w) { w.onclose = null; w.close(); }
-  okxWs = okxPriv = null; clearInterval(okxPing); clearInterval(okxPrivPing);
+  Object.assign(okx, { snap: null, err: '', loaded: false, busy: false, again: '', dir: '', fl: '', okAt: 0, hold: 0, earnNext: 0,
+    privOn: false, privOk: false, privAt: 0, trade: {}, fund: {}, earn: {}, px: {}, inst: {}, noPx: {}, gen: okx.gen + 1 });
+  ['pub', 'priv', 'biz'].forEach(okxShut);
 }
 function okxBuild() {
-  const prev = okx.snap ? okx.snap.items.reduce((a, x) => a + x.usd, 0) : 0, old = {};
+  const prev = okxTot(), old = {};
   (okx.snap ? okx.snap.items : []).forEach(x => { old[x.ccy] = x; });
-  const ccys = [...new Set([...Object.keys(okx.trade), ...Object.keys(okx.fund)])];
-  const items = ccys.map(ccy => {
-    const t = okx.trade[ccy] || {}, qty = (t.eq || 0) + (okx.fund[ccy] || 0);
-    const p = STABLE.includes(ccy) ? { last: 1, open: 1 } : okx.px[ccy];
-    const usd = p && p.last ? qty * p.last : t.eqUsd || 0, o = old[ccy];
+  const items = okxCcys().map(ccy => {
+    const t = okx.trade[ccy] || {}, qty = okxQty(ccy);
+    // Fiyat: sabit coin 1 $; yoksa OKX'teki çiftten; o da yoksa OKX'in Trading'de verdiği dolar değerinden.
+    const p = STABLE.includes(ccy) ? { last: 1, open: 1 } : okx.px[ccy] || (t.eq > 0 && t.eqUsd > 0 ? { last: t.eqUsd / t.eq } : null);
+    const usd = p ? qty * p.last : 0, o = old[ccy];
     return { ccy, qty, usd, last: p ? p.last : 0, ch: p && p.open ? (p.last - p.open) / p.open : 0, upl: t.upl || 0,
-      dir: o && Math.abs(usd - o.usd) >= 0.005 ? (usd > o.usd ? 'up' : 'down') : '' };
+      fl: o && Math.abs(usd - o.usd) >= 0.005 ? (usd > o.usd ? 'up' : 'down') : '' };
   }).filter(x => x.usd >= 0.01).sort((a, b) => b.usd - a.usd);
   const tot = items.reduce((a, x) => a + x.usd, 0);
-  // Altın fiyatı gibi: toplam artınca yeşil, düşünce kırmızı yanıp söner.
-  if (prev && Math.abs(tot - prev) >= 0.005) okx.dir = tot > prev ? 'up' : 'down';
+  // Altın fiyatı gibi: toplam artınca yeşil, düşünce kırmızı yanıp söner; renk ve ok bir sonraki değişime kadar kalır.
+  okx.fl = prev && Math.abs(tot - prev) >= 0.005 ? (tot > prev ? 'up' : 'down') : '';
+  if (okx.fl) okx.dir = okx.fl;
   okx.snap = { at: Date.now(), items };
   try { localStorage.setItem(OKX_SNAP, JSON.stringify(okx.snap)); } catch (e) {}
 }
-const okxTradeSet = details => { for (const d of details || []) okx.trade[d.ccy] = { eq: +d.eq || 0, eqUsd: +d.eqUsd || 0, upl: d.spotUpl !== '' && isFinite(+d.spotUpl) ? +d.spotUpl : 0 }; };
-async function okxPrices() {
-  const need = [...new Set([...Object.keys(okx.trade), ...Object.keys(okx.fund)])].filter(c => c && !STABLE.includes(c) && !okx.px[c]);
-  const tick = await Promise.all(need.map(c => okxGet(`/api/v5/market/ticker?instId=${encodeURIComponent(c)}-USDT`).then(d => d[0]).catch(() => null)));
-  tick.forEach((t, i) => { if (t && +t.last > 0) okx.px[need[i]] = { last: +t.last, open: +t.open24h }; });
+/* Trading satırlarını işler; bir coinin miktarı değiştiyse true döner. */
+function okxTradeSet(details) {
+  let moved = false;
+  for (const d of details || []) {
+    const eq = +d.eq || 0, o = okx.trade[d.ccy];
+    if (o ? Math.abs(o.eq - eq) > 1e-12 : eq) moved = true;
+    okx.trade[d.ccy] = { eq, eqUsd: +d.eqUsd || 0, upl: d.spotUpl !== '' && isFinite(+d.spotUpl) ? +d.spotUpl : 0 };
+  }
+  return moved;
 }
-/* Tam yükleme (Trading + Funding + fiyatlar). fundOnly: yalnız Funding bakiyesi (OKX'te Funding için canlı akış yok). */
-async function loadOkx(force, fundOnly) {
+/* Fiyatı bilinmeyen coinlerin fiyatı (all: hepsinin — canlı fiyat akışı kopukken). Önce -USDT, yoksa -USDC çifti denenir. */
+async function okxPrices(all) {
+  const now = Date.now();
+  const need = okxCcys().filter(c => !STABLE.includes(c) && okxQty(c) > 0 && (all || !okx.px[c]) && !(okx.noPx[c] > now));
+  await Promise.all(need.map(async c => {
+    for (const q of okx.inst[c] ? [okx.inst[c]] : [c + '-USDT', c + '-USDC']) {
+      const t = await okxGet(`/api/v5/market/ticker?instId=${encodeURIComponent(q)}`).then(d => d[0]).catch(() => null);
+      if (t && +t.last > 0) { okx.px[c] = { last: +t.last, open: +t.open24h }; okx.inst[c] = q; return; }
+    }
+    if (!okx.px[c]) okx.noPx[c] = now + 60e3; // OKX'te çifti yok; dakikada bir yeniden denenir
+  }));
+}
+/* Bakiyeleri sorar. mode: 'full' Trading + Funding + Earn hemen; 'auto' aynısı ama son 4 sn'de sorulduysa atlanır;
+   'fast' saniyelik tur: canlı kanalı olmayan Funding ve Earn (Trading akışı kopuksa o da). */
+async function loadOkx(mode = 'auto') {
   const cred = okxCred();
-  if (!cred || okx.busy || (!force && !fundOnly && Date.now() - okx.at < 4e3)) return;
-  if (!okx.loaded) fundOnly = false;
+  if (!cred) return;
+  if (okx.busy) { if (mode === 'full') okx.again = 'full'; return; }
+  if (mode === 'auto' && okx.loaded && Date.now() - okx.at < 4e3) return;
+  const gen = okx.gen, t0 = Date.now(), trade = mode !== 'fast' || !okx.privOn || !okx.loaded;
   okx.busy = true;
   try {
-    if (fundOnly) {
-      const fund = await okxGet('/api/v5/asset/balances', cred);
-      okx.fund = {}; for (const b of fund) okx.fund[b.ccy] = +b.bal || 0;
-    } else {
-      const [acct, fund] = await Promise.all([okxGet('/api/v5/account/balance', cred), okxGet('/api/v5/asset/balances', cred)]);
-      okx.trade = {}; okxTradeSet(acct[0] && acct[0].details);
-      okx.fund = {}; for (const b of fund) okx.fund[b.ccy] = +b.bal || 0;
-    }
-    await okxPrices();
-    okx.loaded = true; okxBuild(); okx.err = ''; okxAutoLink();
-  } catch (e) { okx.err = e.message || 'bağlanılamadı'; }
+    const [acct, fund, sav] = await Promise.all([
+      trade ? okxGet('/api/v5/account/balance', cred) : null,
+      okxGet('/api/v5/asset/balances', cred),
+      // Earn'e erişilemezse (bölge/yetki) son bilinen değer kalır, dakikada bir yeniden denenir.
+      t0 >= okx.earnNext ? okxGet('/api/v5/finance/savings/balance', cred).catch(() => { okx.earnNext = Date.now() + 60e3; return null; }) : null]);
+    if (gen !== okx.gen) return;
+    // Bu sırada canlı akıştan daha yeni Trading verisi geldiyse o korunur.
+    if (acct && !(okx.privAt > t0)) { okx.trade = {}; okxTradeSet(acct[0] && acct[0].details); }
+    okx.fund = {}; for (const b of fund) okx.fund[b.ccy] = +b.bal || 0;
+    if (sav) { okx.earn = {}; for (const b of sav) okx.earn[b.ccy] = +b.amt || 0; }
+    await okxPrices(!okxLive());
+    if (gen !== okx.gen) return;
+    if (okx.hold && t0 >= okx.hold) okx.hold = 0; // Trading'deki değişiklikten sonra Funding de soruldu: ikisi birlikte çizilir
+    okx.loaded = true; okx.err = ''; okx.okAt = Date.now();
+    if (!okx.hold) okxBuild();
+    okxAutoLink();
+  } catch (e) {
+    if (gen !== okx.gen) return;
+    okx.err = e.message || 'bağlanılamadı';
+  }
   okx.busy = false; okx.at = Date.now();
-  // Yalnız OKX kartı yenilenir; sayfa baştan çizilmez, kaydırma yeri bozulmaz.
-  const el = $('#okxCard');
-  if (el) el.outerHTML = okxCard(); else if (ui.tab === 'yatirim') render();
-  // Özet açıksa bağlı OKX hesabının bakiyesi değiştiyse ekran tazelenir.
-  const tot = okx.snap ? okx.snap.items.reduce((a, x) => a + x.usd, 0) : 0;
-  if (ui.tab === 'ozet' && okxAccId() && Math.abs(tot - (okx.shownTot || 0)) >= 0.01) render();
-  okxStream();
+  okxPaint(); okxOzet(); okxStream();
+  if (okx.again) { const m = okx.again; okx.again = ''; loadOkx(m); }
 }
-/* Canlı akış (Yatırım ekranı açıkken):
-   - Fiyat: OKX'in herkese açık WebSocket'i (tickers) — her fiyat değişimi anında.
-   - Trading hesabı bakiyesi: OKX'in özel WebSocket'i (giriş yapılır, "account" kanalı) — bakiye değiştiği anda.
-   - Funding hesabı bakiyesi: OKX'te canlı kanalı yok; 2 saniyede bir sorulur.
+/* Canlı akıştan bir olay gelince (Trading değişti, para yatırıldı/çekildi) bakiyeler hemen yeniden sorulur.
+   OKX'in istek sınırına takılmamak için iki olay sorgusu arası en az 0,4 sn. */
+var okxKickAt = 0, okxKickT = 0;
+function okxKick() {
+  const wait = okxKickAt + 400 - Date.now();
+  clearTimeout(okxKickT);
+  if (wait > 0) { okxKickT = setTimeout(okxKick, wait); return; }
+  okxKickAt = Date.now(); loadOkx('full');
+}
+/* Canlı akış (Yatırım ekranı ya da bağlı hesap varken Özet açıkken), üç WebSocket:
+   - public: fiyatlar (tickers) — her fiyat değişimi anında.
+   - private: Trading bakiyesi ("account" kanalı) — değiştiği anda.
+   - business: para yatırma/çekme olayları (deposit-info, withdrawal-info).
+   OKX, Funding ve Earn bakiyesi için canlı kanal vermiyor: Trading'de bir değişiklik (alım-satım, transfer) ya da yatırma/çekme
+   olayı gelince ikisi hemen yeniden sorulur, bunun dışındaki değişiklikler (Convert, Earn, P2P…) için her saniye sorulur.
    Ekrandan çıkınca ya da uygulama arka plana geçince bağlantılar kapanır. */
-var okxWs = null, okxWsSet = "", okxFrame = 0, okxPing = 0, okxPriv = null, okxPrivPing = 0;
-const okxLive = () => okxWs && okxWs.readyState === 1;
-function okxDraw() { if (okxFrame) return; okxFrame = requestAnimationFrame(() => { okxFrame = 0; if (okx.loaded) okxBuild(); const el = $('#okxCard'); if (el) el.outerHTML = okxCard(); }); }
-const okxWant = () => ui.tab === 'yatirim' && !document.hidden && !!okxCred() && typeof WebSocket !== 'undefined';
-function okxStream() {
-  const want = okxWant();
-  // Fiyat akışı
-  const ccys = [...new Set([...Object.keys(okx.trade), ...Object.keys(okx.fund)])].filter(c => c && !STABLE.includes(c)).sort(), set = ccys.join(',');
-  if (okxWs && (!want || set !== okxWsSet)) { const w = okxWs; okxWs = null; w.onclose = null; w.close(); clearInterval(okxPing); }
-  if (want && ccys.length && !okxWs) {
-    const sock = okxWs = new WebSocket('wss://ws.okx.com:8443/ws/v5/public');
-    okxWsSet = set;
-    sock.onopen = () => {
-      sock.send(JSON.stringify({ op: 'subscribe', args: ccys.map(c => ({ channel: 'tickers', instId: c + '-USDT' })) }));
-      clearInterval(okxPing); okxPing = setInterval(() => { if (sock.readyState === 1) sock.send('ping'); }, 20e3);
-    };
-    sock.onmessage = e => {
-      if (e.data === 'pong') return;
-      let m; try { m = JSON.parse(e.data); } catch (_) { return; }
-      for (const t of m.data || []) {
-        const ccy = String(t.instId || '').replace(/-USDT$/, ''), last = +t.last, open = +t.open24h;
-        if (!(last > 0) || (okx.px[ccy] && okx.px[ccy].last === last)) continue;
-        okx.px[ccy] = { last, open: open > 0 ? open : (okx.px[ccy] || {}).open };
-        okxDraw();
-      }
-    };
-    sock.onclose = () => { if (okxWs === sock) { okxWs = null; clearInterval(okxPing); } };
-  }
-  // Trading bakiyesi akışı (özel kanal)
-  if (okxPriv && !want) { const w = okxPriv; okxPriv = null; w.onclose = null; w.close(); clearInterval(okxPrivPing); }
-  if (want && !okxPriv) {
-    const cred = okxCred(), sock = okxPriv = new WebSocket('wss://ws.okx.com:8443/ws/v5/private');
-    sock.onopen = async () => {
-      try {
-        const ts = String(Math.floor(Date.now() / 1000)), enc = new TextEncoder();
-        const k = await crypto.subtle.importKey('raw', enc.encode(cred.secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-        const sig = new Uint8Array(await crypto.subtle.sign('HMAC', k, enc.encode(ts + 'GET/users/self/verify')));
-        sock.send(JSON.stringify({ op: 'login', args: [{ apiKey: cred.key, passphrase: cred.pass, timestamp: ts, sign: btoa(String.fromCharCode(...sig)) }] }));
-      } catch (_) { sock.close(); }
-      clearInterval(okxPrivPing); okxPrivPing = setInterval(() => { if (sock.readyState === 1) sock.send('ping'); }, 20e3);
-    };
-    sock.onmessage = e => {
-      if (e.data === 'pong') return;
-      let m; try { m = JSON.parse(e.data); } catch (_) { return; }
-      if (m.event === 'login') {
-        if (String(m.code) === '0') sock.send(JSON.stringify({ op: 'subscribe', args: [{ channel: 'account' }] }));
-        else { okx.privErr = (OKX_ERR[m.code] || m.msg || 'giriş yapılamadı'); okxDraw(); }
-        return;
-      }
-      if (m.arg && m.arg.channel === 'account' && m.data && m.data[0]) {
-        okxTradeSet(m.data[0].details); okx.privOn = true;
-        const fresh = Object.keys(okx.trade).some(c => !STABLE.includes(c) && !okx.px[c]);
-        if (fresh) okxPrices().then(okxDraw); else okxDraw();
-      }
-    };
-    sock.onclose = () => { if (okxPriv === sock) { okxPriv = null; okx.privOn = false; clearInterval(okxPrivPing); } };
-  }
+var okxSock = { pub: null, priv: null, biz: null }, okxTry = { pub: 0, priv: 0, biz: 0 }, okxFrame = 0;
+const okxLive = () => !!okxSock.pub && okxSock.pub.readyState === 1;
+const okxWant = () => (ui.tab === 'yatirim' || (ui.tab === 'ozet' && !!okxAccId())) && !document.hidden && !!okxCred();
+function okxOpen(name, path, onOpen, onMsg) {
+  okxTry[name] = Date.now();
+  const sock = okxSock[name] = new WebSocket('wss://ws.okx.com:8443/ws/v5/' + path);
+  // OKX 30 sn sessiz kalan bağlantıyı kapatır; 20 sn'de bir ping.
+  sock.onopen = () => { sock.okxPing = setInterval(() => { if (sock.readyState === 1) sock.send('ping'); }, 20e3); onOpen(sock); };
+  sock.onmessage = e => { if (e.data === 'pong') return; let m; try { m = JSON.parse(e.data); } catch (_) { return; } onMsg(m, sock); };
+  sock.onclose = () => { clearInterval(sock.okxPing); if (okxSock[name] === sock) { okxSock[name] = null; if (name === 'priv') okx.privOn = false; } };
 }
-setInterval(() => { if (okxWant()) { loadOkx(false, true); okxStream(); } }, 2e3);
-setInterval(() => { if (okxWant()) loadOkx(true); }, 60e3);
-document.addEventListener('visibilitychange', () => { okxStream(); if (okxWant()) loadOkx(true); });
+function okxShut(name) {
+  const s = okxSock[name]; if (!s) return;
+  okxSock[name] = null; clearInterval(s.okxPing); s.onclose = null; s.close();
+  if (name === 'priv') okx.privOn = false;
+}
+async function okxLogin(sock) {
+  const cred = okxCred(); if (!cred) return sock.close();
+  const ts = String(Math.floor(Date.now() / 1000)), enc = new TextEncoder();
+  const k = await crypto.subtle.importKey('raw', enc.encode(cred.secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', k, enc.encode(ts + 'GET/users/self/verify')));
+  if (sock.readyState === 1) sock.send(JSON.stringify({ op: 'login', args: [{ apiKey: cred.key, passphrase: cred.pass, timestamp: ts, sign: btoa(String.fromCharCode(...sig)) }] }));
+}
+/* Fiyat akışına, fiyatı bulunan her coinin çifti eklenir; yeni coin gelince aynı bağlantıya abone olunur. */
+function okxSub(sock) {
+  const add = [...new Set(okxCcys().map(c => okx.inst[c]).filter(Boolean))].filter(i => !sock.okxSubs.has(i));
+  if (!add.length) return;
+  add.forEach(i => sock.okxSubs.add(i));
+  sock.send(JSON.stringify({ op: 'subscribe', args: add.map(instId => ({ channel: 'tickers', instId })) }));
+}
+function okxStream() {
+  const want = okxWant() && typeof WebSocket !== 'undefined', now = Date.now();
+  if (!want) { ['pub', 'priv', 'biz'].forEach(okxShut); return; }
+  const can = n => !okxSock[n] && now - okxTry[n] > 3e3; // kopan bağlantı en çok 3 sn'de bir yeniden açılır
+  // Fiyatlar
+  const pub = okxSock.pub;
+  if (pub && pub.readyState === 1 && pub.okxSubs) okxSub(pub);
+  else if (!pub && Object.keys(okx.inst).length && can('pub')) okxOpen('pub', 'public', sock => { sock.okxSubs = new Set(); okxSub(sock); }, m => {
+    for (const t of m.data || []) {
+      const ccy = String(t.instId || '').split('-')[0], last = +t.last, open = +t.open24h;
+      if (okx.inst[ccy] !== t.instId || !(last > 0) || (okx.px[ccy] && okx.px[ccy].last === last)) continue;
+      okx.px[ccy] = { last, open: open > 0 ? open : (okx.px[ccy] || {}).open };
+      okxDraw();
+    }
+  });
+  // Trading bakiyesi
+  if (can('priv')) okxOpen('priv', 'private', sock => okxLogin(sock).catch(() => sock.close()), (m, sock) => {
+    if (m.event === 'login' && String(m.code) === '0') {
+      okx.privOk = true; sock.send(JSON.stringify({ op: 'subscribe', args: [{ channel: 'account' }] }));
+      setTimeout(okxStream, 1100); // yatırma/çekme bağlantısı bir saniye sonra (OKX saniyede en çok 3 bağlantı açtırır)
+    } else if (m.event === 'error' && !okx.privOk) { okxTry.priv = Date.now() + 60e3; sock.close(); } // giriş olmadı: dakikada bir dene
+    else if (m.arg && m.arg.channel === 'account' && m.data && m.data[0]) {
+      const moved = okxTradeSet(m.data[0].details);
+      okx.privOn = true; okx.privAt = Date.now();
+      // Miktar değiştiyse (alım-satım, Funding↔Trading transferi) Funding de hemen sorulur ve ikisi birlikte çizilir ki
+      // transfer edilen para bir anlığına iki kez sayılmasın (en geç 1,5 sn beklenir).
+      if (moved && okx.loaded) { okx.hold = okx.hold || Date.now(); okxKick(); setTimeout(okxDraw, 1600); }
+      else okxDraw();
+    }
+  });
+  // Para yatırma/çekme olayları → Funding hemen yeniden sorulur
+  if (okx.privOk && can('biz')) okxOpen('biz', 'business', sock => okxLogin(sock).catch(() => sock.close()), (m, sock) => {
+    if (m.event === 'login' && String(m.code) === '0') sock.send(JSON.stringify({ op: 'subscribe', args: [{ channel: 'deposit-info' }, { channel: 'withdrawal-info' }] }));
+    else if (m.event === 'error' && /login/i.test(m.msg || '')) { okxTry.biz = Date.now() + 60e3; sock.close(); }
+    else if (m.arg && /^(deposit|withdrawal)-info$/.test(m.arg.channel) && m.data && m.data.length) okxKick();
+  });
+}
+function okxDraw() {
+  if (okxFrame) return;
+  okxFrame = requestAnimationFrame(() => {
+    okxFrame = 0;
+    if (okx.hold && Date.now() - okx.hold < 1500) return; // Funding'in de gelmesi bekleniyor
+    okx.hold = 0;
+    if (okx.loaded) okxBuild();
+    okxPaint(); okxOzet();
+  });
+}
+setInterval(() => { okxStream(); if (okxWant()) loadOkx('fast'); }, 1e3);
+setInterval(() => { if (okxWant()) loadOkx('full'); }, 30e3);
+document.addEventListener('visibilitychange', () => { okxStream(); if (okxWant()) loadOkx('full'); });
+/* Özet açıkken bağlı OKX hesabının bakiyesi değişince ekran tazelenir (en çok saniyede bir; parmak ekrandayken beklenir). */
+var okxOzetAt = 0, okxOzetT = 0;
+function okxOzet() {
+  clearTimeout(okxOzetT);
+  if (ui.tab !== 'ozet' || !okxAccId() || Math.abs(okxTot() - (okx.shownTot || 0)) < 0.01) return;
+  const wait = okxOzetAt + 1e3 - Date.now();
+  if (wait > 0 || drag || openSw || document.body.classList.contains('reordering')) { okxOzetT = setTimeout(okxOzet, Math.max(wait, 300)); return; }
+  okxOzetAt = Date.now(); render();
+}
+/* Kartta yalnız değişen kısım yeniden çizilir: değişmeyen tutar boşuna yanıp sönmez, saat her saniye ilerler. */
+var okxShown = '', okxFootShown = '';
+function okxPaint() {
+  const el = $('#okxCard'), b = $('#okxBody'), f = $('#okxFoot');
+  if (!el) return;
+  if (!b || !f || !okxCred()) { el.outerHTML = okxCard(); return; }
+  const key = okxBody(false), foot = okxFoot();
+  if (key !== okxShown) { okxShown = key; b.innerHTML = okxBody(true); }
+  if (foot !== okxFootShown) { okxFootShown = foot; f.innerHTML = foot; }
+}
+/* fl: son değişimde artan/azalan tutar yanıp sönsün (yalnız o an çizilirken). */
+function okxBody(fl) {
+  const s = okx.snap;
+  if (!s) return '';
+  const D = disp(), tot = okxTot(), flash = d => fl && d ? ' fl-' + d : '';
+  const ch = s.items.reduce((a, x) => a + (x.ch ? x.usd - x.usd / (1 + x.ch) : 0), 0);
+  const pct = v => `${v > 0 ? '+' : ''}${fmtNum(v * 100, 2)}%`;
+  return `<div class="big num gold-px${okx.dir ? ' okx-' + okx.dir : ''}${flash(okx.fl)}" style="margin-top:6px">${fmtUsd(tot)} ${okx.dir === 'up' ? '▲' : okx.dir === 'down' ? '▼' : ''}</div>
+    ${D === 'IQD' && tot ? `<div class="muted num" style="font-size:13px">≈ ${fmt(conv(tot, 'USD', 'IQD', nowRate()), 'IQD')}</div>` : ''}
+    <div class="muted" style="font-size:13px;margin-top:4px">Son 24 saat <b class="num ${ch < 0 ? 'exp' : ch > 0 ? 'inc' : ''}">${ch > 0 ? '+' : ''}${fmtUsd(ch)}</b></div>
+    <div style="margin-top:8px">${s.items.map(x => { const h = { sym: x.ccy, atype: 'crypto' }, [, ic, col] = invIcon(h);
+      return `<div class="tx"><div class="ic" style="background:${col}">${ic}</div>
+      <div class="m"><div class="t">${esc(invName(h))}</div><div class="s">${esc(fmtQty(x.qty, h))}${isGoldTok(h) ? ` ≈ ${fmtNum(x.qty * OZ, 2)} gr altın` : ''}${x.last && !STABLE.includes(x.ccy) ? ` · ${esc(fmtUsd(x.last))}` : ''}</div></div>
+      <div class="a"><b class="num gold-px${flash(x.fl)}">${fmtUsd(x.usd)}</b>${x.ch ? `<br><small class="num ${x.ch < 0 ? 'exp' : 'inc'}">${x.ch < 0 ? '▼' : '▲'} ${pct(x.ch)} (24s)</small>` : ''}${x.upl ? `<br><small class="num ${x.upl < 0 ? 'exp' : 'inc'}">kâr/zarar ${x.upl > 0 ? '+' : ''}${fmtUsd(x.upl)}</small>` : ''}</div></div>`; }).join('') || '<div class="empty">OKX hesabında varlık yok.</div>'}</div>`;
+}
+function okxFoot() {
+  const t = d => new Date(d).toLocaleTimeString('tr-TR');
+  if (okx.okAt && Date.now() - okx.okAt < 5e3) return `<span style="color:#16a34a">●</span> Canlı · ${t(okx.okAt)}`;
+  if (okx.err) return `<span class="exp">OKX'e bağlanılamadı: ${esc(okx.err)}</span>`;
+  return okx.snap ? `Son güncelleme ${t(okx.snap.at)}` : okx.busy ? 'OKX\'ten alınıyor…' : '';
+}
 function okxCard() {
   if (!okxCred()) return `<div class="card" id="okxCard"><div class="krow"><b style="flex:1;font-size:16px">OKX hesabı</b><button class="btn primary sm" data-action="okx-connect">OKX'i bağla</button></div>
     <p class="muted" style="font-size:12px;margin:6px 0 0">OKX'teki varlıkların (XAUT, PAXG, USDT…) miktarı, değeri ve 24 saatlik değişimi kendiliğinden gelir.</p></div>`;
-  const s = okx.snap, D = disp(), tot = s ? s.items.reduce((a, x) => a + x.usd, 0) : 0;
-  const ch = s ? s.items.reduce((a, x) => a + (x.ch ? x.usd - x.usd / (1 + x.ch) : 0), 0) : 0;
-  const pct = v => `${v > 0 ? '+' : ''}${fmtNum(v * 100, 2)}%`;
+  okxShown = okxBody(false); okxFootShown = okxFoot();
   return `<div class="card" id="okxCard">
     <div class="krow"><b style="flex:1;font-size:16px">OKX hesabı</b><button class="btn sm" data-action="okx-connect">Ayar</button></div>
-    ${s ? `<div class="big num gold-px ${okx.dir || ''}" style="margin-top:6px">${fmtUsd(tot)} ${okx.dir === 'up' ? '▲' : okx.dir === 'down' ? '▼' : ''}</div>
-      ${D === 'IQD' && tot ? `<div class="muted num" style="font-size:13px">≈ ${fmt(conv(tot, 'USD', 'IQD', nowRate()), 'IQD')}</div>` : ''}
-      <div class="muted" style="font-size:13px;margin-top:4px">Son 24 saat <b class="num ${ch < 0 ? 'exp' : ch > 0 ? 'inc' : ''}">${ch > 0 ? '+' : ''}${fmtUsd(ch)}</b></div>
-      <div style="margin-top:8px">${s.items.map(x => { const h = { sym: x.ccy, atype: 'crypto' }, [, ic, col] = invIcon(h);
-        return `<div class="tx"><div class="ic" style="background:${col}">${ic}</div>
-        <div class="m"><div class="t">${esc(invName(h))}</div><div class="s">${esc(fmtQty(x.qty, h))}${isGoldTok(h) ? ` ≈ ${fmtNum(x.qty * OZ, 2)} gr altın` : ''}${x.last && !STABLE.includes(x.ccy) ? ` · ${esc(fmtUsd(x.last))}` : ''}</div></div>
-        <div class="a"><b class="num gold-px ${x.dir || ''}">${fmtUsd(x.usd)}</b>${x.ch ? `<br><small class="num ${x.ch < 0 ? 'exp' : 'inc'}">${x.ch < 0 ? '▼' : '▲'} ${pct(x.ch)} (24s)</small>` : ''}${x.upl ? `<br><small class="num ${x.upl < 0 ? 'exp' : 'inc'}">kâr/zarar ${x.upl > 0 ? '+' : ''}${fmtUsd(x.upl)}</small>` : ''}</div></div>`; }).join('') || '<div class="empty">OKX hesabında varlık yok.</div>'}</div>` : ''}
-    <p class="muted" style="font-size:12px;margin:8px 0 0">${okx.err ? `<span class="exp">OKX'e bağlanılamadı: ${esc(okx.err)}</span>` : s && Date.now() - s.at < 30e3 ? `<span style="color:#16a34a">●</span> Canlı${okxLive() ? ' · fiyatlar anında' : ''}${okx.privOn ? ' · Trading bakiyesi anında' : ''} · Funding 2 sn · ${new Date(s.at).toLocaleTimeString('tr-TR')}${okx.privErr ? ` <span class="exp">(canlı bakiye: ${esc(okx.privErr)})</span>` : ''}` : s ? `Son güncelleme ${new Date(s.at).toLocaleTimeString('tr-TR')}` : okx.busy ? 'OKX\'ten alınıyor…' : ''}</p>
+    <div id="okxBody">${okxShown}</div>
+    <p class="muted" id="okxFoot" style="font-size:12px;margin:8px 0 0">${okxFootShown}</p>
   </div>`;
 }
 function okxSheet() {
@@ -3042,7 +3138,7 @@ function okxSubmit(v) {
   if (c.key === key && c.secret === secret && c.pass === pass) { toast('Kaydedildi'); return true; }
   try { localStorage.setItem(OKX_CRED, JSON.stringify({ key, secret, pass })); } catch (e) { toast('Kaydedilemedi.'); return false; }
   okxReset();
-  loadOkx(true).then(() => toast(okx.err ? 'OKX: ' + okx.err : 'OKX bağlandı'));
+  loadOkx('full').then(() => toast(okx.err ? 'OKX: ' + okx.err : 'OKX bağlandı'));
   return true;
 }
 /* Özet'teki hangi hesap OKX'e bağlı (db.settings.okxAcc). Bağlıysa o hesabın bakiyesi OKX'teki toplamdır. */
@@ -3472,7 +3568,7 @@ function render() {
   if (ui.tab === 'altin') { renderGold(); loadGold(); if (db.settings.bridge) loadLive(); }
   if (ui.tab === 'yatirim') loadOkx();
   if (okxCred()) okxAutoLink();
-  if (ui.tab === 'ozet' && okxAccId()) { okx.shownTot = okx.snap ? okx.snap.items.reduce((a, x) => a + x.usd, 0) : 0; loadOkx(); }
+  if (ui.tab === 'ozet' && okxAccId()) { okx.shownTot = okxTot(); loadOkx(); }
   okxStream();
   if (ui.tab === 'yatirim' || (ui.tab === 'ozet' && db.tx.some(isInvTx))) {
     loadInvPx();
@@ -3772,7 +3868,7 @@ document.addEventListener('click', e => {
     case 'inv-tx': { const t = db.tx.find(x => x.id === d.id); if (t) { closeSw(); invSheet(t); } break; }
     case 'inv-refresh': loadInvPx(true); render(); break;
     case 'okx-connect': okxSheet(); break;
-    case 'okx-refresh': loadOkx(true); render(); break;
+    case 'okx-refresh': loadOkx('full'); render(); break;
     case 'okx-off':
       ask({ msg: 'OKX bağlantısı kaldırılsın mı? Anahtar bu telefondan silinir.', ok: 'Kaldır' }).then(ok => {
         if (!ok) return;
