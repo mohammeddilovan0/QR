@@ -2765,8 +2765,9 @@ const isGoldTok = h => h.atype === 'crypto' && !!GOLD_TOKENS[h.sym];
 const invIcon = h => INV_TYPES[isGoldTok(h) ? 'gold' : h.atype];
 const invName = h => h.atype === 'gold' ? `Altın ${h.sym} ayar` : isGoldTok(h) ? `${h.sym} (${GOLD_TOKENS[h.sym]})` : h.sym;
 const invUnit = h => h.atype === 'gold' ? 'gr' : h.atype === 'crypto' ? h.sym : 'adet';
-const fmtQty = (q, h) => `${q.toLocaleString('en-US', { maximumFractionDigits: q >= 100 ? 2 : 8 })} ${invUnit(h)}`;
-const fmtUsd = v => `${v < 0 ? '−' : ''}$${fmtNum(Math.abs(v), Math.abs(v) >= 1000 ? 0 : 2)}`;
+const fmtQty = (q, h) => `${q.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${invUnit(h)}`;
+/* Dolar tutarı kuruşuyla; OKX gibi yuvarlamadan keser (2,673.568 → $2,673.56). */
+const fmtUsd = v => `${v < 0 ? '−' : ''}$${fmtNum(Math.floor(Math.abs(v) * 100 + 1e-6) / 100, 2)}`;
 /* Yatırım alanlarında hem "0,005" (virgül ondalık) hem "95,000" (virgül binlik) yazılabilsin. */
 function invNum(v) {
   let s = String(v ?? '').trim().replace(/\s/g, '');
@@ -2873,13 +2874,16 @@ async function okxGet(path, cred) {
 }
 async function loadOkx(force) {
   const cred = okxCred();
-  if (!cred || okx.busy || (!force && Date.now() - okx.at < 30e3)) return;
+  if (!cred || okx.busy || (!force && Date.now() - okx.at < 4e3)) return;
   okx.busy = true; okx.err = '';
+  const prev = okx.snap ? okx.snap.items.reduce((a, x) => a + x.usd, 0) : 0;
   try {
-    const [acct, fund, tick] = await Promise.all([okxGet('/api/v5/account/balance', cred), okxGet('/api/v5/asset/balances', cred),
-      okxGet('/api/v5/market/tickers?instType=SPOT').catch(() => [])]);
+    const [acct, fund] = await Promise.all([okxGet('/api/v5/account/balance', cred), okxGet('/api/v5/asset/balances', cred)]);
+    const ccys = [...new Set([...((acct[0] && acct[0].details) || []).map(d => d.ccy), ...fund.map(b => b.ccy)])].filter(c => c && !STABLE.includes(c));
+    // Yalnız eldeki coinlerin fiyatı (XAUT-USDT, PAXG-USDT…) çekilir.
+    const tick = await Promise.all(ccys.map(c => okxGet(`/api/v5/market/ticker?instId=${encodeURIComponent(c)}-USDT`).then(d => d[0]).catch(() => null)));
     const px = {};
-    for (const t of tick) if (/-USDT$/.test(t.instId)) px[t.instId.slice(0, -5)] = { last: +t.last, open: +t.open24h };
+    tick.forEach((t, i) => { if (t && +t.last > 0) px[ccys[i]] = { last: +t.last, open: +t.open24h }; });
     const by = {};
     const add = (ccy, qty, usd) => { if (!(qty > 0)) return; const x = by[ccy] || (by[ccy] = { ccy, qty: 0, usd: 0, upl: 0 }); x.qty += qty; x.usdOkx = (x.usdOkx || 0) + (usd || 0); };
     for (const d of (acct[0] && acct[0].details) || []) {
@@ -2893,28 +2897,69 @@ async function loadOkx(force) {
       return { ccy: x.ccy, qty: x.qty, usd, last: p ? p.last : 0, ch: p && p.open ? (p.last - p.open) / p.open : 0, upl: x.upl };
     }).filter(x => x.usd >= 0.01).sort((a, b) => b.usd - a.usd);
     okx.snap = { at: Date.now(), items };
+    const tot = items.reduce((a, x) => a + x.usd, 0);
+    // Altın fiyatı gibi: toplam artınca yeşil, düşünce kırmızı yanıp söner.
+    okx.dir = prev && Math.abs(tot - prev) >= 0.005 ? (tot > prev ? 'up' : 'down') : '';
     try { localStorage.setItem(OKX_SNAP, JSON.stringify(okx.snap)); } catch (e) {}
-  } catch (e) { okx.err = e.message || 'bağlanılamadı'; }
+  } catch (e) { okx.err = e.message || 'bağlanılamadı'; okx.dir = ''; }
   okx.busy = false; okx.at = Date.now();
-  if (ui.tab === 'yatirim') render();
+  // Yalnız OKX kartı yenilenir; sayfa baştan çizilmez, kaydırma yeri bozulmaz.
+  const el = $('#okxCard');
+  if (el) el.outerHTML = okxCard(); else if (ui.tab === 'yatirim') render();
+  okxStream();
 }
-setInterval(() => { if (ui.tab === 'yatirim' && !document.hidden) loadOkx(); }, 30e3);
+/* Canlı fiyat: OKX'in herkese açık WebSocket'inden (tickers kanalı) her fiyat değişimi anında gelir; kart hemen güncellenir,
+   artan yeşil, düşen kırmızı yanıp söner (altın fiyatı gibi). Miktarlar (bakiye) REST ile 5 saniyede bir yenilenir. */
+var okxWs = null, okxWsSet = "", okxFrame = 0, okxPing = 0;
+const okxLive = () => okxWs && okxWs.readyState === 1;
+function okxDraw() { if (okxFrame) return; okxFrame = requestAnimationFrame(() => { okxFrame = 0; const el = $('#okxCard'); if (el) el.outerHTML = okxCard(); }); }
+function okxStream() {
+  const ccys = okx.snap ? okx.snap.items.map(x => x.ccy).filter(c => !STABLE.includes(c)) : [];
+  const want = ui.tab === 'yatirim' && !document.hidden && okxCred() && ccys.length && typeof WebSocket !== 'undefined', set = ccys.sort().join(',');
+  if (okxWs && (!want || set !== okxWsSet)) { const w = okxWs; okxWs = null; w.onclose = null; w.close(); clearInterval(okxPing); }
+  if (!want || okxWs) return;
+  const sock = okxWs = new WebSocket('wss://ws.okx.com:8443/ws/v5/public');
+  okxWsSet = set;
+  sock.onopen = () => {
+    sock.send(JSON.stringify({ op: 'subscribe', args: ccys.map(c => ({ channel: 'tickers', instId: c + '-USDT' })) }));
+    clearInterval(okxPing); okxPing = setInterval(() => { if (sock.readyState === 1) sock.send('ping'); }, 25e3);
+  };
+  sock.onmessage = e => {
+    if (e.data === 'pong' || !okx.snap) return;
+    let m; try { m = JSON.parse(e.data); } catch (_) { return; }
+    for (const t of m.data || []) {
+      const ccy = String(t.instId || '').replace(/-USDT$/, ''), last = +t.last, open = +t.open24h;
+      const x = okx.snap.items.find(i => i.ccy === ccy);
+      if (!x || !(last > 0) || last === x.last) continue;
+      const before = okx.snap.items.reduce((a, i) => a + i.usd, 0);
+      x.dir = x.last ? (last > x.last ? 'up' : 'down') : '';
+      x.last = last; x.usd = x.qty * last; if (open > 0) x.ch = (last - open) / open;
+      const after = okx.snap.items.reduce((a, i) => a + i.usd, 0);
+      okx.dir = after > before ? 'up' : after < before ? 'down' : okx.dir;
+      okx.snap.at = Date.now();
+      okxDraw();
+    }
+  };
+  sock.onclose = () => { if (okxWs === sock) { okxWs = null; clearInterval(okxPing); } };
+}
+setInterval(() => { if (ui.tab === 'yatirim' && !document.hidden) loadOkx(); okxStream(); }, 5e3);
+document.addEventListener('visibilitychange', () => okxStream());
 function okxCard() {
-  if (!okxCred()) return `<div class="card"><div class="krow"><b style="flex:1;font-size:16px">OKX hesabı</b><button class="btn primary sm" data-action="okx-connect">OKX'i bağla</button></div>
+  if (!okxCred()) return `<div class="card" id="okxCard"><div class="krow"><b style="flex:1;font-size:16px">OKX hesabı</b><button class="btn primary sm" data-action="okx-connect">OKX'i bağla</button></div>
     <p class="muted" style="font-size:12px;margin:6px 0 0">OKX'teki varlıkların (XAUT, PAXG, USDT…) miktarı, değeri ve 24 saatlik değişimi kendiliğinden gelir.</p></div>`;
   const s = okx.snap, D = disp(), tot = s ? s.items.reduce((a, x) => a + x.usd, 0) : 0;
   const ch = s ? s.items.reduce((a, x) => a + (x.ch ? x.usd - x.usd / (1 + x.ch) : 0), 0) : 0;
   const pct = v => `${v > 0 ? '+' : ''}${fmtNum(v * 100, 2)}%`;
-  return `<div class="card">
+  return `<div class="card" id="okxCard">
     <div class="krow"><b style="flex:1;font-size:16px">OKX hesabı</b><button class="btn sm" data-action="okx-refresh">↻</button><button class="btn sm" data-action="okx-connect">Ayar</button></div>
-    ${s ? `<div class="big num" style="margin-top:6px">${fmtUsd(tot)}</div>
+    ${s ? `<div class="big num gold-px ${okx.dir || ''}" style="margin-top:6px">${fmtUsd(tot)} ${okx.dir === 'up' ? '▲' : okx.dir === 'down' ? '▼' : ''}</div>
       ${D === 'IQD' && tot ? `<div class="muted num" style="font-size:13px">≈ ${fmt(conv(tot, 'USD', 'IQD', nowRate()), 'IQD')}</div>` : ''}
       <div class="muted" style="font-size:13px;margin-top:4px">Son 24 saat <b class="num ${ch < 0 ? 'exp' : ch > 0 ? 'inc' : ''}">${ch > 0 ? '+' : ''}${fmtUsd(ch)}</b></div>
       <div style="margin-top:8px">${s.items.map(x => { const h = { sym: x.ccy, atype: 'crypto' }, [, ic, col] = invIcon(h);
         return `<div class="tx"><div class="ic" style="background:${col}">${ic}</div>
         <div class="m"><div class="t">${esc(invName(h))}</div><div class="s">${esc(fmtQty(x.qty, h))}${isGoldTok(h) ? ` ≈ ${fmtNum(x.qty * OZ, 2)} gr altın` : ''}${x.last && !STABLE.includes(x.ccy) ? ` · ${esc(fmtUsd(x.last))}` : ''}</div></div>
-        <div class="a"><b class="num">${fmtUsd(x.usd)}</b>${x.ch ? `<br><small class="num ${x.ch < 0 ? 'exp' : 'inc'}">${x.ch < 0 ? '▼' : '▲'} ${pct(x.ch)} (24s)</small>` : ''}${x.upl ? `<br><small class="num ${x.upl < 0 ? 'exp' : 'inc'}">kâr/zarar ${x.upl > 0 ? '+' : ''}${fmtUsd(x.upl)}</small>` : ''}</div></div>`; }).join('') || '<div class="empty">OKX hesabında varlık yok.</div>'}</div>` : ''}
-    <p class="muted" style="font-size:12px;margin:8px 0 0">${okx.busy ? 'OKX\'ten alınıyor…' : okx.err ? `<span class="exp">OKX'e bağlanılamadı: ${esc(okx.err)}</span>` : s ? `Son güncelleme ${new Date(s.at).toLocaleTimeString('tr-TR')} · ekran açıkken 30 saniyede bir yenilenir` : ''}</p>
+        <div class="a"><b class="num gold-px ${x.dir || ''}">${fmtUsd(x.usd)}</b>${x.ch ? `<br><small class="num ${x.ch < 0 ? 'exp' : 'inc'}">${x.ch < 0 ? '▼' : '▲'} ${pct(x.ch)} (24s)</small>` : ''}${x.upl ? `<br><small class="num ${x.upl < 0 ? 'exp' : 'inc'}">kâr/zarar ${x.upl > 0 ? '+' : ''}${fmtUsd(x.upl)}</small>` : ''}</div></div>`; }).join('') || '<div class="empty">OKX hesabında varlık yok.</div>'}</div>` : ''}
+    <p class="muted" style="font-size:12px;margin:8px 0 0">${okx.err ? `<span class="exp">OKX'e bağlanılamadı: ${esc(okx.err)}</span>` : s && Date.now() - s.at < 30e3 ? `<span style="color:#16a34a">●</span> ${okxLive() ? 'Canlı (her fiyat değişiminde)' : 'Canlı'} · ${new Date(s.at).toLocaleTimeString('tr-TR')}` : s ? `Son güncelleme ${new Date(s.at).toLocaleTimeString('tr-TR')}` : okx.busy ? 'OKX\'ten alınıyor…' : ''}</p>
   </div>`;
 }
 function okxSheet() {
@@ -3347,6 +3392,7 @@ function render() {
   }
   if (ui.tab === 'altin') { renderGold(); loadGold(); if (db.settings.bridge) loadLive(); }
   if (ui.tab === 'yatirim') loadOkx();
+  okxStream();
   if (ui.tab === 'yatirim' || (ui.tab === 'ozet' && db.tx.some(isInvTx))) {
     loadInvPx();
     if (!gold.usd && db.tx.some(t => isInvTx(t) && invType(t) === 'gold')) loadGold();
