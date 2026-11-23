@@ -3038,6 +3038,8 @@ const invTotal = D => conv(portfolio().reduce((s, h) => s + h.value, 0), 'USD', 
 
 function vInv() {
   ui.lastMkt = 'yatirim';
+  // OKX bağlıyken varlıklar oradan otomatik gelir; elle girilmiş alış/satış yoksa elle yatırım bölümü gösterilmez.
+  if (okxCred() && !db.tx.some(isInvTx)) return mktSeg() + okxCard();
   const ps = portfolio(), open = ps.filter(h => h.qty > 0), closed = ps.filter(h => !h.qty && h.real);
   const val = open.reduce((s, h) => s + h.value, 0), cost = open.reduce((s, h) => s + h.cost, 0);
   const un = val - cost, real = ps.reduce((s, h) => s + h.real, 0), D = disp();
