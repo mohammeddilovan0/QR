@@ -2765,8 +2765,9 @@ const isGoldTok = h => h.atype === 'crypto' && !!GOLD_TOKENS[h.sym];
 const invIcon = h => INV_TYPES[isGoldTok(h) ? 'gold' : h.atype];
 const invName = h => h.atype === 'gold' ? `Altın ${h.sym} ayar` : isGoldTok(h) ? `${h.sym} (${GOLD_TOKENS[h.sym]})` : h.sym;
 const invUnit = h => h.atype === 'gold' ? 'gr' : h.atype === 'crypto' ? h.sym : 'adet';
-const fmtQty = (q, h) => `${q.toLocaleString('en-US', { maximumFractionDigits: q >= 100 ? 2 : 8 })} ${invUnit(h)}`;
-const fmtUsd = v => `${v < 0 ? '−' : ''}$${fmtNum(Math.abs(v), Math.abs(v) >= 1000 ? 0 : 2)}`;
+const fmtQty = (q, h) => `${q.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${invUnit(h)}`;
+/* Dolar tutarı kuruşuyla; OKX gibi yuvarlamadan keser (2,673.568 → $2,673.56). */
+const fmtUsd = v => `${v < 0 ? '−' : ''}$${fmtNum(Math.floor(Math.abs(v) * 100 + 1e-6) / 100, 2)}`;
 /* Yatırım alanlarında hem "0,005" (virgül ondalık) hem "95,000" (virgül binlik) yazılabilsin. */
 function invNum(v) {
   let s = String(v ?? '').trim().replace(/\s/g, '');
