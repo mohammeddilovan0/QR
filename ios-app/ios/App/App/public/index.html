@@ -3001,7 +3001,7 @@ function okxCard() {
   const ch = s ? s.items.reduce((a, x) => a + (x.ch ? x.usd - x.usd / (1 + x.ch) : 0), 0) : 0;
   const pct = v => `${v > 0 ? '+' : ''}${fmtNum(v * 100, 2)}%`;
   return `<div class="card" id="okxCard">
-    <div class="krow"><b style="flex:1;font-size:16px">OKX hesabı</b><button class="btn sm" data-action="okx-refresh">↻</button><button class="btn sm" data-action="okx-connect">Ayar</button></div>
+    <div class="krow"><b style="flex:1;font-size:16px">OKX hesabı</b><button class="btn sm" data-action="okx-connect">Ayar</button></div>
     ${s ? `<div class="big num gold-px ${okx.dir || ''}" style="margin-top:6px">${fmtUsd(tot)} ${okx.dir === 'up' ? '▲' : okx.dir === 'down' ? '▼' : ''}</div>
       ${D === 'IQD' && tot ? `<div class="muted num" style="font-size:13px">≈ ${fmt(conv(tot, 'USD', 'IQD', nowRate()), 'IQD')}</div>` : ''}
       <div class="muted" style="font-size:13px;margin-top:4px">Son 24 saat <b class="num ${ch < 0 ? 'exp' : ch > 0 ? 'inc' : ''}">${ch > 0 ? '+' : ''}${fmtUsd(ch)}</b></div>
