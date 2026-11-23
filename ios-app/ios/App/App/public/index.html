@@ -2842,6 +2842,102 @@ async function loadInvPx(force) {
 }
 /* Yatırım ekranı açıkken kripto fiyatları 15 saniyede bir yenilenir (altın ons fiyatı zaten canlı akar). */
 setInterval(() => { if (ui.tab === 'yatirim' && !document.hidden) loadInvPx(); }, 15e3);
+/* ---------- OKX hesabı (salt okunur API anahtarıyla) ----------
+   Kullanıcı OKX'te yalnız "Okuma" (Read) yetkili bir API anahtarı açar; anahtar, gizli anahtar ve parola yalnız bu cihazda
+   (localStorage) durur, yedeğe girmez. Trading ve Funding hesaplarındaki bakiyeler çekilir, fiyat ve 24 saatlik değişim
+   OKX'in spot fiyatlarından hesaplanır. iPhone uygulamasında istek yerel HTTP ile gider (tarayıcı CORS engeline takılmaz). */
+const OKX_CRED = KEY + '-okx', OKX_SNAP = KEY + '-okxsnap';
+const okxCred = () => { try { const c = JSON.parse(localStorage.getItem(OKX_CRED)); return c && c.key && c.secret && c.pass ? c : null; } catch (e) { return null; } };
+const okx = { busy: false, at: 0, err: '', snap: (() => { try { return JSON.parse(localStorage.getItem(OKX_SNAP)); } catch (e) { return null; } })() };
+const OKX_ERR = { '50102': 'Telefonun saati yanlış; Ayarlar → Genel → Tarih ve Saat → Otomatik olarak ayarla', '50105': 'Parola (passphrase) yanlış',
+  '50111': 'API anahtarı geçersiz', '50113': 'Gizli anahtar (Secret Key) yanlış', '50110': 'IP adresi izinli değil — anahtarı IP sınırı olmadan oluşturun' };
+async function okxGet(path, cred) {
+  const headers = {};
+  if (cred) {
+    if (!(window.crypto && crypto.subtle)) throw new Error('Bu cihazda imzalama desteklenmiyor');
+    const ts = new Date().toISOString(), enc = new TextEncoder();
+    const k = await crypto.subtle.importKey('raw', enc.encode(cred.secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const sig = new Uint8Array(await crypto.subtle.sign('HMAC', k, enc.encode(ts + 'GET' + path)));
+    Object.assign(headers, { 'OK-ACCESS-KEY': cred.key, 'OK-ACCESS-SIGN': btoa(String.fromCharCode(...sig)), 'OK-ACCESS-TIMESTAMP': ts, 'OK-ACCESS-PASSPHRASE': cred.pass });
+  }
+  const url = 'https://www.okx.com' + path;
+  let j;
+  if (NATIVE) {
+    const r = await Capacitor.nativePromise('CapacitorHttp', 'request', { url, method: 'GET', headers });
+    j = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+  } else {
+    j = await (await fetch(url, { headers, cache: 'no-store' })).json();
+  }
+  if (!j || String(j.code) !== '0') throw new Error((j && OKX_ERR[j.code]) || (j && j.msg ? `${j.msg} (${j.code})` : 'OKX cevap vermedi'));
+  return j.data || [];
+}
+async function loadOkx(force) {
+  const cred = okxCred();
+  if (!cred || okx.busy || (!force && Date.now() - okx.at < 30e3)) return;
+  okx.busy = true; okx.err = '';
+  try {
+    const [acct, fund, tick] = await Promise.all([okxGet('/api/v5/account/balance', cred), okxGet('/api/v5/asset/balances', cred),
+      okxGet('/api/v5/market/tickers?instType=SPOT').catch(() => [])]);
+    const px = {};
+    for (const t of tick) if (/-USDT$/.test(t.instId)) px[t.instId.slice(0, -5)] = { last: +t.last, open: +t.open24h };
+    const by = {};
+    const add = (ccy, qty, usd) => { if (!(qty > 0)) return; const x = by[ccy] || (by[ccy] = { ccy, qty: 0, usd: 0, upl: 0 }); x.qty += qty; x.usdOkx = (x.usdOkx || 0) + (usd || 0); };
+    for (const d of (acct[0] && acct[0].details) || []) {
+      add(d.ccy, +d.eq, +d.eqUsd);
+      if (d.spotUpl !== '' && isFinite(+d.spotUpl)) { by[d.ccy] && (by[d.ccy].upl += +d.spotUpl); }
+    }
+    for (const b of fund) add(b.ccy, +b.bal, 0);
+    const items = Object.values(by).map(x => {
+      const p = STABLE.includes(x.ccy) ? { last: 1, open: 1 } : px[x.ccy];
+      const usd = p && p.last ? x.qty * p.last : x.usdOkx || 0;
+      return { ccy: x.ccy, qty: x.qty, usd, last: p ? p.last : 0, ch: p && p.open ? (p.last - p.open) / p.open : 0, upl: x.upl };
+    }).filter(x => x.usd >= 0.01).sort((a, b) => b.usd - a.usd);
+    okx.snap = { at: Date.now(), items };
+    try { localStorage.setItem(OKX_SNAP, JSON.stringify(okx.snap)); } catch (e) {}
+  } catch (e) { okx.err = e.message || 'bağlanılamadı'; }
+  okx.busy = false; okx.at = Date.now();
+  if (ui.tab === 'yatirim') render();
+}
+setInterval(() => { if (ui.tab === 'yatirim' && !document.hidden) loadOkx(); }, 30e3);
+function okxCard() {
+  if (!okxCred()) return `<div class="card"><div class="krow"><b style="flex:1;font-size:16px">OKX hesabı</b><button class="btn primary sm" data-action="okx-connect">OKX'i bağla</button></div>
+    <p class="muted" style="font-size:12px;margin:6px 0 0">OKX'teki varlıkların (XAUT, PAXG, USDT…) miktarı, değeri ve 24 saatlik değişimi kendiliğinden gelir.</p></div>`;
+  const s = okx.snap, D = disp(), tot = s ? s.items.reduce((a, x) => a + x.usd, 0) : 0;
+  const ch = s ? s.items.reduce((a, x) => a + (x.ch ? x.usd - x.usd / (1 + x.ch) : 0), 0) : 0;
+  const pct = v => `${v > 0 ? '+' : ''}${fmtNum(v * 100, 2)}%`;
+  return `<div class="card">
+    <div class="krow"><b style="flex:1;font-size:16px">OKX hesabı</b><button class="btn sm" data-action="okx-refresh">↻</button><button class="btn sm" data-action="okx-connect">Ayar</button></div>
+    ${s ? `<div class="big num" style="margin-top:6px">${fmtUsd(tot)}</div>
+      ${D === 'IQD' && tot ? `<div class="muted num" style="font-size:13px">≈ ${fmt(conv(tot, 'USD', 'IQD', nowRate()), 'IQD')}</div>` : ''}
+      <div class="muted" style="font-size:13px;margin-top:4px">Son 24 saat <b class="num ${ch < 0 ? 'exp' : ch > 0 ? 'inc' : ''}">${ch > 0 ? '+' : ''}${fmtUsd(ch)}</b></div>
+      <div style="margin-top:8px">${s.items.map(x => { const h = { sym: x.ccy, atype: 'crypto' }, [, ic, col] = invIcon(h);
+        return `<div class="tx"><div class="ic" style="background:${col}">${ic}</div>
+        <div class="m"><div class="t">${esc(invName(h))}</div><div class="s">${esc(fmtQty(x.qty, h))}${isGoldTok(h) ? ` ≈ ${fmtNum(x.qty * OZ, 2)} gr altın` : ''}${x.last && !STABLE.includes(x.ccy) ? ` · ${esc(fmtUsd(x.last))}` : ''}</div></div>
+        <div class="a"><b class="num">${fmtUsd(x.usd)}</b>${x.ch ? `<br><small class="num ${x.ch < 0 ? 'exp' : 'inc'}">${x.ch < 0 ? '▼' : '▲'} ${pct(x.ch)} (24s)</small>` : ''}${x.upl ? `<br><small class="num ${x.upl < 0 ? 'exp' : 'inc'}">kâr/zarar ${x.upl > 0 ? '+' : ''}${fmtUsd(x.upl)}</small>` : ''}</div></div>`; }).join('') || '<div class="empty">OKX hesabında varlık yok.</div>'}</div>` : ''}
+    <p class="muted" style="font-size:12px;margin:8px 0 0">${okx.busy ? 'OKX\'ten alınıyor…' : okx.err ? `<span class="exp">OKX'e bağlanılamadı: ${esc(okx.err)}</span>` : s ? `Son güncelleme ${new Date(s.at).toLocaleTimeString('tr-TR')} · ekran açıkken 30 saniyede bir yenilenir` : ''}</p>
+  </div>`;
+}
+function okxSheet() {
+  const c = okxCred();
+  openSheet(`<form data-form="okx" class="dlg">${sheetNav('OKX bağlantısı', 'Kaydet')}
+    <div class="sheet-body">
+      <div class="fxbox" style="font-size:13px;line-height:1.5">
+        <b>OKX'te anahtar oluştur:</b> Profil → <b>API</b> → Create API key → izin olarak yalnız <b>Read (Okuma)</b>; Trade ve Withdraw kapalı. IP alanını boş bırak.
+        Okuma anahtarıyla alım-satım yapılamaz, para çekilemez. Anahtar yalnız bu telefonda saklanır, yedeğe girmez.</div>
+      <label>API Key<input name="key" autocomplete="off" autocapitalize="off" spellcheck="false" value="${c ? esc(c.key) : ''}"></label>
+      <label>Secret Key<input name="secret" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${c ? '•••••• (değiştirmek için yazın)' : ''}"></label>
+      <label>Passphrase<input name="pass" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${c ? '•••••• (değiştirmek için yazın)' : ''}"></label>
+      ${c ? '<button type="button" class="btn danger block" data-action="okx-off">Bağlantıyı kaldır</button>' : ''}
+    </div></form>`);
+}
+function okxSubmit(v) {
+  const c = okxCred() || {}, key = (v.key || '').trim(), secret = (v.secret || '').trim() || c.secret, pass = (v.pass || '').trim() || c.pass;
+  if (!key || !secret || !pass) { toast('API Key, Secret Key ve Passphrase gerekli.'); return false; }
+  try { localStorage.setItem(OKX_CRED, JSON.stringify({ key, secret, pass })); } catch (e) { toast('Kaydedilemedi.'); return false; }
+  okx.snap = null; okx.err = '';
+  loadOkx(true).then(() => toast(okx.err ? 'OKX: ' + okx.err : 'OKX bağlandı'));
+  return true;
+}
 /* Net servete giren yatırım değeri (seçili para biriminde). */
 const invTotal = D => conv(portfolio().reduce((s, h) => s + h.value, 0), 'USD', D, nowRate());
 
@@ -2858,7 +2954,7 @@ function vInv() {
       <div class="m"><div class="t">${esc(invName(h))}</div><div class="s">${esc(fmtQty(h.qty, h))}${isGoldTok(h) ? ` ≈ ${fmtNum(h.qty * OZ, 2)} gr altın` : ''} · ort. ${esc(fmtUsd(h.avg))}${h.px ? ` · şimdi ${esc(fmtUsd(h.px.v))}${h.px.src === 'elle' ? ' (elle)' : ''}` : ' · fiyat yok'}</div></div>
       <div class="a"><b class="num">${fmtUsd(h.value)}</b><br><small>${h.px ? pl(u, h.cost) : '<span class="muted">maliyet</span>'}</small></div></div>`;
   };
-  return mktSeg() + `<div class="card">
+  return mktSeg() + okxCard() + `<div class="card">
     <div class="muted" style="font-size:13px">Yatırımlarım (şu anki değer)</div>
     <div class="big num">${fmtUsd(val)}</div>
     ${D === 'IQD' && val ? `<div class="muted num" style="font-size:13px">≈ ${fmt(conv(val, 'USD', 'IQD', nowRate()), 'IQD')}</div>` : ''}
@@ -3250,6 +3346,7 @@ function render() {
     if (db.settings.bridge) { renderLive(); loadLive(); } else { renderMkt(); loadMkt(); }
   }
   if (ui.tab === 'altin') { renderGold(); loadGold(); if (db.settings.bridge) loadLive(); }
+  if (ui.tab === 'yatirim') loadOkx();
   if (ui.tab === 'yatirim' || (ui.tab === 'ozet' && db.tx.some(isInvTx))) {
     loadInvPx();
     if (!gold.usd && db.tx.some(t => isInvTx(t) && invType(t) === 'gold')) loadGold();
@@ -3547,6 +3644,15 @@ document.addEventListener('click', e => {
     case 'inv-open': invDetail(d.key); break;
     case 'inv-tx': { const t = db.tx.find(x => x.id === d.id); if (t) { closeSw(); invSheet(t); } break; }
     case 'inv-refresh': loadInvPx(true); render(); break;
+    case 'okx-connect': okxSheet(); break;
+    case 'okx-refresh': loadOkx(true); render(); break;
+    case 'okx-off':
+      ask({ msg: 'OKX bağlantısı kaldırılsın mı? Anahtar bu telefondan silinir.', ok: 'Kaldır' }).then(ok => {
+        if (!ok) return;
+        try { localStorage.removeItem(OKX_CRED); localStorage.removeItem(OKX_SNAP); } catch (e) {}
+        okx.snap = null; okx.err = ''; closeSheet($('#sheet')); render(); toast('OKX bağlantısı kaldırıldı');
+      });
+      break;
     case 'inv-side': case 'inv-type': {
       const f = invForm(); if (!f) break;
       f.elements[d.action === 'inv-side' ? 'side' : 'atype'].value = d.v;
@@ -3934,6 +4040,8 @@ document.addEventListener('submit', e => {
     if (!goalSubmit(form, v)) return;
   } else if (form.dataset.form === 'inv') {
     if (!invSubmit(form, v)) return;
+  } else if (form.dataset.form === 'okx') {
+    if (!okxSubmit(v)) return;
   } else if (form.dataset.form === 'invpx') {
     const px = invNum(v.px), k = form.dataset.key;
     if (px) db.settings.invPx[k] = { v: px, at: Date.now() }; else delete db.settings.invPx[k];
