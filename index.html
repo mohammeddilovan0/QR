@@ -242,6 +242,9 @@ th{font-size:12px;color:var(--muted);font-weight:600;border-top:0}
 .gold-px.fl-up{animation:okxUp 1.2s}.gold-px.fl-down{animation:okxDown 1.2s}
 @keyframes okxUp{from{background:rgba(34,197,94,.35);color:#16a34a}}
 @keyframes okxDown{from{background:rgba(239,68,68,.35);color:#dc2626}}
+.okx-acc{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13px;font-weight:600;color:var(--muted);margin-top:10px;padding:10px 10px 0;border-top:1px solid var(--line)}
+.okx-acc:first-child{margin-top:0;padding-top:4px;border-top:0}
+.okx-acc b{color:var(--ink)}
 details{border-top:1px solid var(--line);margin-top:8px}
 details summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:14px;padding:10px 0}
 /* ---------- uygulama kabuğu: üst çubuk, büyük başlık, alt menü ---------- */
@@ -2883,7 +2886,8 @@ async function okxGet(path, cred) {
 }
 /* OKX verisi: trade (Trading hesabı, ccy → {eq, eqUsd, upl}), fund (Funding hesabı, ccy → bakiye), earn (Simple Earn esnek
    birikim, ccy → miktar), px (fiyat, ccy → {last, open}) ve inst (fiyatın alındığı çift, ör. BTC-USDT). Her değişiklikte kart
-   bunlardan yeniden hesaplanır; OKX'te yeni bir coin belirince (alım, yatırma, Convert…) kendiliğinden listeye girer. */
+   bunlardan yeniden hesaplanır: üstte genel toplam, altında her hesap kendi coinleri ve toplamıyla. OKX'te yeni bir coin
+   belirince (alım, yatırma, Convert…) kendiliğinden listeye girer. */
 Object.assign(okx, { trade: {}, fund: {}, earn: {}, px: {}, inst: {}, noPx: {}, gen: 0, again: '', dir: '', fl: '', okAt: 0, hold: 0, earnNext: 0,
   privOn: false, privOk: false, privAt: 0 });
 const okxCcys = () => [...new Set([...Object.keys(okx.trade), ...Object.keys(okx.fund), ...Object.keys(okx.earn)])].filter(Boolean);
@@ -2895,17 +2899,23 @@ function okxReset() {
     privOn: false, privOk: false, privAt: 0, trade: {}, fund: {}, earn: {}, px: {}, inst: {}, noPx: {}, gen: okx.gen + 1 });
   ['pub', 'priv', 'biz'].forEach(okxShut);
 }
+/* Kartta hesaplar bu sırayla, her biri kendi başlığı ve toplamıyla gösterilir. */
+const OKX_ACCS = [['fund', 'Funding'], ['trade', 'Trading'], ['earn', 'Earn']];
 function okxBuild() {
-  const prev = okxTot(), old = {};
-  (okx.snap ? okx.snap.items : []).forEach(x => { old[x.ccy] = x; });
-  const items = okxCcys().map(ccy => {
-    const t = okx.trade[ccy] || {}, qty = okxQty(ccy);
+  const prev = okxTot(), old = {}, items = [];
+  (okx.snap ? okx.snap.items : []).forEach(x => { old[x.acc + ':' + x.ccy] = x; });
+  for (const ccy of okxCcys()) {
+    const t = okx.trade[ccy] || {};
     // Fiyat: sabit coin 1 $; yoksa OKX'teki çiftten; o da yoksa OKX'in Trading'de verdiği dolar değerinden.
     const p = STABLE.includes(ccy) ? { last: 1, open: 1 } : okx.px[ccy] || (t.eq > 0 && t.eqUsd > 0 ? { last: t.eqUsd / t.eq } : null);
-    const usd = p ? qty * p.last : 0, o = old[ccy];
-    return { ccy, qty, usd, last: p ? p.last : 0, ch: p && p.open ? (p.last - p.open) / p.open : 0, upl: t.upl || 0,
-      fl: o && Math.abs(usd - o.usd) >= 0.005 ? (usd > o.usd ? 'up' : 'down') : '' };
-  }).filter(x => x.usd >= 0.01).sort((a, b) => b.usd - a.usd);
+    for (const [acc, qty] of [['fund', okx.fund[ccy] || 0], ['trade', t.eq || 0], ['earn', okx.earn[ccy] || 0]]) {
+      const usd = p ? qty * p.last : 0, o = old[acc + ':' + ccy];
+      if (usd < 0.01) continue;
+      items.push({ acc, ccy, qty, usd, last: p ? p.last : 0, ch: p && p.open ? (p.last - p.open) / p.open : 0, upl: acc === 'trade' ? t.upl || 0 : 0,
+        fl: o && Math.abs(usd - o.usd) >= 0.005 ? (usd > o.usd ? 'up' : 'down') : '' });
+    }
+  }
+  items.sort((a, b) => b.usd - a.usd);
   const tot = items.reduce((a, x) => a + x.usd, 0);
   // Altın fiyatı gibi: toplam artınca yeşil, düşünce kırmızı yanıp söner; renk ve ok bir sonraki değişime kadar kalır.
   okx.fl = prev && Math.abs(tot - prev) >= 0.005 ? (tot > prev ? 'up' : 'down') : '';
@@ -3091,13 +3101,15 @@ function okxBody(fl) {
   const D = disp(), tot = okxTot(), flash = d => fl && d ? ' fl-' + d : '';
   const ch = s.items.reduce((a, x) => a + (x.ch ? x.usd - x.usd / (1 + x.ch) : 0), 0);
   const pct = v => `${v > 0 ? '+' : ''}${fmtNum(v * 100, 2)}%`;
+  // Funding, Trading, Earn ayrı başlıklar altında (eski sürümden kalan, hesabı belli olmayan satırlar başlıksız).
+  const groups = [['', ''], ...OKX_ACCS].map(([k, name]) => [name, s.items.filter(x => (x.acc || '') === k)]).filter(g => g[1].length);
   return `<div class="big num gold-px${okx.dir ? ' okx-' + okx.dir : ''}${flash(okx.fl)}" style="margin-top:6px">${fmtUsd(tot)} ${okx.dir === 'up' ? '▲' : okx.dir === 'down' ? '▼' : ''}</div>
     ${D === 'IQD' && tot ? `<div class="muted num" style="font-size:13px">≈ ${fmt(conv(tot, 'USD', 'IQD', nowRate()), 'IQD')}</div>` : ''}
     <div class="muted" style="font-size:13px;margin-top:4px">Son 24 saat <b class="num ${ch < 0 ? 'exp' : ch > 0 ? 'inc' : ''}">${ch > 0 ? '+' : ''}${fmtUsd(ch)}</b></div>
-    <div style="margin-top:8px">${s.items.map(x => { const h = { sym: x.ccy, atype: 'crypto' }, [, ic, col] = invIcon(h);
+    <div style="margin-top:8px">${groups.map(([name, xs]) => (name ? `<div class="okx-acc"><span>${name}</span><b class="num">${fmtUsd(xs.reduce((a, x) => a + x.usd, 0))}</b></div>` : '') + xs.map(x => { const h = { sym: x.ccy, atype: 'crypto' }, [, ic, col] = invIcon(h);
       return `<div class="tx"><div class="ic" style="background:${col}">${ic}</div>
       <div class="m"><div class="t">${esc(invName(h))}</div><div class="s">${esc(fmtQty(x.qty, h))}${isGoldTok(h) ? ` ≈ ${fmtNum(x.qty * OZ, 2)} gr altın` : ''}${x.last && !STABLE.includes(x.ccy) ? ` · ${esc(fmtUsd(x.last))}` : ''}</div></div>
-      <div class="a"><b class="num gold-px${flash(x.fl)}">${fmtUsd(x.usd)}</b>${x.ch ? `<br><small class="num ${x.ch < 0 ? 'exp' : 'inc'}">${x.ch < 0 ? '▼' : '▲'} ${pct(x.ch)} (24s)</small>` : ''}${x.upl ? `<br><small class="num ${x.upl < 0 ? 'exp' : 'inc'}">kâr/zarar ${x.upl > 0 ? '+' : ''}${fmtUsd(x.upl)}</small>` : ''}</div></div>`; }).join('') || '<div class="empty">OKX hesabında varlık yok.</div>'}</div>`;
+      <div class="a"><b class="num gold-px${flash(x.fl)}">${fmtUsd(x.usd)}</b>${x.ch ? `<br><small class="num ${x.ch < 0 ? 'exp' : 'inc'}">${x.ch < 0 ? '▼' : '▲'} ${pct(x.ch)} (24s)</small>` : ''}${x.upl ? `<br><small class="num ${x.upl < 0 ? 'exp' : 'inc'}">kâr/zarar ${x.upl > 0 ? '+' : ''}${fmtUsd(x.upl)}</small>` : ''}</div></div>`; }).join('')).join('') || '<div class="empty">OKX hesabında varlık yok.</div>'}</div>`;
 }
 function okxFoot() {
   const t = d => new Date(d).toLocaleTimeString('tr-TR');
