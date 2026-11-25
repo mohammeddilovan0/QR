@@ -3038,19 +3038,26 @@ function okxKick() {
    olayı gelince ikisi hemen yeniden sorulur, bunun dışındaki değişiklikler (Convert, Earn, P2P…) için her saniye sorulur.
    Ekrandan çıkınca ya da uygulama arka plana geçince bağlantılar kapanır. */
 var okxSock = { pub: null, priv: null, biz: null }, okxTry = { pub: 0, priv: 0, biz: 0 }, okxFrame = 0;
-const okxLive = () => !!okxSock.pub && okxSock.pub.readyState === 1;
+/* Fiyat akışı gerçekten canlı mı: açık olması yetmez, son 9 sn'de bir şey (fiyat ya da ping cevabı) gelmiş olmalı.
+   Wi-Fi ↔ mobil veri geçişinde bağlantı sessizce ölebilir; o zaman fiyatlar REST'ten sorulur, bekçi bağlantıyı yeniler. */
+const okxLive = () => { const s = okxSock.pub; return !!s && s.readyState === 1 && Date.now() - s.okxSeen < 9e3; };
 const okxWant = () => (ui.tab === 'yatirim' || (ui.tab === 'ozet' && !!okxAccId())) && !document.hidden && !!okxCred();
 function okxOpen(name, path, onOpen, onMsg) {
   okxTry[name] = Date.now();
   const sock = okxSock[name] = new WebSocket('wss://ws.okx.com:8443/ws/v5/' + path);
-  // OKX 30 sn sessiz kalan bağlantıyı kapatır; 20 sn'de bir ping.
-  sock.onopen = () => { sock.okxPing = setInterval(() => { if (sock.readyState === 1) sock.send('ping'); }, 20e3); onOpen(sock); };
-  sock.onmessage = e => { if (e.data === 'pong') return; let m; try { m = JSON.parse(e.data); } catch (_) { return; } onMsg(m, sock); };
-  sock.onclose = () => { clearInterval(sock.okxPing); if (okxSock[name] === sock) { okxSock[name] = null; if (name === 'priv') okx.privOn = false; } };
+  sock.okxSeen = Date.now(); sock.okxPingAt = 0;
+  sock.onopen = () => { sock.okxSeen = Date.now(); onOpen(sock); };
+  sock.onmessage = e => {
+    sock.okxSeen = Date.now(); sock.okxPingAt = 0;
+    if (e.data === 'pong') return;
+    let m; try { m = JSON.parse(e.data); } catch (_) { return; }
+    onMsg(m, sock);
+  };
+  sock.onclose = () => { if (okxSock[name] === sock) { okxSock[name] = null; if (name === 'priv') okx.privOn = false; } };
 }
 function okxShut(name) {
   const s = okxSock[name]; if (!s) return;
-  okxSock[name] = null; clearInterval(s.okxPing); s.onclose = null; s.close();
+  okxSock[name] = null; s.onclose = null; s.close();
   if (name === 'priv') okx.privOn = false;
 }
 async function okxLogin(sock) {
@@ -3070,6 +3077,13 @@ function okxSub(sock) {
 function okxStream() {
   const want = okxWant() && typeof WebSocket !== 'undefined', now = Date.now();
   if (!want) { ['pub', 'priv', 'biz'].forEach(okxShut); return; }
+  // Bekçi: 5 sn sessiz kalan bağlantıya ping; 5 sn'de cevap gelmezse (ya da 10 sn'dir açılamıyorsa) bağlantı ölü sayılıp hemen yenilenir.
+  for (const n of ['pub', 'priv', 'biz']) {
+    const sk = okxSock[n]; if (!sk) continue;
+    const dead = sk.readyState === 1 ? sk.okxPingAt && now - sk.okxPingAt > 5e3 : sk.readyState === 0 && now - okxTry[n] > 10e3;
+    if (dead) { okxShut(n); okxTry[n] = 0; continue; }
+    if (sk.readyState === 1 && !sk.okxPingAt && now - sk.okxSeen > 5e3) { sk.okxPingAt = now; try { sk.send('ping'); } catch (_) {} }
+  }
   const can = n => !okxSock[n] && now - okxTry[n] > 3e3; // kopan bağlantı en çok 3 sn'de bir yeniden açılır
   // Fiyatlar
   const pub = okxSock.pub;
@@ -3118,6 +3132,7 @@ function okxDraw() {
 setInterval(() => { okxStream(); if (okxWant()) loadOkx('fast'); }, 1e3);
 setInterval(() => { if (okxWant()) loadOkx('full'); }, 30e3);
 document.addEventListener('visibilitychange', () => { okxStream(); if (okxWant()) loadOkx('full'); });
+window.addEventListener('online', () => { ['pub', 'priv', 'biz'].forEach(n => { okxShut(n); okxTry[n] = 0; }); okxStream(); if (okxWant()) loadOkx('full'); });
 /* Özet açıkken bağlı OKX hesabının bakiyesi değişince ekran tazelenir (en çok saniyede bir; parmak ekrandayken beklenir). */
 var okxOzetAt = 0, okxOzetT = 0;
 function okxOzet() {
@@ -3196,6 +3211,7 @@ function okxCoinSheet(ccy) {
   okxCoinSel = { ccy }; okxChart = null; okxChartHover = null;
   const chart = !STABLE.includes(ccy) && !!okx.inst[ccy];
   okxCoinShown = { top: okxCoinTop(), stats: okxCoinStats(), trades: okxTradesHtml(), foot: okxFoot() };
+  okxCoinShown.last = (okxCoinData() || {}).last || 0;
   openSheet(`<div class="dlg"><div class="sheet-nav"><span class="grab"></span><span></span><h2>${esc(invName({ sym: ccy, atype: 'crypto' }))}</h2>
       <button type="button" class="nav-txt b" data-action="close-sheet">Kapat</button></div>
     <div class="sheet-body okx-coin-body" tabindex="-1" autofocus>
@@ -3218,12 +3234,12 @@ function okxCoinData() {
   const last = p ? p.last : items[0] ? items[0].last : 0;
   return { c, items, t, p, qty, last, usd: items.reduce((a, x) => a + x.usd, 0) || qty * last, ch: p && p.open ? (p.last - p.open) / p.open : 0 };
 }
-function okxCoinTop() {
+function okxCoinTop(fl) {
   const k = okxCoinData(); if (!k) return '';
-  const D = disp();
-  return `<div class="big num">${fmtUsd(k.usd)}</div>
+  const D = disp(), f = fl ? ' fl-' + fl : '';
+  return `<div class="big num gold-px${f}">${fmtUsd(k.usd)}</div>
     ${D === 'IQD' && k.usd ? `<div class="muted num" style="font-size:13px">≈ ${fmt(conv(k.usd, 'USD', 'IQD', nowRate()), 'IQD')}</div>` : ''}
-    ${!STABLE.includes(k.c) && k.last ? `<div style="font-size:14px;margin-top:6px"><span class="num">1 ${esc(k.c)} = ${fmtPx(k.last)}</span>${k.ch ? ` <span class="num ${k.ch < 0 ? 'exp' : 'inc'}">${k.ch < 0 ? '▼' : '▲'} ${okxPct(k.ch)} (24s)</span>` : ''}</div>` : ''}`;
+    ${!STABLE.includes(k.c) && k.last ? `<div style="font-size:14px;margin-top:6px"><span class="num gold-px${f}">1 ${esc(k.c)} = ${fmtPx(k.last)}</span>${k.ch ? ` <span class="num ${k.ch < 0 ? 'exp' : 'inc'}">${k.ch < 0 ? '▼' : '▲'} ${okxPct(k.ch)} (24s)</span>` : ''}</div>` : ''}`;
 }
 function okxCoinStats() {
   const k = okxCoinData(); if (!k) return '';
@@ -3311,8 +3327,11 @@ function okxTradesHtml() {
 function okxCoinPaint() {
   if (!okxCoinSel || !$('#sheet').open) return;
   const a = $('#okxCoin'), b = $('#okxCoinStats'); if (!a || !b) return;
-  const top = okxCoinTop(), st = okxCoinStats();
-  if (top !== okxCoinShown.top) { okxCoinShown.top = top; a.innerHTML = top; }
+  const top = okxCoinTop(), st = okxCoinStats(), k = okxCoinData(), last = k ? k.last : 0;
+  if (top !== okxCoinShown.top) {
+    const pv = okxCoinShown.last, fl = pv && last && last !== pv ? (last > pv ? 'up' : 'down') : '';
+    okxCoinShown.top = top; okxCoinShown.last = last; a.innerHTML = okxCoinTop(fl);
+  }
   if (st !== okxCoinShown.stats) { okxCoinShown.stats = st; b.innerHTML = st; }
   const tr = okxTradesHtml(), ft = okxFoot(), c = $('#okxCoinTrades'), f = $('#okxCoinFoot');
   if (c && tr !== okxCoinShown.trades) { okxCoinShown.trades = tr; c.innerHTML = tr; }
