@@ -2864,6 +2864,14 @@ const okxCred = () => { try { const c = JSON.parse(localStorage.getItem(OKX_CRED
 const okx = { busy: false, at: 0, err: '', snap: (() => { try { return JSON.parse(localStorage.getItem(OKX_SNAP)); } catch (e) { return null; } })() };
 const OKX_ERR = { '50102': 'Telefonun saati yanlış; Ayarlar → Genel → Tarih ve Saat → Otomatik olarak ayarla', '50105': 'Parola (passphrase) yanlış',
   '50111': 'API anahtarı geçersiz', '50113': 'Gizli anahtar (Secret Key) yanlış', '50110': 'IP adresi izinli değil — anahtarı IP sınırı olmadan oluşturun' };
+/* Telefonun ya da tarayıcının İngilizce ağ hatalarını anlaşılır Türkçeye çevirir; OKX'in kendi hata mesajları olduğu gibi kalır. */
+function okxNetErr(e) {
+  const m = String((e && e.message) || e || '');
+  if (/hostname could not be found|could not resolve|NAME_NOT_RESOLVED|ENOTFOUND|getaddrinfo/i.test(m)) return 'okx.com adresi bulunamadı. Bağlı olduğun ağ (Wi-Fi ya da mobil veri) OKX\'e ulaşamıyor';
+  if (/offline|connection was lost|data connection|not connected|Could not connect|Failed to fetch|Load failed|NetworkError/i.test(m)) return 'İnternet bağlantısı yok ya da OKX\'e ulaşılamıyor';
+  if (/timed out/i.test(m)) return 'OKX zamanında cevap vermedi';
+  return m || 'bağlanılamadı';
+}
 async function okxGet(path, cred) {
   const headers = {};
   if (cred) {
@@ -2973,7 +2981,7 @@ async function loadOkx(mode = 'auto') {
     okxAutoLink();
   } catch (e) {
     if (gen !== okx.gen) return;
-    okx.err = e.message || 'bağlanılamadı';
+    okx.err = okxNetErr(e);
   }
   okx.busy = false; okx.at = Date.now();
   okxPaint(); okxOzet(); okxStream();
@@ -3112,9 +3120,13 @@ function okxBody(fl) {
       <div class="a"><b class="num gold-px${flash(x.fl)}">${fmtUsd(x.usd)}</b>${x.ch ? `<br><small class="num ${x.ch < 0 ? 'exp' : 'inc'}">${x.ch < 0 ? '▼' : '▲'} ${pct(x.ch)} (24s)</small>` : ''}${x.upl ? `<br><small class="num ${x.upl < 0 ? 'exp' : 'inc'}">kâr/zarar ${x.upl > 0 ? '+' : ''}${fmtUsd(x.upl)}</small>` : ''}</div></div>`; }).join('')).join('') || '<div class="empty">OKX hesabında varlık yok.</div>'}</div>`;
 }
 function okxFoot() {
-  const t = d => new Date(d).toLocaleTimeString('tr-TR');
+  // Saat bugünse yalnız saat, değilse gün de yazılır (ör. "24 Kas 01:04").
+  const t = d => new Date(d).toDateString() === new Date().toDateString() ? new Date(d).toLocaleTimeString('tr-TR')
+    : new Date(d).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   if (okx.okAt && Date.now() - okx.okAt < 5e3) return `<span style="color:#16a34a">●</span> Canlı · ${t(okx.okAt)}`;
-  if (okx.err) return `<span class="exp">OKX'e bağlanılamadı: ${esc(okx.err)}</span>`;
+  // Bağlantı yokken kartta son bilinen değerler durur; ne zamandan oldukları yazılır, bağlantı gelince kendiliğinden canlıya döner.
+  const last = okx.okAt || (okx.snap && okx.snap.at);
+  if (okx.err) return `<span class="exp">OKX'e bağlanılamadı: ${esc(okx.err)}.</span>${last ? ` Gösterilen tutarlar ${t(last)} itibarıyla; bağlantı gelince kendiliğinden güncellenir.` : ''}`;
   return okx.snap ? `Son güncelleme ${t(okx.snap.at)}` : okx.busy ? 'OKX\'ten alınıyor…' : '';
 }
 function okxCard() {
