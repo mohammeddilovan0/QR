@@ -1048,6 +1048,14 @@ const feeCat = () => { const c = cat(db.settings.feeCat); return c && c.type ===
 const MONTH = new Intl.DateTimeFormat('tr-TR', { month: 'long', year: 'numeric' });
 const MSHORT = new Intl.DateTimeFormat('tr-TR', { month: 'short' });
 const DAYFMT = new Intl.DateTimeFormat('tr-TR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+/* Liste gün başlığı: "Bugün", "Dün"; bu yılın günlerinde yıl yazılmaz ("25 Kasım Çarşamba"), eskilerde yazılır. */
+const DAYFMT_Y = new Intl.DateTimeFormat('tr-TR', { weekday: 'long', day: 'numeric', month: 'long' });
+function dayHead(date) {
+  const t = today();
+  if (date === t) return 'Bugün';
+  if (date === ymd(addDays(parse(t), -1))) return 'Dün';
+  return (date.slice(0, 4) === t.slice(0, 4) ? DAYFMT_Y : DAYFMT).format(parse(date));
+}
 function range(kind, anchor) {
   const d = parse(anchor);
   if (kind === 'week') {
@@ -1533,7 +1541,7 @@ function renderTxList() {
   for (const t of rows) {
     if (t.date !== lastDay) {
       lastDay = t.date;
-      html += `<div class="day"><span>${esc(DAYFMT.format(parse(t.date)))}</span>${dayTotals[t.date] ? `<span class="num">−${fmt(dayTotals[t.date], D)}</span>` : ''}</div>`;
+      html += `<div class="day"><span>${esc(dayHead(t.date))}</span>${dayTotals[t.date] ? `<span class="num">−${fmt(dayTotals[t.date], D)}</span>` : ''}</div>`;
     }
     html += ui.sel ? selRow(t) : txRow(t);
   }
@@ -1624,7 +1632,7 @@ function vHesap() {
   const chip = (x, label) => `<button class="chip pick ${(ui.accSel || '') === (x ? x.id : '') ? 'sel' : ''}" data-action="acc-sel" data-id="${x ? x.id : ''}">${esc(label)}</button>`;
   let rows = '', last = '';
   for (const t of shown) {
-    if (t.date !== last) { last = t.date; rows += `<div class="day"><span>${esc(DAYFMT.format(parse(t.date)))}</span></div>`; }
+    if (t.date !== last) { last = t.date; rows += `<div class="day"><span>${esc(dayHead(t.date))}</span></div>`; }
     const { title, sub, col, ic, locked } = txInfo(t), d = delta(t);
     const amt = Math.abs(d) < (C === 'USD' ? 0.005 : 0.5) ? `<span class="num muted">⇄ ${fmt(t.amount, acc(t.accountId)?.currency || C)}</span>`
       : `<span class="num ${d < 0 ? 'exp' : 'inc'}">${d < 0 ? '−' : '+'}${fmt(Math.abs(d), C)}</span>`;
@@ -2315,7 +2323,7 @@ function debtTxCard() {
   const shown = all.slice(0, ui.debtTxN || 30);
   let rows = '', last = '';
   for (const t of shown) {
-    if (t.date !== last) { last = t.date; rows += `<div class="day"><span>${esc(DAYFMT.format(parse(t.date)))}</span></div>`; }
+    if (t.date !== last) { last = t.date; rows += `<div class="day"><span>${esc(dayHead(t.date))}</span></div>`; }
     rows += txRow(t);
   }
   return `<div class="card"><h2>Hareketler</h2>
