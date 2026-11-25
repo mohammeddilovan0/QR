@@ -173,11 +173,19 @@ small.cu{font-size:.6em;font-weight:600;opacity:.7;margin-left:1px;letter-spacin
 .fbadge:empty{display:none}
 .fdate{display:grid;gap:4px;font-size:12px;color:var(--muted)}
 .s1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* İşlem panelinde son kullanılan kategoriler: yana kayan simgeli çipler */
+.cqp-row{display:flex;gap:6px;overflow-x:auto;margin:2px 0 8px;padding-bottom:2px;scrollbar-width:none}
+.cqp-row::-webkit-scrollbar{display:none}
+.cqp{flex:none;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:4px 12px 4px 4px;background:none;color:var(--ink);font:inherit;font-size:14px;cursor:pointer}
+.cqp .cic{margin:0}
+.cqp.sel{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);font-weight:600}
 .pbal .pb{text-align:right;white-space:nowrap}
 .pbal .pb>small{display:block;font-size:11px;margin-top:1px}
 .list-row .acc-ic{flex:none}
 @media (min-width:760px){.filters{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .day{font-size:12px;color:var(--muted);font-weight:600;padding:12px 2px 6px;display:flex;justify-content:space-between}
+/* Gün başlığı kaydırırken üst çubuğun altında sabit kalır (hangi günde olduğun hep görünür). */
+#txlist .day,.ledger-days .day{position:sticky;top:calc(44px + env(safe-area-inset-top));z-index:3;background:var(--card);margin:0 -2px;padding-left:4px;padding-right:4px}
 .tx{display:flex;gap:12px;align-items:center;padding:10px;border-radius:10px;cursor:pointer}
 @media (hover:hover){.tx:hover{background:var(--soft)}}
 .tx .ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex:none;font-weight:700;font-size:14px;color:#fff}
@@ -213,6 +221,8 @@ body.selmode #view{padding-bottom:80px}
 .debt .pays,.debt .acts{flex-basis:100%}
 .debt .pays{display:grid;gap:3px;border-left:2px solid var(--line);padding-left:10px}
 .debt .acts{display:flex;gap:6px;justify-content:flex-end}
+.dprog{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);margin-top:4px}
+.dprog b{color:var(--ink);font-weight:600}
 .warn{display:flex;gap:12px;align-items:center;flex-wrap:wrap;border-color:var(--accent)}
 .warn .m{flex:1;min-width:160px}
 .warn .m b{display:block}
@@ -563,6 +573,7 @@ table.fuel .r{text-align:right}
     </div>
     <label><span id="accLbl">Hesap</span><select name="accountId"></select></label>
     <div id="catWrap"><label>Kategori</label>
+      <div id="cpRecent" class="cqp-row"></div>
       <select name="categoryId" class="hide" tabindex="-1"></select>
       <button type="button" class="cpick-btn" data-action="cpick" id="cpickBtn"></button>
       <div id="cpick" class="cpick hide"></div>
@@ -918,6 +929,17 @@ function drawCatPick() {
   btn.classList.toggle('open', !box.classList.contains('hide'));
   box.innerHTML = catTree({ types: [tp], value: v, open: dlg.cpOpen, set: 'cpick-set', tog: 'cpick-tog',
     extras: tp === 'income' ? [['', '— Belirtme —']] : [] });
+  // Hızlı seçim: bu türde en son kullanılan 8 kategori (yeni kullanıcıda ana kategoriler), simgeleriyle tek dokunuşta.
+  const rc = $('#cpRecent'); if (!rc) return;
+  const ids = [];
+  for (const t of [...db.tx].sort(txNewer)) {
+    if (t.type !== tp || !t.categoryId || ids.includes(t.categoryId)) continue;
+    const x = cat(t.categoryId); if (x && x.type === tp) ids.push(x.id);
+    if (ids.length >= 8) break;
+  }
+  const list = (ids.length ? ids.map(cat) : parents(tp).slice(0, 8)).filter(Boolean);
+  rc.innerHTML = list.map(x => `<button type="button" class="cqp ${x.id === v ? 'sel' : ''}" data-action="cpick-set" data-id="${x.id}" title="${esc(catLabel(x))}">${catIc(x, 'cic xs')}<span>${esc(x.name)}</span></button>`).join('');
+  rc.classList.toggle('hide', !list.length);
 }
 /* İşlemler sekmesindeki kategori filtresi. */
 const FILTER_EXTRAS = [['', 'Tüm kategoriler'], ['__none', 'Kategorisiz'], ['__transfer', 'Transferler'], ['__debt', 'Borç/Alacak hareketleri'], ['__inv', 'Yatırımlar (kripto, altın, hisse)']];
@@ -2171,7 +2193,8 @@ function debtRow(x) {
   return swRow(`<div class="list-row debt">
     <div class="m"><b>${esc(x.person)}</b> <span class="cur">${x.currency}</span>
       <div class="muted" style="font-size:12px">${esc(SHORTDATE.format(parse(x.date)))}${x.opening ? ' · Başlangıç' : ''}${x.note ? ' · ' + esc(x.note) : ''}${source} · toplam ${fmt(debtTotal(x), x.currency)}</div>
-      ${x.payments.length ? `<div class="bar-track" style="margin-top:6px"><div class="bar-fill" style="width:${pct}%;background:var(--accent)"></div></div>` : ''}
+      <div class="bar-track" style="margin-top:8px"><div class="bar-fill" style="width:${pct > 0 ? Math.max(2, pct) : 0}%;background:${x.dir === 'lent' ? 'var(--inc)' : 'var(--accent)'}"></div></div>
+      <div class="dprog"><span>${x.dir === 'lent' ? 'Geri alınan' : 'Ödenen'} <b class="num">${fmt(debtPaid(x), x.currency)}</b> / ${fmt(debtTotal(x), x.currency)}</span><b class="num">${Math.round(pct)}%</b></div>
     </div>
     <b class="num ${!open ? 'muted' : x.dir === 'lent' ? 'inc' : 'exp'}">${open ? fmt(left, x.currency) : 'Kapandı'}</b>
     ${pays.length ? `<div class="pays">${pays.map(p => `<div class="subline"><span>${esc(SHORTDATE.format(parse(p.date)))}${p.note ? ' · ' + esc(p.note) : ''}${p.accountId && acc(p.accountId) ? ' · ' + esc(accLabel(acc(p.accountId))) : ''}</span><span class="num">${fmt(p.amount, x.currency)}${p.paid ? ` <small class="muted">(${fmt(p.paid.amount, p.paid.currency)})</small>` : ''}<button class="icon xs" data-action="del-pay" data-id="${x.id}" data-pay="${p.id}" aria-label="Ödemeyi sil">✕</button></span></div>`).join('')}</div>` : ''}
