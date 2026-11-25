@@ -17,17 +17,17 @@
 <style>
 :root{
   --bg:#f5f4f0;--card:#ffffff;--ink:#1c1c1a;--muted:#6d6b65;--line:#e3e1da;--soft:#efede7;
-  --accent:#1f6f5c;--accent-ink:#ffffff;--exp:#b4432f;--inc:#1f7a4a;--shadow:0 1px 2px rgba(0,0,0,.05),0 4px 16px rgba(0,0,0,.04);
+  --accent:#1f6f5c;--accent-ink:#ffffff;--exp:#b4432f;--inc:#1f7a4a;--chart:#0a7d62;--shadow:0 1px 2px rgba(0,0,0,.05),0 4px 16px rgba(0,0,0,.04);
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
     --bg:#141413;--card:#1e1e1c;--ink:#ecebe6;--muted:#9d9b94;--line:#33322e;--soft:#282725;
-    --accent:#4fb596;--accent-ink:#0c1f19;--exp:#ec8069;--inc:#5fc78d;--shadow:none;
+    --accent:#4fb596;--accent-ink:#0c1f19;--exp:#ec8069;--inc:#5fc78d;--shadow:none;--chart:#45ab8c;
   }
 }
 :root[data-theme="dark"]{
   --bg:#141413;--card:#1e1e1c;--ink:#ecebe6;--muted:#9d9b94;--line:#33322e;--soft:#282725;
-  --accent:#4fb596;--accent-ink:#0c1f19;--exp:#ec8069;--inc:#5fc78d;--shadow:none;
+  --accent:#4fb596;--accent-ink:#0c1f19;--exp:#ec8069;--inc:#5fc78d;--shadow:none;--chart:#45ab8c;
 }
 *{box-sizing:border-box}
 html,body{margin:0}
@@ -245,6 +245,27 @@ th{font-size:12px;color:var(--muted);font-weight:600;border-top:0}
 .okx-acc{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13px;font-weight:600;color:var(--muted);margin-top:10px;padding:10px 10px 0;border-top:1px solid var(--line)}
 .okx-acc:first-child{margin-top:0;padding-top:4px;border-top:0}
 .okx-acc b{color:var(--ink)}
+/* OKX coin detayı: fiyat grafiği ve bilgi satırları */
+.okx-chart-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:16px}
+.okx-chart{position:relative;height:180px;margin-top:6px;touch-action:pan-y;outline:none;-webkit-user-select:none;user-select:none}
+.okx-chart:focus-visible{box-shadow:0 0 0 2px var(--accent);border-radius:8px}
+.okx-chart svg{display:block;width:100%;height:100%;overflow:visible}
+.okx-chart-msg{display:grid;place-items:center;height:100%;font-size:13px}
+.okx-line{fill:none;stroke:var(--chart);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.okx-area{fill:var(--chart);opacity:.1}
+.okx-axis{stroke:var(--line);stroke-width:1}
+.okx-cross{stroke:var(--muted);stroke-width:1}
+.okx-dot{fill:var(--chart);stroke:var(--card);stroke-width:2}
+.okx-lbl text{font-size:11px;fill:var(--muted)}
+.okx-tip{position:absolute;top:0;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px 8px;font-size:12px;line-height:1.35;white-space:nowrap;pointer-events:none;box-shadow:var(--shadow)}
+.okx-tip b{display:block;font-size:14px}
+.okx-tip span{color:var(--muted)}
+.okx-coin-body:focus{outline:none}
+.okx-kv{margin-top:14px}
+.okx-kv-r{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:10px 2px;border-top:1px solid var(--line);font-size:14px}
+.okx-kv-r:first-child{border-top:0}
+.okx-kv-r span{color:var(--muted)}
+.okx-kv-r b{text-align:right;font-weight:600}
 details{border-top:1px solid var(--line);margin-top:8px}
 details summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:14px;padding:10px 0}
 /* ---------- uygulama kabuğu: üst çubuk, büyük başlık, alt menü ---------- */
@@ -2937,7 +2958,10 @@ function okxTradeSet(details) {
   for (const d of details || []) {
     const eq = +d.eq || 0, o = okx.trade[d.ccy];
     if (o ? Math.abs(o.eq - eq) > 1e-12 : eq) moved = true;
-    okx.trade[d.ccy] = { eq, eqUsd: +d.eqUsd || 0, upl: d.spotUpl !== '' && isFinite(+d.spotUpl) ? +d.spotUpl : 0 };
+    // OKX'in spot alanları: spotUpl (kâr/zarar $), spotUplRatio (oran), openAvgPx (ortalama alış $), totalPnl (toplam kâr/zarar $).
+    const f = (k, def) => d[k] === undefined ? def : d[k] !== '' && isFinite(+d[k]) ? +d[k] : null;
+    okx.trade[d.ccy] = { eq, eqUsd: +d.eqUsd || 0, upl: f('spotUpl', o ? o.upl : 0) || 0, uplR: f('spotUplRatio', o ? o.uplR : null),
+      avg: f('openAvgPx', o ? o.avg : null), pnl: f('totalPnl', o ? o.pnl : null) };
   }
   return moved;
 }
@@ -2948,7 +2972,7 @@ async function okxPrices(all) {
   await Promise.all(need.map(async c => {
     for (const q of okx.inst[c] ? [okx.inst[c]] : [c + '-USDT', c + '-USDC']) {
       const t = await okxGet(`/api/v5/market/ticker?instId=${encodeURIComponent(q)}`).then(d => d[0]).catch(() => null);
-      if (t && +t.last > 0) { okx.px[c] = { last: +t.last, open: +t.open24h }; okx.inst[c] = q; return; }
+      if (t && +t.last > 0) { okx.px[c] = { last: +t.last, open: +t.open24h, high: +t.high24h, low: +t.low24h }; okx.inst[c] = q; return; }
     }
     if (!okx.px[c]) okx.noPx[c] = now + 60e3; // OKX'te çifti yok; dakikada bir yeniden denenir
   }));
@@ -3044,7 +3068,8 @@ function okxStream() {
     for (const t of m.data || []) {
       const ccy = String(t.instId || '').split('-')[0], last = +t.last, open = +t.open24h;
       if (okx.inst[ccy] !== t.instId || !(last > 0) || (okx.px[ccy] && okx.px[ccy].last === last)) continue;
-      okx.px[ccy] = { last, open: open > 0 ? open : (okx.px[ccy] || {}).open };
+      const was = okx.px[ccy] || {};
+      okx.px[ccy] = { last, open: open > 0 ? open : was.open, high: +t.high24h > 0 ? +t.high24h : was.high, low: +t.low24h > 0 ? +t.low24h : was.low };
       okxDraw();
     }
   });
@@ -3095,6 +3120,7 @@ function okxOzet() {
 /* Kartta yalnız değişen kısım yeniden çizilir: değişmeyen tutar boşuna yanıp sönmez, saat her saniye ilerler. */
 var okxShown = '', okxFootShown = '';
 function okxPaint() {
+  okxCoinPaint();
   const el = $('#okxCard'), b = $('#okxBody'), f = $('#okxFoot');
   if (!el) return;
   if (!b || !f || !okxCred()) { el.outerHTML = okxCard(); return; }
@@ -3115,8 +3141,8 @@ function okxBody(fl) {
     ${D === 'IQD' && tot ? `<div class="muted num" style="font-size:13px">≈ ${fmt(conv(tot, 'USD', 'IQD', nowRate()), 'IQD')}</div>` : ''}
     <div class="muted" style="font-size:13px;margin-top:4px">Son 24 saat <b class="num ${ch < 0 ? 'exp' : ch > 0 ? 'inc' : ''}">${ch > 0 ? '+' : ''}${fmtUsd(ch)}</b></div>
     <div style="margin-top:8px">${groups.map(([name, xs]) => (name ? `<div class="okx-acc"><span>${name}</span><b class="num">${fmtUsd(xs.reduce((a, x) => a + x.usd, 0))}</b></div>` : '') + xs.map(x => { const h = { sym: x.ccy, atype: 'crypto' }, [, ic, col] = invIcon(h);
-      return `<div class="tx"><div class="ic" style="background:${col}">${ic}</div>
-      <div class="m"><div class="t">${esc(invName(h))}</div><div class="s">${esc(fmtQty(x.qty, h))}${isGoldTok(h) ? ` ≈ ${fmtNum(x.qty * OZ, 2)} gr altın` : ''}${x.last && !STABLE.includes(x.ccy) ? ` · ${esc(fmtUsd(x.last))}` : ''}</div></div>
+      return `<div class="tx tap" data-action="okx-coin" data-ccy="${esc(x.ccy)}"><div class="ic" style="background:${col}">${ic}</div>
+      <div class="m"><div class="t">${esc(invName(h))}</div><div class="s">${esc(fmtQty(x.qty, h))}${isGoldTok(h) ? ` ≈ ${fmtNum(x.qty * OZ, 2)} gr altın` : ''}${x.last && !STABLE.includes(x.ccy) ? ` · ${esc(fmtPx(x.last))}` : ''}</div></div>
       <div class="a"><b class="num gold-px${flash(x.fl)}">${fmtUsd(x.usd)}</b>${x.ch ? `<br><small class="num ${x.ch < 0 ? 'exp' : 'inc'}">${x.ch < 0 ? '▼' : '▲'} ${pct(x.ch)} (24s)</small>` : ''}${x.upl ? `<br><small class="num ${x.upl < 0 ? 'exp' : 'inc'}">kâr/zarar ${x.upl > 0 ? '+' : ''}${fmtUsd(x.upl)}</small>` : ''}</div></div>`; }).join('')).join('') || '<div class="empty">OKX hesabında varlık yok.</div>'}</div>`;
 }
 function okxFoot() {
@@ -3139,6 +3165,175 @@ function okxCard() {
     <p class="muted" id="okxFoot" style="font-size:12px;margin:8px 0 0">${okxFootShown}</p>
   </div>`;
 }
+/* ---------- OKX coin detayı ----------
+   Karttaki bir coine dokununca alttan açılır: toplam değer, fiyat ve 24 saatlik değişim (canlı), fiyat grafiği (24 saat /
+   7 gün / 30 gün), miktar ve hesaplara dağılımı, altın tokenlerde gram/miskal karşılığı, Trading'deki ortalama alış ve
+   kâr/zarar. Açıkken kartla birlikte canlı tazelenir. */
+var okxCoinSel = null, okxChart = null, okxChartHover = null, okxCandles = {}, okxCoinShown = { top: '', stats: '' };
+// dönem → [ad, mum aralığı, mum sayısı, bir mumun süresi (ms)]
+const OKX_PERIODS = { '1d': ['24 saat', '15m', 96, 9e5], '7d': ['7 gün', '1H', 168, 36e5], '30d': ['30 gün', '6H', 120, 216e5] };
+/* Fiyat: 1 $'ın altındaki coinlerde anlamlı basamaklarıyla (ör. $0.000012345), diğerlerinde kuruşuyla. */
+const fmtPx = v => v > 0 && v < 1 ? '$' + v.toLocaleString('en-US', { maximumSignificantDigits: 5 }) : fmtUsd(v);
+const okxPct = v => `${v > 0 ? '+' : ''}${fmtNum(v * 100, 2)}%`;
+/* Grafik saatleri: bugünse yalnız saat; 30 günlükte eksen için yalnız gün. */
+function okxWhen(ts, tip) {
+  const d = new Date(ts), today = d.toDateString() === new Date().toDateString();
+  if (today) return d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleString('tr-TR', !tip && okxChart && okxChart.per === '30d' ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+function okxCoinSheet(ccy) {
+  if (!ccy) return;
+  okxCoinSel = { ccy }; okxChart = null; okxChartHover = null;
+  const chart = !STABLE.includes(ccy) && !!okx.inst[ccy];
+  okxCoinShown = { top: okxCoinTop(), stats: okxCoinStats() };
+  openSheet(`<div class="dlg"><div class="sheet-nav"><span class="grab"></span><span></span><h2>${esc(invName({ sym: ccy, atype: 'crypto' }))}</h2>
+      <button type="button" class="nav-txt b" data-action="close-sheet">Kapat</button></div>
+    <div class="sheet-body okx-coin-body" tabindex="-1" autofocus>
+      <div id="okxCoin">${okxCoinShown.top}</div>
+      ${chart ? `<div class="okx-chart-head"><div class="seg" id="okxPer">${Object.entries(OKX_PERIODS).map(([k, [l]]) =>
+        `<button type="button" data-action="okx-chart" data-p="${k}"${k === '1d' ? ' class="on"' : ''}>${l}</button>`).join('')}</div><b id="okxPerCh" class="num"></b></div>
+      <div id="okxChart" class="okx-chart" tabindex="0"></div>` : ''}
+      <div id="okxCoinStats" class="okx-kv">${okxCoinShown.stats}</div>
+    </div></div>`);
+  if (chart) { okxChartBind($('#okxChart')); okxChartLoad('1d'); }
+}
+/* Seçili coinin tüm hesaplardaki toplamı ve fiyat bilgileri. */
+function okxCoinData() {
+  const c = okxCoinSel && okxCoinSel.ccy; if (!c) return null;
+  const items = okx.snap ? okx.snap.items.filter(x => x.ccy === c) : [], t = okx.trade[c] || {};
+  const p = STABLE.includes(c) ? { last: 1, open: 1 } : okx.px[c] || null, qty = okxQty(c);
+  const last = p ? p.last : items[0] ? items[0].last : 0;
+  return { c, items, t, p, qty, last, usd: items.reduce((a, x) => a + x.usd, 0) || qty * last, ch: p && p.open ? (p.last - p.open) / p.open : 0 };
+}
+function okxCoinTop() {
+  const k = okxCoinData(); if (!k) return '';
+  const D = disp();
+  return `<div class="big num">${fmtUsd(k.usd)}</div>
+    ${D === 'IQD' && k.usd ? `<div class="muted num" style="font-size:13px">≈ ${fmt(conv(k.usd, 'USD', 'IQD', nowRate()), 'IQD')}</div>` : ''}
+    ${!STABLE.includes(k.c) && k.last ? `<div style="font-size:14px;margin-top:6px"><span class="num">1 ${esc(k.c)} = ${fmtPx(k.last)}</span>${k.ch ? ` <span class="num ${k.ch < 0 ? 'exp' : 'inc'}">${k.ch < 0 ? '▼' : '▲'} ${okxPct(k.ch)} (24s)</span>` : ''}</div>` : ''}`;
+}
+function okxCoinStats() {
+  const k = okxCoinData(); if (!k) return '';
+  const h = { sym: k.c, atype: 'crypto' }, rows = [];
+  const row = (l, v, cls = '') => rows.push(`<div class="okx-kv-r"><span>${l}</span><b class="num ${cls}">${v}</b></div>`);
+  const sign = v => `${v > 0 ? '+' : ''}${fmtUsd(v)}`, pl = v => v < 0 ? 'exp' : v > 0 ? 'inc' : '';
+  row('Miktar', esc(fmtQty(k.qty, h)));
+  if (isGoldTok(h)) {
+    const g = k.qty * OZ;
+    row('Altın karşılığı', `≈ ${fmtNum(g, 2)} gr · ${fmtNum(g / MISKAL, 2)} miskal`);
+    if (k.last) row('1 gr altın', `≈ ${fmtUsd(k.last / OZ)}`);
+  }
+  // Hangi hesapta ne kadar var
+  const parts = OKX_ACCS.map(([a, n]) => [n, a === 'fund' ? okx.fund[k.c] || 0 : a === 'trade' ? k.t.eq || 0 : okx.earn[k.c] || 0]).filter(x => x[1] > 0);
+  const many = parts.length > 1, tr = many ? ' (Trading)' : '';
+  row(many ? 'Hesaplar' : 'Hesap', parts.map(([n, q]) => many ? `${n} ${q.toLocaleString('en-US', { maximumFractionDigits: 8 })}` : n).join(' · ') || '—');
+  if (k.t.eq > 0) {
+    if (k.t.avg > 0) row('Ortalama alış fiyatı' + tr, fmtPx(k.t.avg));
+    if (k.t.upl) row('Kâr/zarar' + tr, `${sign(k.t.upl)}${k.t.uplR != null ? ` (${okxPct(k.t.uplR)})` : ''}`, pl(k.t.upl));
+    if (k.t.pnl != null && Math.abs(k.t.pnl - k.t.upl) >= 0.01) row('Toplam kâr/zarar' + tr, sign(k.t.pnl), pl(k.t.pnl));
+  }
+  if (k.p && k.p.high > 0 && k.p.low > 0 && !STABLE.includes(k.c)) { row('24s en yüksek', fmtPx(k.p.high)); row('24s en düşük', fmtPx(k.p.low)); }
+  const d24 = k.items.reduce((a, x) => a + (x.ch ? x.usd - x.usd / (1 + x.ch) : 0), 0);
+  if (Math.abs(d24) >= 0.01) row('Son 24 saatte değeri', sign(d24), pl(d24));
+  return rows.join('') + `<p class="muted" style="font-size:12px;margin:10px 0 0">${okxFoot()}</p>`;
+}
+/* Açık detay, kartla birlikte tazelenir; yalnız değişen kısım yeniden çizilir. */
+function okxCoinPaint() {
+  if (!okxCoinSel || !$('#sheet').open) return;
+  const a = $('#okxCoin'), b = $('#okxCoinStats'); if (!a || !b) return;
+  const top = okxCoinTop(), st = okxCoinStats();
+  if (top !== okxCoinShown.top) { okxCoinShown.top = top; a.innerHTML = top; }
+  if (st !== okxCoinShown.stats) { okxCoinShown.stats = st; b.innerHTML = st; }
+  const p = okx.px[okxCoinSel.ccy];
+  if (okxChart && okxChart.pts && p && p.last !== okxChart.drawn) okxChartDraw();
+}
+/* Mumlar OKX'in herkese açık geçmiş fiyatlarından gelir; bir dakika saklanır, açıkken dakikada bir yenilenir. */
+function okxChartLoad(per, again) {
+  const c = okxCoinSel && okxCoinSel.ccy, inst = c && okx.inst[c]; if (!inst || !OKX_PERIODS[per]) return;
+  document.querySelectorAll('#okxPer button').forEach(b => b.classList.toggle('on', b.dataset.p === per));
+  const [, bar, limit] = OKX_PERIODS[per], key = inst + ':' + per, hit = okxCandles[key];
+  if (!again || !okxChart || okxChart.per !== per) { okxChart = { inst, per, pts: hit ? hit.pts : null, err: '' }; okxChartHover = null; okxChartDraw(); }
+  if (hit && Date.now() - hit.at < 60e3) return;
+  okxGet(`/api/v5/market/candles?instId=${encodeURIComponent(inst)}&bar=${bar}&limit=${limit}`).then(d => {
+    const pts = d.map(r => ({ t: +r[0], c: +r[4] })).filter(q => q.t > 0 && q.c > 0).reverse();
+    okxCandles[key] = { pts, at: Date.now() };
+    if (okxChart && okxChart.inst === inst && okxChart.per === per) { okxChart.pts = pts; okxChart.err = ''; okxChartDraw(); }
+  }).catch(e => { if (okxChart && okxChart.inst === inst && okxChart.per === per && !okxChart.pts) { okxChart.err = okxNetErr(e); okxChartDraw(); } });
+}
+function okxChartDraw() {
+  const el = $('#okxChart'), chg = $('#okxPerCh'); if (!el || !okxChart) return;
+  if (!okxChart.pts || okxChart.pts.length < 2) {
+    el.innerHTML = `<div class="muted okx-chart-msg">${okxChart.err ? 'Grafik alınamadı: ' + esc(okxChart.err) : okxChart.pts ? 'Bu dönem için fiyat yok' : 'Grafik yükleniyor…'}</div>`;
+    if (chg) chg.textContent = ''; return;
+  }
+  // Son nokta canlı fiyattır: aynı mumun içindeyse kapanışı güncellenir, mum dolduysa yeni nokta eklenir.
+  const p = okx.px[okxCoinSel.ccy], step = OKX_PERIODS[okxChart.per][3], pts = okxChart.pts.slice(), end = pts[pts.length - 1];
+  if (p && p.last > 0 && okx.inst[okxCoinSel.ccy] === okxChart.inst) {
+    if (Date.now() < end.t + step) pts[pts.length - 1] = { t: end.t, c: p.last }; else pts.push({ t: Date.now(), c: p.last });
+  }
+  okxChart.drawn = p ? p.last : 0; okxChart.view = pts;
+  const W = el.clientWidth || 320, H = el.clientHeight || 180, top = 20, bot = 40, base = H - bot;
+  const vals = pts.map(q => q.c), hi = Math.max(...vals), lo = Math.min(...vals), span = hi - lo || hi * 1e-3 || 1;
+  const t0 = pts[0].t, t1 = pts[pts.length - 1].t;
+  const X = t => 1 + (t1 > t0 ? (t - t0) / (t1 - t0) : 0) * (W - 2), Y = v => top + (hi - v) / span * (base - top);
+  Object.assign(okxChart, { X, Y, W, top, base });
+  const line = pts.map((q, i) => `${i ? 'L' : 'M'}${X(q.t).toFixed(1)} ${Y(q.c).toFixed(1)}`).join('');
+  // En yüksek noktanın üstüne, en düşüğün altına fiyatı yazılır; kenarlarda taşmasın diye hizası kayar.
+  const lbl = (i, below) => { const x = X(pts[i].t), a = x < 44 ? 'start' : x > W - 44 ? 'end' : 'middle';
+    return `<text x="${x.toFixed(1)}" y="${(Y(vals[i]) + (below ? 15 : -7)).toFixed(1)}" text-anchor="${a}">${esc(fmtPx(vals[i]))}</text>`; };
+  const iHi = vals.indexOf(hi), iLo = vals.lastIndexOf(lo), first = vals[0], last = vals[vals.length - 1], d = (last - first) / first;
+  if (chg) { chg.className = 'num ' + (d < 0 ? 'exp' : d > 0 ? 'inc' : 'muted'); chg.textContent = `${d < 0 ? '▼ ' : d > 0 ? '▲ ' : ''}${okxPct(d)}`; }
+  el.setAttribute('role', 'img');
+  el.setAttribute('aria-label', `${okxChart.inst.replace('-', '/')} fiyatı, son ${OKX_PERIODS[okxChart.per][0]}: ${fmtPx(first)} → ${fmtPx(last)} (${okxPct(d)}), en yüksek ${fmtPx(hi)}, en düşük ${fmtPx(lo)}`);
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">
+      <path class="okx-area" d="${line}L${X(t1).toFixed(1)} ${base}L${X(t0).toFixed(1)} ${base}Z"/>
+      <line class="okx-axis" x1="0" x2="${W}" y1="${base + .5}" y2="${base + .5}"/>
+      <path class="okx-line" d="${line}"/>
+      <g class="okx-lbl">${lbl(iHi, false)}${iLo !== iHi ? lbl(iLo, true) : ''}
+        <text x="1" y="${H - 3}" text-anchor="start">${esc(okxWhen(t0))}</text><text x="${W - 1}" y="${H - 3}" text-anchor="end">şimdi</text></g>
+      <g id="okxHov" style="display:none"><line class="okx-cross" y1="${top - 6}" y2="${base}"/><circle class="okx-dot" r="4"/></g>
+    </svg><div class="okx-tip" id="okxTip" style="display:none"></div>`;
+  if (okxChartHover != null) okxChartShow(Math.min(okxChartHover, pts.length - 1));
+}
+/* Parmakla (ya da fareyle) grafiğin üstünde gezinince o anki fiyat ve saat görünür; ok tuşlarıyla da gezilebilir. */
+function okxChartShow(i) {
+  const v = okxChart && okxChart.view, g = $('#okxHov'), tip = $('#okxTip'); if (!v || !v[i] || !g || !tip) return;
+  okxChartHover = i;
+  const x = okxChart.X(v[i].t), y = okxChart.Y(v[i].c), ln = g.querySelector('line'), dot = g.querySelector('circle');
+  ln.setAttribute('x1', x); ln.setAttribute('x2', x); dot.setAttribute('cx', x); dot.setAttribute('cy', y);
+  g.style.display = '';
+  const b = document.createElement('b'), s = document.createElement('span');
+  b.textContent = fmtPx(v[i].c); s.textContent = okxWhen(v[i].t, true);
+  tip.replaceChildren(b, s); tip.style.display = '';
+  const w = tip.offsetWidth;
+  tip.style.left = Math.min(Math.max(x - w / 2, 0), okxChart.W - w) + 'px';
+}
+function okxChartHide() {
+  okxChartHover = null;
+  const g = $('#okxHov'), tip = $('#okxTip'); if (g) g.style.display = 'none'; if (tip) tip.style.display = 'none';
+}
+function okxChartBind(el) {
+  const at = e => {
+    const v = okxChart && okxChart.view; if (!v) return;
+    const x = e.clientX - el.getBoundingClientRect().left;
+    let best = 0, bd = Infinity;
+    v.forEach((q, i) => { const dx = Math.abs(okxChart.X(q.t) - x); if (dx < bd) { bd = dx; best = i; } });
+    okxChartShow(best);
+  };
+  el.addEventListener('pointerdown', at); el.addEventListener('pointermove', at);
+  el.addEventListener('pointerleave', okxChartHide); el.addEventListener('pointercancel', okxChartHide);
+  el.addEventListener('pointerup', e => { if (e.pointerType !== 'mouse') okxChartHide(); });
+  el.addEventListener('focus', () => { if (okxChart && okxChart.view) okxChartShow(okxChart.view.length - 1); });
+  el.addEventListener('blur', okxChartHide);
+  el.addEventListener('keydown', e => {
+    const v = okxChart && okxChart.view; if (!v) return;
+    const i = okxChartHover == null ? v.length - 1 : okxChartHover;
+    if (e.key === 'ArrowLeft') { okxChartShow(Math.max(0, i - 1)); e.preventDefault(); }
+    else if (e.key === 'ArrowRight') { okxChartShow(Math.min(v.length - 1, i + 1)); e.preventDefault(); }
+  });
+}
+$('#sheet').addEventListener('close', () => { okxCoinSel = null; okxChart = null; okxChartHover = null; });
+setInterval(() => { if (okxCoinSel && okxChart && $('#sheet').open && !document.hidden) okxChartLoad(okxChart.per, true); }, 60e3);
 function okxSheet() {
   const c = okxCred();
   openSheet(`<form data-form="okx" class="dlg">${sheetNav('OKX bağlantısı', 'Kaydet')}
@@ -3892,6 +4087,8 @@ document.addEventListener('click', e => {
     case 'inv-tx': { const t = db.tx.find(x => x.id === d.id); if (t) { closeSw(); invSheet(t); } break; }
     case 'inv-refresh': loadInvPx(true); render(); break;
     case 'okx-connect': okxSheet(); break;
+    case 'okx-coin': okxCoinSheet(d.ccy); break;
+    case 'okx-chart': okxChartLoad(d.p); break;
     case 'okx-refresh': loadOkx('full'); render(); break;
     case 'okx-off':
       ask({ msg: 'OKX bağlantısı kaldırılsın mı? Anahtar bu telefondan silinir.', ok: 'Kaldır' }).then(ok => {
