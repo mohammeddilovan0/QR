@@ -71,6 +71,10 @@ label>input,label>select,label>.amt{margin-top:4px}
 .amt input:focus{outline:none}
 .amt:focus-within{outline:2px solid var(--accent);outline-offset:-1px}
 .amt span{padding:0 12px;color:var(--muted);font-weight:600;font-size:13px}
+/* İşlem panelinde tutar en önemli alan: büyük ve kalın (bankacılık uygulamalarındaki gibi) */
+#amtBox{border-radius:14px}
+#amtBox input{font-size:30px;font-weight:700;letter-spacing:-.01em;padding:12px 14px;height:auto;font-variant-numeric:tabular-nums}
+#amtBox span{font-size:16px}
 .amt.auto{background:var(--soft);border-style:dashed}
 .amt.auto input{background:transparent}
 .amt.auto::after{content:"otomatik";font-size:11px;color:var(--accent);font-weight:600;padding-right:10px}
@@ -78,19 +82,32 @@ label>input,label>select,label>.amt{margin-top:4px}
 .fxbox .hint{margin-top:-6px}
 .check{display:flex;gap:8px;align-items:center;color:var(--ink);font-size:13px;cursor:pointer}
 .check input{width:auto;margin:0}
-.accs{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
-.acc{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--card)}
+.accs{display:block;margin-top:2px}
+.acc{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;column-gap:12px;padding:10px 2px;border-top:1px solid var(--line);background:var(--card)}
+.acc:first-child{border-top:0}
+.acc-ic{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;font-size:14px;font-weight:700;line-height:1}
+.acc-ic.iqd{background:color-mix(in srgb,#3b82c4 16%,transparent);color:#3b82c4}
+.acc-ic.usd{background:color-mix(in srgb,#2e9e6b 18%,transparent);color:#2e9e6b;font-size:17px}
+.acc-ic.grp{background:color-mix(in srgb,#8b5cf6 16%,transparent);color:#8b5cf6}
+.acc .live{color:#16a34a;font-size:11px;flex:none}
+/* Açık tonlu simge kutusu (kategori, işlem): rengin %17'si zemin, simge/harf rengin kendisi */
+.tint{background:color-mix(in srgb,var(--c) 17%,transparent)!important;color:var(--c)}
+.tx .ic.tint,.ic.tint{font-size:18px;font-weight:700;color:var(--c)}
+.cic{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;flex:none;font-size:16px;font-weight:700;line-height:1}
+.cic.sm{width:26px;height:26px;border-radius:7px;font-size:13px}
+.cic.xs{width:24px;height:24px;border-radius:7px;font-size:13px;margin-right:2px}
 .grip{flex:none;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;margin:-8px -6px -8px 0;color:var(--muted);font-size:20px;line-height:1;cursor:grab;touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 .acc .n .grip{margin-left:auto}
 .lifting{position:relative;z-index:20;transition:none!important;box-shadow:0 10px 28px rgba(0,0,0,.28);border-radius:12px;background:var(--card);opacity:.96}
 .lifting.acc{transform-origin:center}
 body.reordering{-webkit-user-select:none;user-select:none}
-.acc .n{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.acc .n{font-size:15px;font-weight:550;color:var(--ink);display:flex;align-items:center;gap:6px;min-width:0}
 .acc .n>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .acc .n .cur{flex:none}
 .networth{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px;margin:-4px 0 12px}
-.acc .v{font-size:18px;font-weight:650;margin-top:2px}
-.acc.group .sublines{margin-top:8px;border-top:1px solid var(--line);padding-top:6px;display:grid;gap:3px}
+.acc .v{font-size:16px;font-weight:650;white-space:nowrap}
+.acc .grip{margin:-8px -8px -8px -6px}
+.acc.group .sublines{grid-column:2/-1;margin-top:6px;display:grid;gap:3px}
 .subline{display:flex;justify-content:space-between;gap:8px;font-size:13px}
 .subline span:first-child{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .subline span:first-child::before{content:"↳ "}
@@ -103,6 +120,9 @@ body.reordering{-webkit-user-select:none;user-select:none}
 .kpi{background:var(--soft);border-radius:12px;padding:12px}
 .kpi .l{font-size:12px;color:var(--muted)}
 .kpi .v{font-size:20px;font-weight:700;margin-top:2px}
+.kpi{container-type:inline-size}
+.kpi .v{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:clamp(14px,11cqw,20px)}
+small.cu{font-size:.6em;font-weight:600;opacity:.7;margin-left:1px;letter-spacing:0}
 .bar-row{display:grid;grid-template-columns:minmax(90px,150px) 1fr auto;gap:10px;align-items:center;padding:5px 0;cursor:pointer;border-radius:8px}
 @media (hover:hover){.bar-row:hover .bar-lbl{text-decoration:underline}}
 .bar-lbl{display:flex;align-items:center;gap:8px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
@@ -144,8 +164,19 @@ body.reordering{-webkit-user-select:none;user-select:none}
 .tcol.cur .tbar{background:var(--accent)}
 .tcol .tl{font-size:11px;color:var(--muted);white-space:nowrap}
 .tcol .tv{font-size:11px;color:var(--muted);white-space:nowrap}
-.filters{display:grid;gap:8px;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
-@media (min-width:760px){.filters{grid-template-columns:2fr 1fr 1fr 1fr 1fr auto}}
+.filters{display:grid;gap:8px;grid-template-columns:minmax(0,1fr) minmax(0,1fr);margin-top:10px}
+.tx-tools{display:flex;gap:8px;align-items:center}
+.tx-tools .q{flex:1;min-width:0}
+.tx-tools .btn{flex:none}
+.tx-tools .btn.on{border-color:var(--accent);color:var(--accent)}
+.fbadge{display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:6px;padding:0 5px;border-radius:9px;background:var(--accent);color:var(--accent-ink);font-size:11px;font-weight:700}
+.fbadge:empty{display:none}
+.fdate{display:grid;gap:4px;font-size:12px;color:var(--muted)}
+.s1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pbal .pb{text-align:right;white-space:nowrap}
+.pbal .pb>small{display:block;font-size:11px;margin-top:1px}
+.list-row .acc-ic{flex:none}
+@media (min-width:760px){.filters{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .day{font-size:12px;color:var(--muted);font-weight:600;padding:12px 2px 6px;display:flex;justify-content:space-between}
 .tx{display:flex;gap:12px;align-items:center;padding:10px;border-radius:10px;cursor:pointer}
 @media (hover:hover){.tx:hover{background:var(--soft)}}
@@ -304,7 +335,7 @@ html,body{overflow-x:hidden;overflow-x:clip;max-width:100%}
 .pnav{flex:1 1 auto;min-width:0}.pnav .lbl{flex:1;min-width:0}
 .kpis{grid-template-columns:repeat(auto-fit,minmax(min(130px,100%),1fr))}
 .kpi,.acc,.card,.m{min-width:0}
-.big,.kpi .v,.acc .v{overflow-wrap:anywhere}
+.big{overflow-wrap:anywhere}
 .bar-row{grid-template-columns:minmax(64px,140px) minmax(30px,1fr) auto}
 .debt .pays{grid-template-columns:minmax(0,1fr);min-width:0}
 .subline>span:last-child{flex:none}
@@ -416,7 +447,7 @@ dialog.sheet{overflow-x:hidden;touch-action:pan-y}
   #report h3{margin:18px 0 6px;break-after:avoid}
   #report .rp-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;border-bottom:2px solid var(--accent);padding-bottom:8px}
   #report .kpis{grid-template-columns:repeat(4,1fr)}
-  #report .kpi small{display:block;margin-top:4px;color:var(--muted);font-size:10px}
+  #report .kpi>small{display:block;margin-top:4px;color:var(--muted);font-size:10px}
   #report .kpi .v{font-size:16px}
   #report td,#report th{padding:5px 4px;vertical-align:top}
   #report tr{break-inside:avoid}
@@ -754,6 +785,27 @@ const ui = {
 
 const acc = id => db.accounts.find(a => a.id === id);
 const cat = id => db.categories.find(c => c.id === id);
+/* Kategori simgesi: seçilen emoji; seçilmediyse adından tahmin edilir (Market 🛒, Benzin ⛽…), o da olmazsa üst kategorininki,
+   o da yoksa adın ilk harfi. "none" seçildiyse hep harf. */
+const CAT_EMOJI = ['🛒', '🍽️', '🍴', '☕', '🍔', '🚗', '⛽', '🔧', '🧽', '🚕', '🧾', '💡', '💧', '📱', '🌐', '🏠', '🛋️', '💊', '🏥', '🎓',
+  '📚', '👕', '👟', '🎁', '✈️', '🎮', '🎬', '🍼', '🐾', '🏋️', '💼', '💰', '📈', '🤲', '🕌', '💸', '💳', '🧴', '✂️', '⚽'];
+const CAT_AUTO = [[/market|bakkal|manav|kasap|fırın/, '🛒'], [/restoran|lokanta|dışarıda|fast ?food|döner|pizza/, '🍴'], [/kahve|kafe|cafe|çay/, '☕'],
+  [/yemek|gıda|mutfak|yiyecek/, '🍽️'], [/benzin|yakıt|mazot|akaryakıt|dizel/, '⛽'], [/bakım|tamir|servis|lastik|yağ değiş/, '🔧'], [/yıkama/, '🧽'],
+  [/taksi|ulaşım|otobüs|uber|careem/, '🚕'], [/araba|araç|oto/, '🚗'], [/elektrik|jeneratör/, '💡'], [/(^|\s)su(\s|$)/, '💧'],
+  [/internet|telefon|mobil|kontör|asiacell|korek|zain/, '📱'], [/fatura|aidat/, '🧾'], [/kira/, '🏠'], [/(^|\s)ev(\s|$)|mobilya|eşya/, '🛋️'],
+  [/sağlık|ilaç|eczane|doktor|hastane/, '💊'], [/eğitim|okul|kurs|üniversite/, '🎓'], [/kitap/, '📚'], [/giyim|kıyafet|elbise/, '👕'], [/ayakkabı/, '👟'],
+  [/hediye/, '🎁'], [/tatil|seyahat|uçak|otel|gezi/, '✈️'], [/eğlence|oyun|sinema/, '🎮'], [/çocuk|bebek/, '🍼'], [/kedi|köpek|evcil/, '🐾'],
+  [/spor|gym|fitness/, '🏋️'], [/berber|kuaför/, '✂️'], [/kozmetik|bakım ürün/, '🧴'], [/bağış|sadaka|zekat|fitre/, '🤲'], [/maaş|prim|ikramiye/, '💼'],
+  [/yatırım|hisse|borsa|faiz|kâr payı/, '📈'], [/gelir|kazanç/, '💰']];
+function catEmoji(c, depth = 0) {
+  if (!c || c.emoji === 'none' || depth > 8) return '';
+  if (c.emoji) return c.emoji;
+  const n = String(c.name || '').toLocaleLowerCase('tr');
+  for (const [re, e] of CAT_AUTO) if (re.test(n)) return e;
+  return c.parentId ? catEmoji(cat(c.parentId), depth + 1) : '';
+}
+/* Simge kutusu: kategori renginin açık tonu üstünde emoji ya da kategori renginde baş harf. */
+const catIc = (c, cls = 'cic') => `<span class="${cls} tint" style="--c:${c ? c.color : '#999'}" aria-hidden="true">${catEmoji(c) || esc(String((c && c.name) || '•').trim()[0] || '•').toLocaleUpperCase('tr')}</span>`;
 const disp = () => db.settings.display;
 /* Kategoriler iki seviyeli: ana kategori ve (parentId ile) alt kategori. */
 const parents = tp => db.categories.filter(c => c.type === tp && (!c.parentId || !cat(c.parentId)));
@@ -828,7 +880,7 @@ function catTree(o) {
       ? `<button type="button" class="caret ${open ? 'open' : ''}" data-action="${o.tog}" data-id="${x.id}" ${at} aria-label="Alt kategoriler" aria-expanded="${open}">›</button>`
       : '<span class="caret-sp"></span>';
     return `<div class="cpick-row ${x.id === o.value ? 'sel' : ''}" style="padding-left:${8 + depth * 24}px">${caret}` +
-      `<span class="dot" style="background:${x.color}"></span>` +
+      catIc(x, 'cic xs') +
       `<button type="button" class="nm" data-action="${o.set}" data-id="${x.id}" ${at}>${esc(x.name)}</button>` +
       `${kids.length && !open ? `<span class="n">${kids.length} alt</span>` : ''}</div>` +
       (open ? kids.map(k => item(k, depth + 1)).join('') : '');
@@ -926,6 +978,8 @@ function fmt(n, cur, signed = false) {
   const a = Math.abs(n);
   return cur === 'USD' ? `${sign}$${fmtNum(a, 2)}` : `${sign}${fmtNum(a)} IQD`;
 }
+/* Büyük tutar (kutucuk, net servet, hesap bakiyesi): "IQD" küçük ve soluk yazılır ki rakam öne çıksın, satır bölünmesin. */
+const fmtH = (n, cur, signed) => cur === 'USD' ? fmt(n, cur, signed) : fmt(n, cur, signed).replace(/ IQD$/, ' <small class="cu">IQD</small>');
 function num(s) {
   s = String(s ?? '').trim().replace(/\s/g, '');
   if (!s) return NaN;
@@ -994,6 +1048,14 @@ const feeCat = () => { const c = cat(db.settings.feeCat); return c && c.type ===
 const MONTH = new Intl.DateTimeFormat('tr-TR', { month: 'long', year: 'numeric' });
 const MSHORT = new Intl.DateTimeFormat('tr-TR', { month: 'short' });
 const DAYFMT = new Intl.DateTimeFormat('tr-TR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+/* Liste gün başlığı: "Bugün", "Dün"; bu yılın günlerinde yıl yazılmaz ("25 Kasım Çarşamba"), eskilerde yazılır. */
+const DAYFMT_Y = new Intl.DateTimeFormat('tr-TR', { weekday: 'long', day: 'numeric', month: 'long' });
+function dayHead(date) {
+  const t = today();
+  if (date === t) return 'Bugün';
+  if (date === ymd(addDays(parse(t), -1))) return 'Dün';
+  return (date.slice(0, 4) === t.slice(0, 4) ? DAYFMT_Y : DAYFMT).format(parse(date));
+}
 function range(kind, anchor) {
   const d = parse(anchor);
   if (kind === 'week') {
@@ -1172,28 +1234,28 @@ function vOzet() {
   </div>`;
   const ins = insights(ui.period, ui.anchor);
 
-  return warn + remOzet() + goalOzet() + `
+  return warn + `
   <div class="card">
     <div class="muted" style="font-size:13px">Net servet (${D})</div>
-    <div class="big num ${total < 0 ? 'exp' : ''}">${fmt(total, D)}</div>
+    <div class="big num ${total < 0 ? 'exp' : ''}">${fmtH(total, D)}</div>
     ${hasDebt ? `<div class="networth tap" data-action="nav" data-tab="borclar"><span class="muted">Hesaplar <b class="num">${fmt(accTotal, D)}</b></span>${dt.lent ? `<span class="muted">Alacak <b class="num inc">+${fmt(dt.lent, D)}</b></span>` : ''}${dt.owed ? `<span class="muted">Borç <b class="num exp">−${fmt(dt.owed, D)}</b></span>` : ''}${inv ? `<span class="muted tap" data-action="tab" data-tab="yatirim">Yatırım <b class="num">${fmt(inv, D)}</b></span>` : ''}</div>` : ''}
     <div class="muted" style="font-size:12px;margin-bottom:12px">${esc(nowRateNote())}</div>
     ${db.accounts.length ? `<div class="accs" data-reorder-box>${accParents().map((a, _, all) => {
       const grip = all.length > 1 ? GRIP : '';
       const b = balance(a.id), kids = accChildren(a.id);
-      if (!kids.length) return `<div class="acc tap" data-action="acc-open" data-reorder="acc" data-id="${a.id}"><div class="n"><span>${esc(a.name)}</span><span class="cur">${a.currency}</span>${a.id === okxAccId() ? '<span style="color:#16a34a;font-size:11px">● canlı</span>' : ''}${grip}</div>
-        <div class="v num ${b < 0 ? 'exp' : ''}">${fmt(b, a.currency)}</div></div>`;
+      if (!kids.length) return `<div class="acc tap" data-action="acc-open" data-reorder="acc" data-id="${a.id}">${accIc(a)}<div class="n"><span>${esc(a.name)}</span>${a.id === okxAccId() ? '<span class="live">● canlı</span>' : ''}</div>
+        <div class="v num ${b < 0 ? 'exp' : ''}">${fmtH(b, a.currency)}</div>${grip}</div>`;
       // Grup kartı: toplam + ana hesabın kendi bakiyesi (kullanılıyorsa) + alt hesaplar
       const members = (accUsed(a.id) || Number(a.opening) ? [a] : []).concat(kids);
       const tot = [a, ...kids].reduce((s, x) => s + conv(balance(x.id), x.currency, D, r), 0);
-      return `<div class="acc group tap" data-action="acc-open" data-reorder="acc" data-id="${a.id}"><div class="n"><span>${esc(a.name)}</span><span class="cur">≈ ${D}</span>${grip}</div>
-        <div class="v num ${tot < 0 ? 'exp' : ''}">${fmt(tot, D)}</div>
+      return `<div class="acc group tap" data-action="acc-open" data-reorder="acc" data-id="${a.id}">${accIc(a, true)}<div class="n"><span>${esc(a.name)}</span><span class="cur">≈ ${D}</span></div>
+        <div class="v num ${tot < 0 ? 'exp' : ''}">${fmtH(tot, D)}</div>${grip}
         <div class="sublines">${members.map(x => {
           const xb = balance(x.id);
           return `<div class="subline tap" data-action="acc-open" data-id="${a.id}" data-sel="${x.id}"><span>${x === a ? 'Ana hesap' : esc(x.name)}</span><span class="num ${xb < 0 ? 'exp' : ''}">${fmt(xb, x.currency)}</span></div>`;
         }).join('')}</div></div>`;
     }).join('')}</div>` : `<div class="empty">Henüz hesap yok. <button class="btn sm" data-action="tab" data-tab="hesaplar">Hesap ekle</button></div>`}
-  </div>
+  </div>` + remOzet() + goalOzet() + `
 
   <div class="card">
     <div class="periodbar">
@@ -1211,10 +1273,10 @@ function vOzet() {
       <button class="btn sm" data-action="report" title="Bu ${ui.period === 'week' ? 'haftanın' : ui.period === 'year' ? 'yılın' : 'ayın'} raporunu PDF olarak kaydet">📄 PDF rapor</button>
     </div>
     <div class="kpis">
-      <div class="kpi"><div class="l">Harcama</div><div class="v num exp">${fmt(st.exp, D)}</div></div>
-      <div class="kpi"><div class="l">Gelir</div><div class="v num inc">${fmt(st.inc, D)}</div></div>
-      <div class="kpi"><div class="l">Net</div><div class="v num ${st.inc - st.exp < 0 ? 'exp' : 'inc'}">${fmt(st.inc - st.exp, D, true)}</div></div>
-      <div class="kpi"><div class="l">Günlük ortalama harcama</div><div class="v num">${fmt(avg, D)}</div></div>
+      <div class="kpi"><div class="l">Harcama</div><div class="v num">${fmtH(st.exp, D)}</div></div>
+      <div class="kpi"><div class="l">Gelir</div><div class="v num inc">${fmtH(st.inc, D)}</div></div>
+      <div class="kpi"><div class="l">Net</div><div class="v num ${st.inc - st.exp < 0 ? 'exp' : 'inc'}">${fmtH(st.inc - st.exp, D, true)}</div></div>
+      <div class="kpi"><div class="l">Günlük ortalama harcama</div><div class="v num">${fmtH(avg, D)}</div></div>
     </div>
     ${nativeLine}
     ${ins.length ? `<h3>Önceki ${ui.period === 'week' ? 'hafta' : ui.period === 'year' ? 'yıl' : 'ay'} ile karşılaştırma</h3>${insightsHtml(ins)}` : ''}
@@ -1280,15 +1342,17 @@ function monthList() {
   const firstIdx = rows.findIndex(r => r.v > 0), lastIdx = rows.reduce((l, r, i) => r.fut ? l : i, -1);
   const n = firstIdx >= 0 && lastIdx >= firstIdx ? lastIdx - firstIdx + 1 : 0;
   const nm = r => { const s = MNAME.format(parse(r.g.start)); return s[0].toUpperCase() + s.slice(1); };
+  // Yalnız harcamanın başladığı aydan bugüne kadar olan aylar (baştaki boş aylar ve gelecek aylar gösterilmez).
+  const shown = firstIdx < 0 ? [] : rows.filter((r, i) => i >= firstIdx && !r.fut);
   return `<div class="card">
     <div class="krow" style="margin-bottom:10px"><b style="flex:1;font-size:16px">Aylık harcamalar</b>
       <button class="icon" data-action="mon-year" data-n="-1" aria-label="Önceki yıl">‹</button>
       <b class="num" style="min-width:44px;text-align:center">${y}</b>
       <button class="icon" data-action="mon-year" data-n="1" aria-label="Sonraki yıl">›</button></div>
-    <div class="mon">${rows.map(r => `<div class="mr ${r.cur ? 'now' : ''} ${r.fut ? 'fut' : ''}" data-action="mon-open" data-d="${r.g.start}" title="${esc(r.g.label)} işlemlerini gör">
-      <span class="mn"><i>${r.m + 1}.</i>${esc(nm(r))}</span>
-      <span class="bar-track"><span class="bar-fill" style="display:block;width:${r.v ? Math.max(2, r.v / max * 100) : 0}%;background:var(--exp)"></span></span>
-      <span class="mv num">${r.fut ? '—' : fmt(r.v, D)}</span></div>`).join('')}
+    <div class="mon">${shown.map(r => `<div class="mr ${r.cur ? 'now' : ''}" data-action="mon-open" data-d="${r.g.start}" title="${esc(r.g.label)} işlemlerini gör">
+      <span class="mn">${esc(nm(r))}</span>
+      <span class="bar-track"><span class="bar-fill" style="display:block;width:${r.v ? Math.max(2, r.v / max * 100) : 0}%;background:var(--chart)"></span></span>
+      <span class="mv num">${fmt(r.v, D)}</span></div>`).join('') || `<div class="empty">${y} yılında harcama yok.</div>`}
       <div class="tot"><span>Toplam <b class="num">${fmt(tot, D)}</b></span><span class="muted">Aylık ort. <b class="num">${fmt(n ? tot / n : 0, D)}</b></span></div>
     </div></div>`;
 }
@@ -1353,10 +1417,10 @@ function reportHtml(kind, anchor) {
     <div class="muted r" style="font-size:12px">Hazırlanma: ${esc(fmtTs(Date.now()))}<br>Tutarlar: ${D} · 1 $ = ${fmtNum(rateAt(endBal))} IQD</div>
   </div>
   <div class="kpis">
-    <div class="kpi"><div class="l">Harcama</div><div class="v num exp">${fmt(st.exp, D)}</div><small>Önceki ${word}: ${fmt(ps.exp, D)} · ${chg(st.exp, ps.exp, false)}</small></div>
-    <div class="kpi"><div class="l">Gelir</div><div class="v num inc">${fmt(st.inc, D)}</div><small>Önceki ${word}: ${fmt(ps.inc, D)} · ${chg(st.inc, ps.inc, true)}</small></div>
-    <div class="kpi"><div class="l">Net</div><div class="v num ${st.inc - st.exp < 0 ? 'exp' : 'inc'}">${fmt(st.inc - st.exp, D, true)}</div><small>Önceki ${word}: ${fmt(ps.inc - ps.exp, D, true)}</small></div>
-    <div class="kpi"><div class="l">Günlük ortalama harcama</div><div class="v num">${fmt(avg, D)}</div><small>${days} gün</small></div>
+    <div class="kpi"><div class="l">Harcama</div><div class="v num exp">${fmtH(st.exp, D)}</div><small>Önceki ${word}: ${fmt(ps.exp, D)} · ${chg(st.exp, ps.exp, false)}</small></div>
+    <div class="kpi"><div class="l">Gelir</div><div class="v num inc">${fmtH(st.inc, D)}</div><small>Önceki ${word}: ${fmt(ps.inc, D)} · ${chg(st.inc, ps.inc, true)}</small></div>
+    <div class="kpi"><div class="l">Net</div><div class="v num ${st.inc - st.exp < 0 ? 'exp' : 'inc'}">${fmtH(st.inc - st.exp, D, true)}</div><small>Önceki ${word}: ${fmt(ps.inc - ps.exp, D, true)}</small></div>
+    <div class="kpi"><div class="l">Günlük ortalama harcama</div><div class="v num">${fmtH(avg, D)}</div><small>${days} gün</small></div>
   </div>
   ${ins.length ? `<h3>Öne çıkanlar</h3>${insightsHtml(ins)}` : ''}
   ${months ? `<h3>Aylara göre</h3><table><tr><th>Ay</th><th class="r">Harcama</th><th class="r">Gelir</th><th class="r">Net</th></tr>${months}</table>` : ''}
@@ -1398,24 +1462,31 @@ async function printReport() {
 function vTx() {
   const f = ui.f;
   const accOpts = accOptions(accOrdered(), f.acc);
+  const nf = fCount();
   return `
   <div class="card">
-    <div class="filters">
-      <input data-filter="q" placeholder="Notta ara…" value="${esc(f.q)}" style="grid-column:1/-1" class="q">
+    <div class="tx-tools">
+      <input data-filter="q" placeholder="İşlemlerde ara…" value="${esc(f.q)}" class="q" type="search" enterkeyhint="search">
+      <button type="button" class="btn ${ui.fOpen || nf ? 'on' : ''}" data-action="f-toggle" aria-expanded="${!!ui.fOpen}">Filtre<b class="fbadge num" id="fBadge">${nf || ''}</b></button>
+      <button type="button" class="btn ${ui.sel ? 'primary' : ''}" data-action="sel-mode">${ui.sel ? 'Bitti' : 'Seç'}</button>
+    </div>
+    <div class="filters ${ui.fOpen ? '' : 'hide'}">
       <select data-filter="acc"><option value="">Tüm hesaplar</option>${accOpts}</select>
       <button type="button" class="cpick-btn fpick-btn" data-action="fpick" id="fpickBtn"></button>
       <div id="fpick" class="cpick hide" style="grid-column:1/-1;margin-top:0"></div>
-      <input type="date" data-filter="from" value="${f.from}" title="Başlangıç">
-      <input type="date" data-filter="to" value="${f.to}" title="Bitiş">
-      <button class="btn" data-action="clear-f">Temizle</button>
-      <button class="btn ${ui.sel ? 'primary' : ''}" data-action="sel-mode">${ui.sel ? 'Seçimi bitir' : '☑︎ Seç'}</button>
+      <label class="fdate">Başlangıç<input type="date" data-filter="from" value="${f.from}"></label>
+      <label class="fdate">Bitiş<input type="date" data-filter="to" value="${f.to}"></label>
+      <button class="btn" data-action="clear-f" style="grid-column:1/-1">Filtreleri temizle</button>
     </div>
     <div id="txlist"></div>
   </div>
   <div id="selbar" class="selbar ${ui.sel ? '' : 'hide'}"></div>`;
 }
+/* Açık filtre sayısı (arama hariç): hesap, kategori, başlangıç, bitiş. */
+const fCount = () => ['acc', 'cat', 'from', 'to'].filter(k => ui.f[k]).length;
 function renderTxList() {
   const el = $('#txlist'); if (!el) return;
+  const fb = $('#fBadge'); if (fb) { const n = fCount(); fb.textContent = n || ''; fb.closest('button').classList.toggle('on', !!ui.fOpen || !!n); }
   const f = ui.f, q = f.q.trim().toLocaleLowerCase('tr');
   const D = disp();
   const rows = db.tx.filter(t => {
@@ -1453,7 +1524,7 @@ function renderTxList() {
   const up = top && cat(top.parentId);
   const subBar = subs.length ? `<div class="chips subchips">${up ? subChip(up.id, `‹ ${up.name}`) : ''}${subChip(top.id, `Tümü · ${top.name}`)}${subs.map(k => subChip(k.id, k.name)).join('')}</div>` : '';
   const summary = subBar + `<div class="chips"><span class="chip">${rows.length} işlem</span>
-    <span class="chip">Harcama: <b class="exp num">${fmt(exp, D)}</b></span>
+    <span class="chip">Harcama: <b class="num">${fmt(exp, D)}</b></span>
     <span class="chip">Gelir: <b class="inc num">${fmt(inc, D)}</b></span>
     ${active ? '<span class="chip">Filtre açık</span>' : ''}</div>`;
 
@@ -1470,7 +1541,7 @@ function renderTxList() {
   for (const t of rows) {
     if (t.date !== lastDay) {
       lastDay = t.date;
-      html += `<div class="day"><span>${esc(DAYFMT.format(parse(t.date)))}</span>${dayTotals[t.date] ? `<span class="num">−${fmt(dayTotals[t.date], D)}</span>` : ''}</div>`;
+      html += `<div class="day"><span>${esc(dayHead(t.date))}</span>${dayTotals[t.date] ? `<span class="num">−${fmt(dayTotals[t.date], D)}</span>` : ''}</div>`;
     }
     html += ui.sel ? selRow(t) : txRow(t);
   }
@@ -1483,7 +1554,7 @@ const selectable = t => t.type === 'expense' || t.type === 'income';
 function selRow(t) {
   const { title, sub, col, ic, amt } = txInfo(t), ok = selectable(t);
   return `<div class="tx ${ok ? '' : 'dis'} ${ui.sel.has(t.id) ? 'on' : ''}" ${ok ? `data-action="sel-tx" data-id="${t.id}"` : ''}>
-    <span class="ck">✓</span><div class="ic" style="background:${col}">${ic}</div>
+    <span class="ck">✓</span><div class="ic tint" style="--c:${col}">${ic}</div>
     <div class="m"><div class="t">${esc(title)}</div><div class="s">${esc(sub)}</div></div>
     <div class="a">${amt}</div></div>`;
 }
@@ -1561,12 +1632,12 @@ function vHesap() {
   const chip = (x, label) => `<button class="chip pick ${(ui.accSel || '') === (x ? x.id : '') ? 'sel' : ''}" data-action="acc-sel" data-id="${x ? x.id : ''}">${esc(label)}</button>`;
   let rows = '', last = '';
   for (const t of shown) {
-    if (t.date !== last) { last = t.date; rows += `<div class="day"><span>${esc(DAYFMT.format(parse(t.date)))}</span></div>`; }
+    if (t.date !== last) { last = t.date; rows += `<div class="day"><span>${esc(dayHead(t.date))}</span></div>`; }
     const { title, sub, col, ic, locked } = txInfo(t), d = delta(t);
     const amt = Math.abs(d) < (C === 'USD' ? 0.005 : 0.5) ? `<span class="num muted">⇄ ${fmt(t.amount, acc(t.accountId)?.currency || C)}</span>`
       : `<span class="num ${d < 0 ? 'exp' : 'inc'}">${d < 0 ? '−' : '+'}${fmt(Math.abs(d), C)}</span>`;
     const row = `<div class="tx" data-action="${isInvTx(t) ? 'inv-tx' : locked ? 'debt-tx' : 'edit-tx'}" data-id="${t.id}">
-      <div class="ic" style="background:${col}">${ic}</div>
+      <div class="ic tint" style="--c:${col}">${ic}</div>
       <div class="m"><div class="t">${esc(title)}</div><div class="s">${esc(sub)}</div></div>
       <div class="a">${amt}<br><small class="muted num">${one && !liveOkx ? fmt(after[t.id], C) : ''}</small></div></div>`;
     rows += locked ? row : swRow(row, swBtn('Sil', 'del-tx', t.id));
@@ -1577,8 +1648,8 @@ function vHesap() {
       <button class="btn sm" data-action="edit-acc" data-id="${(sel || a).id}">Düzenle</button></div>
     ${kids.length ? `<div class="chips">${chip(null, 'Tümü')}${chip(a, 'Ana hesap')}${kids.map(k => chip(k, k.name)).join('')}</div>` : ''}
     <div class="kpis">
-      <div class="kpi"><div class="l">Bu ay giren</div><div class="v num inc">${fmt(inn, C)}</div></div>
-      <div class="kpi"><div class="l">Bu ay çıkan</div><div class="v num exp">${fmt(out, C)}</div></div>
+      <div class="kpi"><div class="l">Bu ay giren</div><div class="v num inc">${fmtH(inn, C)}</div></div>
+      <div class="kpi"><div class="l">Bu ay çıkan</div><div class="v num">${fmtH(out, C)}</div></div>
     </div>
     <div class="kbtns">
       <button class="btn" data-action="acc-tx" data-type="expense">− Gider</button>
@@ -1614,7 +1685,7 @@ function txInfo(t) {
     const h = { sym: invSym(t), atype: invType(t) }, buy = t.type === 'inv-buy', [, ic0, c0] = invIcon(h);
     title = `${buy ? 'Alım' : 'Satış'} · ${invName(h)}`; col = c0; ic = ic0;
     sub = `${fmtQty(+t.qty, h)} × ${fmtUsd(+t.price)}` + (a ? ' · ' + accLabel(a) : '');
-    amt = a ? `<span class="num ${buy ? 'exp' : 'inc'}">${buy ? '−' : '+'}${fmt(t.amount, cur)}</span>` + (cur !== 'USD' ? `<br><small class="muted num">${fmtUsd(invUsd(t))}</small>` : '')
+    amt = a ? `<span class="num ${buy ? '' : 'inc'}">${buy ? '−' : '+'}${fmt(t.amount, cur)}</span>` + (cur !== 'USD' ? `<br><small class="muted num">${fmtUsd(invUsd(t))}</small>` : '')
       : `<span class="num muted">${fmtUsd(invUsd(t))}</span>`;
   } else if (t.type === 'opening') {
     title = 'Başlangıç Girişi'; col = '#14b8a6'; ic = 'B';
@@ -1626,15 +1697,15 @@ function txInfo(t) {
     title = t.debtKind === 'lent' ? (incoming ? 'Alacak Tahsilatı' : 'Borç Verildi') : (incoming ? 'Borç Alındı' : 'Borç Ödemesi');
     col = incoming ? '#2e9e6b' : '#d9534f'; ic = incoming ? '↓' : '↑';
     sub = `${t.person ? t.person + ' · ' : ''}${accLabel(a)}`;
-    amt = `<span class="num ${incoming ? 'inc' : 'exp'}">${incoming ? '+' : '−'}${fmt(t.amount, cur)}</span>` +
+    amt = `<span class="num ${incoming ? 'inc' : ''}">${incoming ? '+' : '−'}${fmt(t.amount, cur)}</span>` +
       (t.fee ? `<br><small class="exp num">ücret −${fmt(t.fee, txCur(t))}${feeAccId(t) !== t.accountId ? ' · ' + esc(accLabel(acc(feeAccId(t)))) : ''}</small>` : '');
   } else {
     const c = cat(t.categoryId);
     title = c ? catLabel(c) : (t.type === 'income' ? 'Gelir' : 'Kategorisiz');
     col = c ? c.color : (t.type === 'income' ? '#2e9e6b' : '#999');
-    ic = esc((c ? c.name : title).trim()[0] || '•').toLocaleUpperCase('tr');
+    ic = catEmoji(c) || esc((c ? c.name : title).trim()[0] || '•').toLocaleUpperCase('tr');
     sub = (t.type === 'income' && t.forMonth ? forMonthLabel(t.forMonth) + ' için · ' : '') + accLabel(a);
-    amt = `<span class="num ${t.type === 'expense' ? 'exp' : 'inc'}">${t.type === 'expense' ? '−' : '+'}${fmt(t.amount, cur)}</span>` +
+    amt = `<span class="num ${t.type === 'expense' ? '' : 'inc'}">${t.type === 'expense' ? '−' : '+'}${fmt(t.amount, cur)}</span>` +
       (t.paid ? `<br><small class="muted num">${fmt(t.paid.amount, t.paid.currency)} · 1 $ = ${fmtNum(cur === 'IQD' ? t.amount / t.paid.amount : t.paid.amount / t.amount)}</small>` : '');
     const L = txLiters(t);
     if (L) amt += `<br><small class="muted num">${fmtL(L)} · ${fmt(t.amount / L, cur)}/L</small>`;
@@ -1646,7 +1717,7 @@ function txInfo(t) {
 function txRow(t) {
   const { title, sub, col, ic, amt, locked } = txInfo(t);
   const row = `<div class="tx" data-action="${isInvTx(t) ? 'inv-tx' : locked ? 'debt-tx' : 'edit-tx'}" data-id="${t.id}">
-    <div class="ic" style="background:${col}">${ic}</div>
+    <div class="ic tint" style="--c:${col}">${ic}</div>
     <div class="m"><div class="t">${esc(title)}</div><div class="s">${esc(sub)}</div></div>
     <div class="a">${amt}</div></div>`;
   // Borç/alacak hareketleri kendi ekranından silinir.
@@ -1661,9 +1732,9 @@ function vAcc() {
     const tot = kids.length ? [a, ...kids].reduce((s, x) => s + conv(balance(x.id), x.currency, D, r), 0) : 0;
     const sibs = isChild ? accChildren(a.parentId) : accParents();
     return swRow(`<div class="list-row tap ${isChild ? 'child' : ''}" data-action="edit-acc" data-id="${a.id}">
-      ${sibs.length > 1 ? GRIP : ''}<span class="cur">${a.currency}</span>
-      <div class="m"><b>${isChild ? '↳ ' : ''}${esc(a.name)}</b><div class="muted" style="font-size:12px">${n} işlem · açılış ${fmt(Number(a.opening) || 0, a.currency)}${a.currency !== D ? ` · ≈ ${fmt(conv(b, a.currency, D, r), D)}` : ''}${kids.length ? ` · <b>grup toplamı ≈ ${fmt(tot, D)}</b>` : ''}</div></div>
-      <b class="num ${b < 0 ? 'exp' : ''}">${fmt(b, a.currency)}</b><span class="chev-r">›</span>
+      ${sibs.length > 1 ? GRIP : ''}${accIc(a)}
+      <div class="m"><b>${isChild ? '↳ ' : ''}${esc(a.name)}</b><div class="muted s1" style="font-size:12px">${n} işlem · açılış ${fmt(Number(a.opening) || 0, a.currency)}${a.currency !== D ? ` · ≈ ${fmt(conv(b, a.currency, D, r), D)}` : ''}${kids.length ? ` · <b>grup toplamı ≈ ${fmt(tot, D)}</b>` : ''}</div></div>
+      <b class="num ${b < 0 ? 'exp' : ''}" style="white-space:nowrap">${fmtH(b, a.currency)}</b><span class="chev-r">›</span>
     </div>`, swBtn('Sil', 'del-acc', a.id));
   };
   return `
@@ -1707,7 +1778,7 @@ function vCat() {
       ? `<button class="caret ${open ? 'open' : ''}" data-action="toggle-cat" data-id="${c.id}" aria-label="${open ? 'Alt kategorileri gizle' : 'Alt kategorileri göster'}" aria-expanded="${open}">›</button>`
       : '<span class="caret-sp"></span>';
     return swRow(`<div class="list-row" style="${depth ? `padding-left:${4 + depth * 22}px` : ''}">
-      ${caret}<span class="dot" style="background:${c.color};width:${depth ? 10 : 14}px;height:${depth ? 10 : 14}px"></span>
+      ${caret}${catIc(c, depth ? 'cic sm' : 'cic')}
       <div class="m tog" data-action="cat-tx" data-id="${c.id}" title="İşlemlerini göster"><b style="${depth ? 'font-weight:500' : ''}">${depth ? '↳ ' : ''}${esc(c.name)}</b><div class="muted" style="font-size:12px">${nAll} işlem${kids.length ? ` · ${kids.length} alt kategori` : ''}${month ? ` · bu ay ${fmt(month, D)}` : ''}</div></div>
       <span class="chev-r">›</span>
     </div>`, swBtn('+ Alt', 'add-sub', c.id, 'ok') + swBtn('Düzenle', 'edit-cat', c.id, 'edit') + swBtn('Sil', 'del-cat', c.id));
@@ -1748,6 +1819,8 @@ function catSheet() {
         <option value="expense" ${type !== 'income' ? 'selected' : ''}>Gider</option>
         <option value="income" ${type === 'income' ? 'selected' : ''}>Gelir</option></select></label>
       <label>Renk<input type="color" name="color" value="${color}"></label>
+      <div><label>Simge <span class="muted">(Otomatik: adına göre seçilir)</span></label><input type="hidden" name="emoji" value="${esc(e?.emoji || '')}">
+        <div class="emo">${['', 'none', ...CAT_EMOJI].map(x => `<button type="button" class="chip pick ${x === (e?.emoji || '') ? 'sel' : ''}" data-action="cat-emoji" data-v="${x}">${x === '' ? 'Otomatik' : x === 'none' ? 'Harf' : x}</button>`).join('')}</div></div>
       ${e ? `<button type="button" class="btn block" data-action="add-sub" data-id="${e.id}">+ Alt kategori ekle</button>` : ''}
       ${e ? `<button type="button" class="btn danger block" data-action="del-cat" data-id="${e.id}">Kategoriyi sil</button>` : ''}
     </div></form>`);
@@ -2112,9 +2185,9 @@ function vDebt() {
   return `
   <div class="card">
     <div class="kpis" style="margin-top:0">
-      <div class="kpi"><div class="l">Alacağım</div><div class="v num inc">${fmt(t.lent, D)}</div></div>
-      <div class="kpi"><div class="l">Borcum</div><div class="v num exp">${fmt(t.owed, D)}</div></div>
-      <div class="kpi"><div class="l">Net</div><div class="v num ${t.lent - t.owed < 0 ? 'exp' : 'inc'}">${fmt(t.lent - t.owed, D, true)}</div></div>
+      <div class="kpi"><div class="l">Alacağım</div><div class="v num inc">${fmtH(t.lent, D)}</div></div>
+      <div class="kpi"><div class="l">Borcum</div><div class="v num exp">${fmtH(t.owed, D)}</div></div>
+      <div class="kpi"><div class="l">Net</div><div class="v num ${t.lent - t.owed < 0 ? 'exp' : 'inc'}">${fmtH(t.lent - t.owed, D, true)}</div></div>
     </div>
   </div>
   ${(() => {
@@ -2150,13 +2223,14 @@ const personName = () => { const p = personOf(ui.person); return p ? p.name : 'K
 const pColor = k => PCOL[[...k].reduce((s, c) => s + c.charCodeAt(0), 0) % PCOL.length];
 const balLines = (p, big) => ['IQD', 'USD'].filter(c => Math.abs(p.bal[c]) >= (c === 'USD' ? 0.005 : 0.5)).map(c => {
   const v = p.bal[c];
-  return `<div><small class="muted">${v > 0 ? 'Alacağım' : 'Borcum'}</small> <b class="num ${v > 0 ? 'inc' : 'exp'}"${big ? ' style="font-size:22px"' : ''}>${fmt(Math.abs(v), c)}</b></div>`;
+  return big ? `<div><small class="muted">${v > 0 ? 'Alacağım' : 'Borcum'}</small> <b class="num ${v > 0 ? 'inc' : 'exp'}" style="font-size:22px">${fmt(Math.abs(v), c)}</b></div>`
+    : `<div class="pb"><b class="num ${v > 0 ? 'inc' : 'exp'}">${fmtH(Math.abs(v), c)}</b><small class="muted">${v > 0 ? 'alacağım' : 'borcum'}</small></div>`;
 }).join('');
 function personRow(p) {
   const n = p.debts.length, bl = balLines(p);
   return `<div class="list-row tap" data-action="person-open" data-key="${esc(p.key)}">
     <span class="pav" style="background:${pColor(p.key)}">${esc((p.name.trim()[0] || '?').toLocaleUpperCase('tr'))}</span>
-    <div class="m"><b>${esc(p.name)}</b><div class="muted" style="font-size:12px">${n} kayıt · son hareket ${esc(SHORTDATE.format(parse(p.last)))}</div></div>
+    <div class="m"><b>${esc(p.name)}</b><div class="muted s1" style="font-size:12px">${n} kayıt · ${esc(SHORTDATE.format(parse(p.last)))}</div></div>
     <div class="pbal">${bl || '<span class="muted">Kapandı</span>'}</div><span class="chev-r">›</span></div>`;
 }
 /* Kişinin ekstresi: eskiden yeniye yürüyen bakiye hesaplanır, yeniden eskiye gösterilir. */
@@ -2249,7 +2323,7 @@ function debtTxCard() {
   const shown = all.slice(0, ui.debtTxN || 30);
   let rows = '', last = '';
   for (const t of shown) {
-    if (t.date !== last) { last = t.date; rows += `<div class="day"><span>${esc(DAYFMT.format(parse(t.date)))}</span></div>`; }
+    if (t.date !== last) { last = t.date; rows += `<div class="day"><span>${esc(dayHead(t.date))}</span></div>`; }
     rows += txRow(t);
   }
   return `<div class="card"><h2>Hareketler</h2>
@@ -2667,9 +2741,9 @@ function vGoals() {
   const st = sum('t'), ss = sum('s');
   return `${act.length ? `<div class="card">
     <div class="kpis" style="margin-top:0">
-      <div class="kpi"><div class="l">Biriken</div><div class="v num inc">${fmt(ss, D)}</div></div>
-      <div class="kpi"><div class="l">Hedeflerin toplamı</div><div class="v num">${fmt(st, D)}</div></div>
-      <div class="kpi"><div class="l">Kalan</div><div class="v num">${fmt(Math.max(0, st - ss), D)}</div></div>
+      <div class="kpi"><div class="l">Biriken</div><div class="v num inc">${fmtH(ss, D)}</div></div>
+      <div class="kpi"><div class="l">Hedeflerin toplamı</div><div class="v num">${fmtH(st, D)}</div></div>
+      <div class="kpi"><div class="l">Kalan</div><div class="v num">${fmtH(Math.max(0, st - ss), D)}</div></div>
     </div></div>` : ''}
   <div class="card">${act.length ? act.map(g => goalRow(g)).join('') : '<div class="empty">Bütün hedefler tamamlandı 🎉</div>'}</div>
   ${done.length ? `<div class="card"><h2>Tamamlananlar</h2>${done.map(g => goalRow(g)).join('')}</div>` : ''}
@@ -3347,7 +3421,7 @@ function okxActRow(x) {
     r1 = (dep ? '+' : '−') + n(x.qty);
     if (!dep && x.fee) r2 = `ağ ücreti ${q(x.fee)}`;
   }
-  return `<div class="tx tap" data-action="okx-act" data-id="${esc(x.id)}"><div class="ic" style="background:${col}">${ic}</div>
+  return `<div class="tx tap" data-action="okx-act" data-id="${esc(x.id)}"><div class="ic tint" style="--c:${col}">${ic}</div>
     <div class="m"><div class="t">${title}</div><div class="s num">${sub}</div></div>
     <div class="a"><b class="num">${r1}</b>${r2 ? `<small class="num muted">${r2}</small>` : ''}</div></div>`;
 }
@@ -3908,6 +3982,8 @@ document.addEventListener('pointerup', endDrag);
 document.addEventListener('pointercancel', endDrag);
 /* Sürükleme tutamağı (≡): yalnız buradan tutulunca kart sürüklenir; kartın kendisi dokunma ve kaydırmada normal davranır. */
 const GRIP = '<span class="grip" data-action="grip" aria-label="Sırala">≡</span>';
+/* Hesap simgesi: dolar hesabında "$", dinar hesabında "د.ع"; grup (alt hesaplı) hesapta adın ilk harfi. */
+const accIc = (a, group) => `<span class="acc-ic ${group ? 'grp' : a.currency === 'USD' ? 'usd' : 'iqd'}" aria-hidden="true">${group ? esc((a.name.trim()[0] || '•').toLocaleUpperCase('tr')) : a.currency === 'USD' ? '$' : 'د.ع'}</span>`;
 /* Sürükleyerek sıralama (Özet'teki hesap kartları, Hesaplar listesi): ≡ tutamağından tutunca kart kalkar, parmakla birlikte
    gider, başka bir kartın üstüne gelince yer değiştirir. Bırakınca yeni sıra db.accounts'a yazılır. */
 let ro = null;
@@ -4343,6 +4419,7 @@ document.addEventListener('click', e => {
       ui.tab = 'islemler'; render(); scrollTo(0, 0); break;
     }
     case 'clear-f': ui.f = { q: '', acc: '', cat: '', from: '', to: '' }; ui.fcShow = false; render(); break;
+    case 'f-toggle': ui.fOpen = !ui.fOpen; render(); break;
     case 'new-tx': openTx(d.type); if (ui.tab === 'hesap') accPreset(); break;
     case 'acc-open':
       if (!acc(d.id)) break;
@@ -4600,6 +4677,10 @@ document.addEventListener('click', e => {
       });
       break;
     }
+    case 'cat-emoji': {
+      const f = el.closest('form'); f.elements.emoji.value = d.v;
+      f.querySelectorAll('[data-action=cat-emoji]').forEach(b => b.classList.toggle('sel', b === el)); break;
+    }
     case 'goal-emoji': {
       const f = el.closest('form'); f.elements.emoji.value = d.v;
       f.querySelectorAll('[data-action=goal-emoji]').forEach(b => b.classList.toggle('sel', b === el)); break;
@@ -4694,12 +4775,12 @@ document.addEventListener('submit', e => {
       if (c.type !== type && db.tx.some(t => desc.has(t.categoryId))) {
         toast('İşlemi olan kategorinin türü (gider/gelir) değiştirilemez.'); return;
       }
-      Object.assign(c, { name, type, color: v.color, parentId });
+      Object.assign(c, { name, type, color: v.color, parentId, emoji: v.emoji || '' });
       desc.forEach(k => { const x = cat(k); if (x) x.type = type; });
       if (parentId) catPath(parentId).forEach(x => ui.openCats.add(x.id));
       ui.editCat = null; toast('Kategori güncellendi');
     } else {
-      db.categories.push({ id: uid(), name, type, color: v.color, parentId: par ? par.id : '' });
+      db.categories.push({ id: uid(), name, type, color: v.color, parentId: par ? par.id : '', emoji: v.emoji || '' });
       if (par) catPath(par.id).forEach(x => ui.openCats.add(x.id));
       toast(par ? `"${par.name}" altına eklendi` : 'Kategori eklendi');
       // Aynı ana kategoriye art arda alt kategori eklemeyi kolaylaştırmak için form açık kalır.
