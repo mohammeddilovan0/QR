@@ -3242,7 +3242,7 @@ function okxStream() {
   if (okx.privOk && can('biz')) okxOpen('biz', 'business', sock => okxLogin(sock).catch(() => sock.close()), (m, sock) => {
     if (m.event === 'login' && String(m.code) === '0') sock.send(JSON.stringify({ op: 'subscribe', args: [{ channel: 'deposit-info' }, { channel: 'withdrawal-info' }] }));
     else if (m.event === 'error' && /login/i.test(m.msg || '')) { okxTry.biz = Date.now() + 60e3; sock.close(); }
-    else if (m.arg && /^(deposit|withdrawal)-info$/.test(m.arg.channel) && m.data && m.data.length) { okxKick(); setTimeout(() => okxActLoad(true), 1500); }
+    else if (m.arg && /^(deposit|withdrawal)-info$/.test(m.arg.channel) && m.data && m.data.length) okxKick();
   });
 }
 function okxDraw() {
@@ -3372,16 +3372,11 @@ function okxHoldCard() {
 }
 function okxActCard() {
   okxShown.act = okxActBody(false);
-  return `<div class="card" id="okxActCard"><h2>İşlemler <span class="muted okx-h2s">son 3 ay</span></h2><div id="okxActBody">${okxShown.act}</div></div>`;
+  return `<div class="card" id="okxActCard"><h2>Alım-satımlar <span class="muted okx-h2s">son 3 ay</span></h2><div id="okxActBody">${okxShown.act}</div></div>`;
 }
-/* ---------- İşlemler: alım-satım, Convert, para yatırma/çekme ----------
-   OKX'te son 3 ay: spot emirler (dolum kayıtları; aynı emrin parçaları birleşir), Convert, yatırma ve çekme geçmişi.
-   Yatırım ekranı ya da coin detayı açılınca sorulur (en çok dakikada bir); alım-satım ya da yatırma/çekme olunca hemen. */
-const OKX_DEP_ST = { 0: 'onay bekliyor', 1: 'hesaba geçti', 8: 'beklemede', 11: 'engellendi', 12: 'donduruldu', 13: 'engellendi', 14: 'kimlik doğrulama sınırı' };
-const OKX_WD_ST = { '-3': 'iptal ediliyor', '-2': 'iptal edildi', '-1': 'başarısız', 0: 'bekliyor', 1: 'gönderiliyor', 7: 'onaylandı', 10: 'bekliyor' };
-const okxActState = x => x.k === 'trade' || String(x.state) === '2' || x.state === undefined || x.state === '' ? '' :
-  (x.k === 'dep' ? OKX_DEP_ST : OKX_WD_ST)[x.state] || 'işleniyor';
-const okxShort = v => { v = String(v || ''); return v.length > 16 ? v.slice(0, 8) + '…' + v.slice(-6) : v; };
+/* ---------- Alım-satımlar ----------
+   OKX'te son 3 ay: spot emirler (dolum kayıtları; aynı emrin parçaları birleşir) ve Convert. Para yatırma/çekme gösterilmez.
+   Yatırım ekranı ya da coin detayı açılınca sorulur (en çok dakikada bir); alım-satım olunca hemen. */
 // Dolar dışı bir çiftle yapıldıysa (ör. PAXG-BTC) tutar o birimle yazılır.
 const okxInQ = (v, q, px) => STABLE.includes(q) ? (px ? fmtPx(v) : fmtUsd(v)) : `${v.toLocaleString('en-US', { maximumSignificantDigits: 8 })} ${esc(q)}`;
 async function okxActLoad(force) {
@@ -3391,9 +3386,7 @@ async function okxActLoad(force) {
   const res = await Promise.allSettled([
     okxGet('/api/v5/trade/fills-history?instType=SPOT&limit=100', cred),
     okxGet('/api/v5/trade/fills?instType=SPOT&limit=100', cred),
-    okxGet('/api/v5/asset/convert/history?limit=100', cred),
-    okxGet('/api/v5/asset/deposit-history?limit=100', cred),
-    okxGet('/api/v5/asset/withdrawal-history?limit=100', cred)]);
+    okxGet('/api/v5/asset/convert/history?limit=100', cred)]);
   if (gen !== okx.gen) return;
   a.busy = false; a.at = Date.now();
   if (res.every(r => r.status === 'rejected')) { if (!a.list) a.err = okxNetErr(res[0].reason); okxPaint(); return; }
@@ -3414,8 +3407,6 @@ async function okxActLoad(force) {
   for (const c of val(2)) if (!c.state || c.state === 'fullyFilled')
     list.push({ id: 'c' + (c.tradeId || c.ts), k: 'trade', via: 'convert', side: c.side, ccy: c.baseCcy, q: c.quoteCcy, ts: +c.ts,
       qty: +c.fillBaseSz || 0, quote: +c.fillQuoteSz || 0, px: +c.fillPx || 0, fee: 0 });
-  for (const d of val(3)) list.push({ id: 'd' + (d.depId || d.txId || d.ts), k: 'dep', ccy: d.ccy, ts: +d.ts, qty: +d.amt || 0, state: d.state, chain: d.chain, from: d.from, to: d.to, txId: d.txId });
-  for (const w of val(4)) list.push({ id: 'w' + (w.wdId || w.txId || w.ts), k: 'wd', ccy: w.ccy, ts: +w.ts, qty: +w.amt || 0, fee: parseFloat(w.fee) || 0, state: w.state, chain: w.chain, to: w.to, txId: w.txId });
   a.list = list.filter(x => x.ccy && x.qty > 0 && x.ts > 0).sort((p, q) => q.ts - p.ts);
   a.err = '';
   okxPaint();
@@ -3427,31 +3418,16 @@ function okxActWhen(ts, long) {
     : Object.assign({ day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }, d.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}));
 }
 function okxActRow(x) {
-  const q = v => `${v.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${esc(x.ccy)}`, n = v => v.toLocaleString('en-US', { maximumFractionDigits: 8 });
-  let ic, col, title, sub, r1, r2 = '';
-  if (x.k === 'trade') {
-    const buy = x.side !== 'sell';
-    ic = buy ? '+' : '−'; col = buy ? '#1f7a4a' : '#b4432f';
-    title = `${esc(x.ccy)} ${buy ? 'alış' : 'satış'}${x.via === 'convert' ? ' <span class="muted okx-nm">Convert</span>' : ''}`;
-    sub = `${esc(okxActWhen(x.ts))}</div><div class="s num">1 ${esc(x.ccy)} = ${okxInQ(x.px, x.q, true)}`;
-    r1 = (buy ? '+' : '−') + n(x.qty); r2 = `${buy ? 'ödenen' : 'alınan'} ${okxInQ(x.quote, x.q)}`;
-  } else {
-    const dep = x.k === 'dep', st = okxActState(x);
-    ic = dep ? '↓' : '↑'; col = dep ? '#3b82c4' : '#8b5cf6';
-    title = `${esc(x.ccy)} ${dep ? 'yatırma' : 'çekme'}`;
-    const more = [x.chain ? esc(String(x.chain).replace(/^[^-]+-/, '')) : '', st ? `<span class="${/başarısız|iptal|engel|dondur/.test(st) ? 'exp' : ''}">${esc(st)}</span>` : ''].filter(Boolean).join(' · ');
-    sub = `${esc(okxActWhen(x.ts))}${more ? `</div><div class="s num">${more}` : ''}`;
-    r1 = (dep ? '+' : '−') + n(x.qty);
-    if (!dep && x.fee) r2 = `ağ ücreti ${q(x.fee)}`;
-  }
-  return `<div class="tx tap" data-action="okx-act" data-id="${esc(x.id)}"><div class="ic tint" style="--c:${col}">${ic}</div>
-    <div class="m"><div class="t">${title}</div><div class="s num">${sub}</div></div>
-    <div class="a"><b class="num">${r1}</b>${r2 ? `<small class="num muted">${r2}</small>` : ''}</div></div>`;
+  const buy = x.side !== 'sell', n = x.qty.toLocaleString('en-US', { maximumFractionDigits: 8 });
+  return `<div class="tx tap" data-action="okx-act" data-id="${esc(x.id)}"><div class="ic tint" style="--c:${buy ? '#1f7a4a' : '#b4432f'}">${buy ? '+' : '−'}</div>
+    <div class="m"><div class="t">${esc(x.ccy)} ${buy ? 'alış' : 'satış'}${x.via === 'convert' ? ' <span class="muted okx-nm">Convert</span>' : ''}</div>
+      <div class="s num">${esc(okxActWhen(x.ts))}</div><div class="s num">1 ${esc(x.ccy)} = ${okxInQ(x.px, x.q, true)}</div></div>
+    <div class="a"><b class="num">${buy ? '+' : '−'}${n}</b><small class="num muted">${buy ? 'ödenen' : 'alınan'} ${okxInQ(x.quote, x.q)}</small></div></div>`;
 }
 function okxActBody() {
   const a = okx.act;
-  if (!a.list) return `<div class="empty">${a.err ? 'İşlemler alınamadı: ' + esc(a.err) : 'İşlemler alınıyor…'}</div>`;
-  if (!a.list.length) return '<div class="empty">OKX\'te son 3 ayda işlem yok.</div>';
+  if (!a.list) return `<div class="empty">${a.err ? 'Alım-satımlar alınamadı: ' + esc(a.err) : 'Alım-satımlar alınıyor…'}</div>`;
+  if (!a.list.length) return '<div class="empty">OKX\'te son 3 ayda alım-satım yok.</div>';
   const n = ui.okxActAll ? a.list.length : 8;
   return `<div class="okx-list">${a.list.slice(0, n).map(okxActRow).join('')}</div>` + (a.list.length > 8 ?
     `<button type="button" class="btn sm okx-more" data-action="okx-act-all">${ui.okxActAll ? 'Daha az göster' : `Tümünü göster (${a.list.length})`}</button>` : '');
@@ -3462,10 +3438,8 @@ function okxActSheet(id) {
   okxCoinSel = null;
   const h = { sym: x.ccy, atype: 'crypto' }, rows = [];
   const row = (l, v, cls = '') => rows.push(`<div class="okx-kv-r"><span>${l}</span><b class="num ${cls}">${v}</b></div>`);
-  let title;
-  if (x.k === 'trade') {
-    const buy = x.side !== 'sell';
-    title = `${x.ccy} ${buy ? 'alış' : 'satış'}`;
+  const buy = x.side !== 'sell', title = `${x.ccy} ${buy ? 'alış' : 'satış'}`;
+  {
     row('Tarih', esc(okxActWhen(x.ts, true)));
     row('Tür', x.via === 'convert' ? 'Convert' : 'Spot emir');
     row('Çift', esc(`${x.ccy}/${x.q}`));
@@ -3480,17 +3454,6 @@ function okxActSheet(id) {
       row('Bugünkü değeri', fmtUsd(now));
       row('Alıştan beri', `${okxSign(d)} (${okxPct(d / x.quote)})`, okxPl(d));
     }
-  } else {
-    const dep = x.k === 'dep', st = okxActState(x);
-    title = `${x.ccy} ${dep ? 'yatırma' : 'çekme'}`;
-    row('Tarih', esc(okxActWhen(x.ts, true)));
-    row('Miktar', esc(fmtQty(x.qty, h)));
-    if (!dep && x.fee) row('Ağ ücreti', esc(fmtQty(x.fee, h)));
-    if (x.chain) row('Ağ', esc(String(x.chain).replace(/^[^-]+-/, '')));
-    row('Durum', st ? esc(st) : 'tamamlandı', /başarısız|iptal|engel|dondur/.test(st) ? 'exp' : '');
-    if (dep && x.from) row('Gönderen', esc(okxShort(x.from)));
-    if (!dep && x.to) row('Alıcı adres', esc(okxShort(x.to)));
-    if (x.txId) row('İşlem kimliği', esc(okxShort(x.txId)));
   }
   openSheet(`<div class="dlg"><div class="sheet-nav"><span class="grab"></span><span></span><h2>${esc(title)}</h2>
       <button type="button" class="nav-txt b" data-action="close-sheet">Kapat</button></div>
@@ -3576,14 +3539,14 @@ function okxCoinStats() {
   if (Math.abs(d24) >= 0.01) row('Son 24 saatte değeri', sign(d24), pl(d24));
   return rows.join('');
 }
-/* Coin detayında o coinin işlemleri (alım-satım, yatırma/çekme); satıra dokununca ayrıntısı açılır. */
+/* Coin detayında o coinin alım-satımları; satıra dokununca ayrıntısı açılır. */
 function okxTradesHtml() {
-  const c = okxCoinSel && okxCoinSel.ccy; if (!c) return '';
+  const c = okxCoinSel && okxCoinSel.ccy; if (!c || STABLE.includes(c)) return '';
   const a = okx.act, note = m => `<p class="muted" style="font-size:13px;margin:6px 0 0">${m}</p>`;
-  const head = '<h3 class="okx-sec">İşlemler <span class="muted" style="font-weight:400">· son 3 ay</span></h3>';
+  const head = '<h3 class="okx-sec">Alım-satımlar <span class="muted" style="font-weight:400">· son 3 ay</span></h3>';
   if (!a.list) return head + note(a.err ? 'Alınamadı: ' + esc(a.err) : 'Alınıyor…');
   const mine = a.list.filter(x => x.ccy === c);
-  if (!mine.length) return head + note('Son 3 ayda bu coin için işlem yok.');
+  if (!mine.length) return head + note('Son 3 ayda bu coin için alım-satım yok.');
   return head + `<div class="okx-list">${mine.slice(0, 30).map(okxActRow).join('')}</div>`;
 }
 /* Açık detay, kartla birlikte tazelenir; yalnız değişen kısım yeniden çizilir. */
