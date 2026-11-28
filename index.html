@@ -5467,6 +5467,15 @@ function remNextFrom(r, date) {
   }
   return x && (!r.until || x <= r.until) ? x : '';
 }
+/* "Yaptığım günden" (yenilenen) tekrar: sonraki tarih, planlanan günden değil hatırlatıcının yapıldığı günden sayılır.
+   Aşı, ilaç, parazit hapı gibi şeyler için: geç ya da erken yapılırsa sonraki tarih de o kadar kayar.
+   Belirli hafta günlerine bağlı tekrarlarda (hafta içi, her hafta) anlamsız olduğundan yalnız bunlarda kullanılır. */
+const REM_RENEW = ['day', '2week', 'month', 'year', 'custom'];
+const remRenews = r => !!r.renew && REM_RENEW.includes(r.rep);
+const remRenewNext = (r, from) => remNextFrom(Object.assign({}, r, { dom: parse(from).getDate() }), from);
+/* Son yapıldığı gün: geçmişin en yenisi (yenilenende yapıldığı gün, diğerlerinde planlanan gün). */
+const remLastDone = r => (r.log && r.log[0] && r.log[0].d) || '';
+const remLastLabel = d => { const l = remDayLabel(d); return /\d/.test(l) ? l : l.toLocaleLowerCase('tr'); };
 function remRepLabel(r) {
   if (!r.rep) return '';
   if (r.rep === 'week' && r.days && r.days.length && r.days.length < 7)
@@ -5504,6 +5513,7 @@ function remRow(r) {
   const meta = [
     r.done ? `Tamamlandı ${esc(fmtTs(r.doneAt || r.ts))}` : `<span class="${over ? 'exp' : ''}">${esc(remWhen(r))}</span>`,
     r.rep && !r.done ? '↻ ' + esc(remRepLabel(r)) : '',
+    remRenews(r) && !r.done && remLastDone(r) ? `son: ${esc(remLastLabel(remLastDone(r)))}` : '',
     r.alert && r.date && !r.done ? '🔔 ' + esc((REM_ALERT.find(a => a[0] === r.alert) || ['', ''])[1]) : '',
     r.amount ? `<b class="num">${fmt(r.amount, r.currency)}</b>` : '',
   ].filter(Boolean);
@@ -5592,11 +5602,11 @@ function remOzet() {
 /* ----- düzenleme paneli ----- */
 function remSheet(r, preset) {
   const e = r || null, v = Object.assign({ title: '', note: '', date: today(), time: '', rep: '', every: 1, unit: 'day', days: [], until: '', alert: 0, pri: 0,
-    list: ui.remL || 'genel', amount: 0, currency: 'IQD', accountId: '', categoryId: '' }, e || preset || {});
+    list: ui.remL || 'genel', amount: 0, currency: 'IQD', accountId: '', categoryId: '', renew: false }, e || preset || {});
   if (!e && !preset && ui.remF === 'tumu') v.date = '';
   const sel = (a, b) => String(a) === String(b) ? 'selected' : '';
-  const hist = e && e.log && e.log.length ? `<div class="fxbox"><b style="font-size:13px">Son tamamlananlar</b>${e.log.slice(0, 6).map(x =>
-    `<div class="subline"><span>${esc(remDayLabel(x.d))}</span><span class="muted">${esc(fmtTs(x.ts))}</span></div>`).join('')}</div>` : '';
+  const hist = e && e.log && e.log.length ? `<div class="fxbox"><b style="font-size:13px">${remRenews(e) ? 'Yapıldığı günler' : 'Son tamamlananlar'}</b>${e.log.slice(0, 6).map(x =>
+    `<div class="subline"><span>${esc(remDayLabel(x.d))}</span><span class="muted">${x.ts ? esc(fmtTs(x.ts)) : 'elle girildi'}</span></div>`).join('')}</div>` : '';
   const accs = accOrdered();
   openSheet(`<form data-form="rem" class="dlg"${e ? ` data-id="${e.id}"` : ''}>${sheetNav(e ? 'Hatırlatıcıyı düzenle' : 'Yeni hatırlatıcı', e ? 'Kaydet' : 'Ekle')}
     <div class="sheet-body">
@@ -5605,7 +5615,7 @@ function remSheet(r, preset) {
       <div>
         <div class="chips" style="margin-top:0">${[['today', 'Bugün'], ['tomorrow', 'Yarın'], ['weekend', 'Hafta sonu'], ['nextweek', 'Gelecek hafta'], ['none', 'Tarih yok']]
           .map(([k, l]) => `<button type="button" class="chip pick" data-action="rem-qd" data-v="${k}">${l}</button>`).join('')}</div>
-        <div class="ktimes" style="margin-top:10px"><label>Tarih<input type="date" name="date" value="${v.date}"></label>
+        <div class="ktimes" style="margin-top:10px"><label><span data-rem-dl>Tarih</span><input type="date" name="date" value="${v.date}"></label>
           <label>Saat <span class="muted">(boşsa ${remHour()})</span><input type="time" name="time" value="${v.time}"></label></div>
       </div>
       <label>Tekrar<select name="rep">${REM_REP.map(([k, l]) => `<option value="${k}" ${sel(k, v.rep)}>${l}</option>`).join('')}</select></label>
@@ -5613,6 +5623,11 @@ function remSheet(r, preset) {
         <label>Birim<select name="unit">${REM_UNITS.map(([k, l]) => `<option value="${k}" ${sel(k, v.unit)}>${l}</option>`).join('')}</select></label></div>
       <div data-rem-week><label>Günler</label><input type="hidden" name="days" value="${(v.days || []).join(',')}">
         <div class="chips kdays">${KALK_DAYS.map(([d, l]) => `<button type="button" class="chip pick ${(v.days || []).includes(d) ? 'sel' : ''}" data-action="rem-day" data-v="${d}">${l}</button>`).join('')}</div></div>
+      <div data-rem-renew><label>Sonraki tarih nereden sayılsın?</label><input type="hidden" name="renew" value="${v.renew ? 1 : ''}">
+        <div class="seg mseg" style="margin:4px 0 0">${[['', 'Plandaki günden'], ['1', 'Yaptığım günden']].map(([k, l]) =>
+          `<button type="button" class="${(v.renew ? '1' : '') === k ? 'on' : ''}" data-action="rem-renew" data-v="${k}">${l}</button>`).join('')}</div>
+        <p class="muted" data-rem-rh style="font-size:12px;margin:6px 2px 0"></p></div>
+      <label data-rem-last>Son ne zaman yapıldı? <span class="muted">(biliyorsan)</span><input type="date" name="last" max="${today()}" value="${remLastDone(v)}"></label>
       <label data-rem-until>Tekrar bitişi <span class="muted">(boşsa hep tekrarlar)</span><input type="date" name="until" value="${v.until || ''}"></label>
       <label>Uyarı<select name="alert">${REM_ALERT.map(([k, l]) => `<option value="${k}" ${sel(k, v.alert)}>${l}</option>`).join('')}</select></label>
       <div><label>Öncelik</label><input type="hidden" name="pri" value="${v.pri || 0}">
@@ -5645,6 +5660,21 @@ function remSync(f) {
   f.querySelector('[data-rem-custom]').classList.toggle('hide', rep !== 'custom');
   f.querySelector('[data-rem-week]').classList.toggle('hide', rep !== 'week');
   f.querySelector('[data-rem-until]').classList.toggle('hide', !rep);
+  const renew = remRenews({ rep, renew: f.elements.renew.value });
+  f.querySelector('[data-rem-renew]').classList.toggle('hide', !REM_RENEW.includes(rep));
+  f.querySelector('[data-rem-last]').classList.toggle('hide', !renew);
+  f.querySelector('[data-rem-dl]').textContent = renew ? 'Sonraki tarih' : 'Tarih';
+  f.querySelector('[data-rem-rh]').textContent = renew
+    ? 'Geç ya da erken yaparsan sonraki tarih de o kadar kayar. Aşı, ilaç, parazit hapı gibi şeyler için.'
+    : 'Ne zaman yaparsan yap tarih plana göre ilerler. Fatura, kira gibi şeyler için.';
+}
+/* "Yaptığım günden" seçiliyken son yapıldığı gün ya da aralık değişince sonraki tarih kendiliğinden hesaplanır
+   (isteyen sonra tarihi elle de değiştirebilir). */
+function remRenewFill(f) {
+  const E = f.elements, last = E.last.value;
+  if (!remRenews({ rep: E.rep.value, renew: E.renew.value }) || !last || last > today()) return;
+  const next = remRenewNext({ rep: E.rep.value, every: E.every.value, unit: E.unit.value }, last);
+  if (next) E.date.value = next;
 }
 /* Form → kayıt. Hata varsa false. */
 function remSubmit(form, v) {
@@ -5652,6 +5682,9 @@ function remSubmit(form, v) {
   if (!title) { toast('Başlık yazın.'); form.elements.title.focus(); return false; }
   const amount = v.amount && v.amount.trim() ? num(v.amount) : 0;
   if (!(amount >= 0)) { toast('Tutar geçersiz.'); form.elements.amount.focus(); return false; }
+  const renew = remRenews(v), last = renew ? v.last || '' : '';
+  if (last > today()) { toast('Son yapıldığı gün ileride olamaz.'); form.elements.last.focus(); return false; }
+  if (last && !v.date) v.date = remRenewNext(v, last);
   if (v.rep && !v.date) { toast('Tekrarlayan hatırlatıcı için başlangıç tarihi seçin.'); return false; }
   if (v.until && v.date && v.until < v.date) { toast('Tekrar bitişi başlangıçtan önce olamaz.'); return false; }
   const days = (v.days || '').split(',').filter(x => x !== '').map(Number);
@@ -5663,9 +5696,15 @@ function remSubmit(form, v) {
     days: v.rep === 'week' ? (days.length ? days : [parse(v.date).getDay()]) : [], until: v.rep ? (v.until || '') : '',
     alert: +v.alert || 0, pri: +v.pri || 0, list: v.list || 'genel',
     amount, currency: v.currency || 'IQD', accountId: amount ? v.accountId || '' : '', categoryId: amount ? v.categoryId || '' : '',
+    renew: renew && !!v.date,
   });
-  // Aylık/yıllık tekrarda ayın günü değiştiyse yeni gün esas alınır.
-  if (v.date && (!old || old.date !== v.date)) r.dom = parse(v.date).getDate();
+  // Elle girilen son yapılış günü: en son kaydı düzeltir, kayıt yoksa ilk kayıt olur.
+  if (last && last !== remLastDone(r)) {
+    const log = r.log || (r.log = []);
+    if (log.length) log[0] = { d: last, ts: 0 }; else log.unshift({ d: last, ts: 0 });
+  }
+  // Aylık/yıllık tekrarda ayın günü değiştiyse yeni gün esas alınır (r eski kaydın kendisi olduğundan karşılaştırma "was" ile).
+  if (v.date && (!was || was.date !== v.date)) r.dom = parse(v.date).getDate();
   // Haftalık (seçili günler) / hafta içi tekrarda ilk tarih uymuyorsa ilk uygun güne kayar.
   const wd = r.date ? parse(r.date).getDay() : -1;
   if ((r.rep === 'week' && !r.days.includes(wd)) || (r.rep === 'weekday' && (wd === 0 || wd === 6)))
@@ -5689,11 +5728,13 @@ function remComplete(id, quiet) {
   closeSw();
   if (r.done) { r.done = false; r.doneAt = 0; save(); render(); remPlanSoon(); toast('Yeniden açıldı'); return; }
   remUndoSnap = copy(r);
-  r.log = [{ d: r.date || today(), ts: Date.now() }, ...(r.log || [])].slice(0, 30);
+  // Yenilenende geçmişe yapıldığı gün yazılır ve sonraki tarih o günden sayılır; diğerlerinde plandaki günden.
+  const done = today(), renew = remRenews(r);
+  r.log = [{ d: renew ? done : r.date || done, ts: Date.now() }, ...(r.log || [])].slice(0, 30);
   r.snz = 0;
-  const next = r.rep && r.date ? remNextFrom(r, r.date) : '';
+  const next = r.rep && r.date ? (renew ? remRenewNext(r, done) : remNextFrom(r, r.date)) : '';
   let msg = 'Tamamlandı';
-  if (next) { r.date = next; msg = `Tamamlandı · sonraki: ${remWhen(r)}`; }
+  if (next) { r.date = next; if (renew) r.dom = parse(done).getDate(); msg = `Tamamlandı · sonraki: ${remWhen(r)}`; }
   else { r.done = true; r.doneAt = Date.now(); }
   save(); closeSheet($('#sheet')); render(); remPlanSoon();
   remToastUndo(msg);
@@ -5787,12 +5828,15 @@ function remAlerts(limit = REM_MAX) {
   }
   return out.sort((a, b) => a.at - b.at).slice(0, limit);
 }
+/* Bildirim metni; Genel dışındaki listenin adı başta durur (ör. aynı başlıklı iki kedinin hatırlatıcısı karışmasın). */
 function remBody(x) {
-  const r = x.r, parts = [];
+  const r = x.r, parts = [], L = remList(r.list);
   if (x.at !== x.due) parts.push(`${remDayLabel(x.date)} ${hhmm(x.due)}`);
   if (r.amount) parts.push(fmt(r.amount, r.currency));
   if (r.note) parts.push(r.note);
-  return parts.join(' · ') || (r.rep ? remRepLabel(r) : 'Hatırlatıcı');
+  if (!parts.length && r.rep) parts.push(remRepLabel(r));
+  if (L[0] !== 'genel') parts.unshift(L[1]);
+  return parts.join(' · ') || 'Hatırlatıcı';
 }
 const remSlots = () => NATIVE ? remAlerts().length : 0;
 let remT, remActOk = false;
@@ -5896,6 +5940,11 @@ document.addEventListener('click', e => {
       if (!f) break;
       f.elements.pri.value = d.v;
       f.querySelectorAll('[data-action="rem-pri"]').forEach(b => b.classList.toggle('on', b === el)); break;
+    case 'rem-renew':
+      if (!f) break;
+      f.elements.renew.value = d.v;
+      f.querySelectorAll('[data-action="rem-renew"]').forEach(b => b.classList.toggle('on', b === el));
+      remSync(f); remRenewFill(f); break;
     case 'rem-list-new': {
       const box = f && f.querySelector('[data-rem-newlist]'); if (!box) break;
       box.classList.toggle('hide'); if (!box.classList.contains('hide')) box.querySelector('[data-rem-newname]').focus();
@@ -5957,7 +6006,10 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => {
   const el = e.target;
-  if (el.closest && el.closest('[data-form="rem"]') && (el.name === 'rep' || el.name === 'date')) { remSync(el.form); return; }
+  if (el.closest && el.closest('[data-form="rem"]') && ['rep', 'date', 'last', 'every', 'unit'].includes(el.name)) {
+    if (el.name !== 'date') remRenewFill(el.form);
+    remSync(el.form); return;
+  }
   if (el.dataset && (el.dataset.remLn || el.dataset.remLc)) {
     const l = db.remLists.find(x => x.id === (el.dataset.remLn || el.dataset.remLc)); if (!l) return;
     if (el.dataset.remLn) {
